@@ -103,7 +103,6 @@ def interp(code: types.CodeType, globals_: Dict[Text, Any],
             if f is range:
                 push(range(*args))
             elif f is print:
-                #import pdb; pdb.set_trace()
                 result = print(*args)
                 push(result)
             elif isinstance(f, _Function):
@@ -141,6 +140,10 @@ def interp(code: types.CodeType, globals_: Dict[Text, Any],
             qualified_name = pop()
             code = pop()
             push(_Function(code, qualified_name))
+        elif opname == 'BUILD_TUPLE':
+            count = instruction.arg
+            stack, t = stack[:-count], tuple(stack[-count:])
+            push(t)
         elif opname.startswith('BINARY'):
             # Probably need to handle radd and such here.
             op = _BINARY_OPS[opname]

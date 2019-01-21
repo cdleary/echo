@@ -45,3 +45,23 @@ buzz 10
 fizz 12
 fizzbuzz 15
 """
+
+
+def test_cond_with_bindings():
+    def main():
+        if True:
+            x = 42
+            y = 24
+        else:
+            x = 24
+            y = 42
+        return x, y
+    assert interp(get_code(main), globals()) == (42, 24)
+
+
+def test_simple_cond_run_alternate():
+    def main():
+        if False: x = 42
+        else: x = 24
+        return x
+    assert interp(get_code(main), globals()) == 24
