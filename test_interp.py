@@ -59,6 +59,13 @@ def test_cond_with_bindings():
     assert interp(get_code(main), globals()) == (42, 24)
 
 
+def test_built_list_and_index():
+    def main():
+        lst = [1, 2, 3]
+        return lst[1]
+    assert run_function(main) == 2
+
+
 def test_simple_cond_run_alternate():
     def main():
         if False: x = 42
@@ -72,3 +79,23 @@ def test_kwarg_slot():
         return x * y
     assert run_function(f, 1) == 3
     assert run_function(f, 1, 2) == 2
+
+
+def test_mutating_closure_explicit_cell_object():
+    def main():
+        list_cell = [42]
+        def inc(): list_cell[0] += 1
+        inc()
+        return list_cell[0]
+    assert run_function(main) == 43
+
+
+def test_mutating_closure_implicit_cell():
+    def main():
+        x = 0
+        def inc():
+            nonlocal x
+            x += 1
+        inc()
+        return x
+    assert run_function(main) == 1

@@ -17,7 +17,7 @@ import operator
 import types
 
 from io import StringIO
-from typing import Dict, Any, Text, Tuple, List, Optional
+from typing import Dict, Any, Text, Tuple, List, Optional, Union
 
 from common import dis_to_str, get_code
 
@@ -27,16 +27,27 @@ _BINARY_OPS = {
     'BINARY_ADD': operator.add,
     'BINARY_MODULO': operator.mod,
     'BINARY_MULTIPLY': operator.mul,
+    'BINARY_SUBSCR': operator.getitem,
 }
 _COMPARE_OPS = {
     '==': operator.eq,
 }
+_BUILTIN_TYPES = {
+    int,
+    list,
+}
 
 
 class _Function(object):
-    def __init__(self, code, name):
+    def __init__(self, code, name, *, closure=None, defaults=None):
         self.code = code
         self.name = name
+        self.closure = closure
+        self.defaults = defaults
+
+    def __repr__(self):
+        return '_Function(code={!r}, name={!r}, closure={!r}, defaults={!r})'.format(
+            self.code, self.name, self.closure, self.defaults)
 
 
 def is_false(v: Any) -> bool:
@@ -54,9 +65,28 @@ def code_to_str(c: types.CodeType) -> Text:
     return 'Code({})'.format(guts)
 
 
+def builtins_get(builtins: Union[types.ModuleType, Dict], name: Text) -> Any:
+    if isinstance(builtins, types.ModuleType):
+        return getattr(builtins, name)
+    return builtins[name]
+
+
+class _Cell:
+    def __init__(self):
+        self._storage = _Cell
+
+    def get(self):
+        assert self._storage is not _Cell, 'Cell is uninitialized'
+        return self._storage
+
+    def set(self, value):
+        self._storage = value
+
+
 def interp(code: types.CodeType, globals_: Dict[Text, Any],
-           args: Tuple[Any, ...] = (),
-           defaults: Tuple[Any, ...] = (),
+           args: Optional[Tuple[Any, ...]] = None,
+           defaults: Optional[Tuple[Any, ...]] = None,
+           closure: Optional[Tuple[_Cell, ...]] = None,
            in_function: bool = True) -> Any:
     """Evaluates "code" using "globals_" after initializing locals with "args".
 
@@ -80,6 +110,12 @@ def interp(code: types.CodeType, globals_: Dict[Text, Any],
     TODO(cdleary, 2019-01-20): factor.
     TODO(cdleary, 2019-01-21): Use dis.stack_effect to cross-check stack depth change.
     """
+    args = args or ()
+    defaults = defaults or ()
+    closure = closure or ()
+
+    assert len(code.co_freevars) == len(closure), (code, code.co_freevars, closure)
+
     logging.debug('<bytecode>')
     logging.debug(dis_to_str(code))
     logging.debug('</bytecode>')
@@ -89,11 +125,15 @@ def interp(code: types.CodeType, globals_: Dict[Text, Any],
     assert len(args) + len(defaults) >= code.co_argcount or code.co_flags & STARARGS_FLAG, (code, args, defaults, code.co_argcount)
 
     locals_ = list(args) + list(defaults) + [None] * (code.co_nlocals-code.co_argcount)
+    cellvars = tuple(_Cell() for _ in range(len(code.co_cellvars))) + closure
     stack = []
     consts = code.co_consts  # LOAD_CONST indexes into this.
     names = code.co_names  # LOAD_GLOBAL uses these names.
+
+    # TODO(cdleary, 2019-01-21): Investigate why this "builtins" ref is
+    # sometimes a dict and other times a module?
     builtins = globals_['__builtins__']
-    #assert isinstance(builtins, types.ModuleType), builtins
+
     push = lambda x: stack.append(x)
     pop = lambda: stack.pop()
     peek = lambda: stack[-1]
@@ -118,7 +158,7 @@ def interp(code: types.CodeType, globals_: Dict[Text, Any],
             try:
                 push(globals_[name])
             except KeyError:
-                push(builtins[name])
+                push(builtins_get(builtins,name))
         elif opname == 'LOAD_CONST':
             push(consts[instruction.arg])
         elif opname == 'CALL_FUNCTION':
@@ -131,9 +171,9 @@ def interp(code: types.CodeType, globals_: Dict[Text, Any],
                 result = print(*args)
                 push(result)
             elif isinstance(f, _Function):
-                push(interp(f.code, globals_, args=args))
+                push(interp(f.code, globals_, args=args, closure=f.closure))
             elif isinstance(f, types.FunctionType):
-                push(interp(f.__code__, globals_, args=args))
+                push(interp(f.__code__, f.__globals__, defaults=f.__defaults__, args=args))
             else:
                 raise NotImplementedError(f, args)
         elif opname == 'GET_ITER':
@@ -171,17 +211,32 @@ def interp(code: types.CodeType, globals_: Dict[Text, Any],
         elif opname == 'MAKE_FUNCTION':
             qualified_name = pop()
             code = pop()
-            push(_Function(code, qualified_name))
+            closure = None
+            defaults = None
+            if instruction.arg & 0x08:
+                assert isinstance(peek(), tuple), peek()
+                closure = pop()
+            if instruction.arg & 0x04:
+                raise NotImplementedError
+            if instruction.arg & 0x02:
+                raise NotImplementedError
+            if instruction.arg & 0x01:
+                defaults = pop()
+            push(_Function(code, qualified_name, defaults=defaults, closure=closure))
         elif opname == 'BUILD_TUPLE':
             count = instruction.arg
             stack, t = stack[:-count], tuple(stack[-count:])
+            push(t)
+        elif opname == 'BUILD_LIST':
+            count = instruction.arg
+            stack, t = stack[:-count], stack[-count:]
             push(t)
         elif opname.startswith('BINARY'):
             # Probably need to handle radd and such here.
             op = _BINARY_OPS[opname]
             rhs = pop()
             lhs = pop()
-            if type(lhs) is int and type(rhs) is int:
+            if {type(lhs), type(rhs)} <= _BUILTIN_TYPES:
                 push(op(lhs,rhs))
             else:
                 raise NotImplementedError(lhs, rhs)
@@ -210,6 +265,29 @@ def interp(code: types.CodeType, globals_: Dict[Text, Any],
                 raise NotImplementedError
             else:
                 push(globals_[instruction.argval])
+        elif opname == 'LOAD_DEREF':
+            push(cellvars[instruction.arg].get())
+        elif opname == 'STORE_DEREF':
+            cellvars[instruction.arg].set(pop())
+        elif opname == 'STORE_SUBSCR':
+            tos = pop()
+            tos1 = pop()
+            tos2 = pop()
+            operator.setitem(tos1, tos, tos2)
+        elif opname == 'LOAD_CLOSURE':
+            push(cellvars[instruction.arg])
+        elif opname == 'INPLACE_ADD':
+            lhs = pop()
+            rhs = pop()
+            if type(lhs) is int and type(rhs) is int:
+                push(operator.add(lhs,rhs))
+            else:
+                raise NotImplementedError(instruction, stack)
+        elif opname == 'DUP_TOP_TWO':
+            stack = stack + stack[-2:]
+        elif opname == 'ROT_THREE':
+            #                                  old first  old second  old third
+            stack[-3], stack[-1], stack[-2] = stack[-1], stack[-2], stack[-3]
         else:
             raise NotImplementedError(instruction, stack)
         pc += pc_to_bc_width[pc]
