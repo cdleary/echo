@@ -6,3 +6,9 @@ Python meta-circular evaluator.
 ```
 py.test-3 interp.py
 ```
+
+### Type checking
+
+```
+pytype --config=pytype.cfg 
+```

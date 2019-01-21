@@ -15,7 +15,7 @@ import types
 
 from contextlib import redirect_stdout
 from io import StringIO
-from typing import Dict, Any, Text, Tuple
+from typing import Dict, Any, Text, Tuple, List, Optional
 
 
 STARARGS_FLAG = 0x04
@@ -32,6 +32,10 @@ class _Function(object):
     def __init__(self, code, name):
         self.code = code
         self.name = name
+
+
+def get_code(x: Any) -> types.CodeType:
+    return x.__code__
 
 
 
@@ -66,8 +70,8 @@ def interp(code: types.CodeType, globals_: Dict[Text, Any],
     pop = lambda: stack.pop()
     peek = lambda: stack[-1]
     instructions = tuple(dis.get_instructions(code))
-    pc_to_instruction = [None] * (instructions[-1].offset+1)
-    pc_to_bc_width = [None] * (instructions[-1].offset+1)
+    pc_to_instruction = [None] * (instructions[-1].offset+1)  # type: List[Optional[dis.Instruction]]
+    pc_to_bc_width = [None] * (instructions[-1].offset+1)  # type: List[Optional[int]]
     for i, instruction in enumerate(instructions):
         pc_to_instruction[instruction.offset] = instruction
         if i+1 != len(instructions):
@@ -160,19 +164,19 @@ def test_print_to_10():
         for i in range(10):
             print(i)
 
-    interp(main.__code__, globals())
+    interp(get_code(main), globals())
 
 
 def test_two_plus_two():
     add = lambda x, y: x+y
-    assert interp(add.__code__, globals(), args=(2, 3)) == 5
+    assert interp(get_code(add), globals(), args=(2, 3)) == 5
 
 
 def test_call_other():
     def main():
         sub = lambda addend: 42+addend
         return sub(0) + sub(1)
-    assert interp(main.__code__, globals()) == 85
+    assert interp(get_code(main), globals()) == 85
 
 
 def test_fizzbuzz():
@@ -186,7 +190,7 @@ def test_fizzbuzz():
                 print('buzz', i)
     out = StringIO()
     with redirect_stdout(out):
-        interp(fizzbuzz.__code__, globals(), args=(16,))
+        interp(get_code(fizzbuzz), globals(), args=(16,))
     assert out.getvalue() == """fizz 3
 buzz 5
 fizz 6
