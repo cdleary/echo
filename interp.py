@@ -1,4 +1,7 @@
-"""
+"""(Metacircular) interpreter loop implementation.
+
+Notes
+-----
 
 co_flags:
 
@@ -13,9 +16,10 @@ import logging
 import operator
 import types
 
-from contextlib import redirect_stdout
 from io import StringIO
 from typing import Dict, Any, Text, Tuple, List, Optional
+
+from common import dis_to_str
 
 
 STARARGS_FLAG = 0x04
@@ -34,11 +38,6 @@ class _Function(object):
         self.name = name
 
 
-def get_code(x: Any) -> types.CodeType:
-    return x.__code__
-
-
-
 def is_false(v: Any) -> bool:
     if isinstance(v, int):
         return v == 0
@@ -48,14 +47,18 @@ def is_false(v: Any) -> bool:
         raise NotImplementedError(v)
 
 
-def dis_to_str(x) -> Text:
-    out = StringIO()
-    dis.dis(x, file=out)
-    return out.getvalue()
-
-
 def interp(code: types.CodeType, globals_: Dict[Text, Any],
            args: Tuple[Any, ...] = ()) -> Any:
+    """Evaluates "code" using "globals_" after initializing locals with "args".
+
+    Returns the result of evaluating the code object.
+
+    Implementation note: this is one giant function for the moment, unclear
+    whether performance will be important, but this makes it easy for early
+    prototyping.
+
+    TODO(cdleary, 2019-01-20): factor.
+    """
     logging.debug('<bytecode>')
     logging.debug(dis_to_str(code))
     logging.debug('</bytecode>')
@@ -100,7 +103,9 @@ def interp(code: types.CodeType, globals_: Dict[Text, Any],
             if f is range:
                 push(range(*args))
             elif f is print:
-                push(print(*args))
+                #import pdb; pdb.set_trace()
+                result = print(*args)
+                push(result)
             elif isinstance(f, _Function):
                 push(interp(f.code, globals_, args=args))
             else:
@@ -156,46 +161,3 @@ def interp(code: types.CodeType, globals_: Dict[Text, Any],
         else:
             raise NotImplementedError(instruction, stack)
         pc += pc_to_bc_width[pc]
-            
-
-
-def test_print_to_10():
-    def main():
-        for i in range(10):
-            print(i)
-
-    interp(get_code(main), globals())
-
-
-def test_two_plus_two():
-    add = lambda x, y: x+y
-    assert interp(get_code(add), globals(), args=(2, 3)) == 5
-
-
-def test_call_other():
-    def main():
-        sub = lambda addend: 42+addend
-        return sub(0) + sub(1)
-    assert interp(get_code(main), globals()) == 85
-
-
-def test_fizzbuzz():
-    def fizzbuzz(x):
-        for i in range(1,x):
-            if i % 15 == 0:
-                print('fizzbuzz', i)
-            elif i % 3 == 0:
-                print('fizz', i)
-            elif i % 5 == 0:
-                print('buzz', i)
-    out = StringIO()
-    with redirect_stdout(out):
-        interp(get_code(fizzbuzz), globals(), args=(16,))
-    assert out.getvalue() == """fizz 3
-buzz 5
-fizz 6
-fizz 9
-buzz 10
-fizz 12
-fizzbuzz 15
-"""
