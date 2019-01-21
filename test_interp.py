@@ -14,20 +14,20 @@ def test_print_to_10():
 
 
 def test_two_plus_two():
-    add = lambda x, y: x+y
+    def add(x, y): return x+y
     assert interp(get_code(add), globals(), args=(2, 3)) == 5
 
 
 def test_call_other():
     def main():
-        sub = lambda addend: 42+addend
+        def sub(addend): return 42+addend
         return sub(0) + sub(1)
     assert interp(get_code(main), globals()) == 85
 
 
 def test_fizzbuzz():
     def fizzbuzz(x):
-        for i in range(1,x):
+        for i in range(1, x):
             if i % 15 == 0:
                 print('fizzbuzz', i)
             elif i % 3 == 0:
@@ -68,8 +68,10 @@ def test_built_list_and_index():
 
 def test_simple_cond_run_alternate():
     def main():
-        if False: x = 42
-        else: x = 24
+        if False:
+            x = 42
+        else:
+            x = 24
         return x
     assert interp(get_code(main), globals()) == 24
 
@@ -84,6 +86,7 @@ def test_kwarg_slot():
 def test_mutating_closure_explicit_cell_object():
     def main():
         list_cell = [42]
+
         def inc(): list_cell[0] += 1
         inc()
         return list_cell[0]
@@ -93,6 +96,7 @@ def test_mutating_closure_explicit_cell_object():
 def test_mutating_closure_implicit_cell():
     def main():
         x = 0
+
         def inc():
             nonlocal x
             x += 1

@@ -36,6 +36,12 @@ _BUILTIN_TYPES = {
     int,
     list,
 }
+_CODE_ATTRS = [
+    'co_argcount', 'co_cellvars', 'co_code', 'co_consts', 'co_filename',
+    'co_firstlineno', 'co_flags', 'co_freevars', 'co_kwonlyargcount',
+    'co_lnotab', 'co_name', 'co_names', 'co_nlocals', 'co_stacksize',
+    'co_varnames',
+]
 
 
 class _Function(object):
@@ -46,22 +52,23 @@ class _Function(object):
         self.defaults = defaults
 
     def __repr__(self):
-        return '_Function(code={!r}, name={!r}, closure={!r}, defaults={!r})'.format(
-            self.code, self.name, self.closure, self.defaults)
+        return ('_Function(code={!r}, name={!r}, closure={!r}, '
+                'defaults={!r})').format(
+                    self.code, self.name, self.closure, self.defaults)
 
 
 def is_false(v: Any) -> bool:
     if isinstance(v, int):
         return v == 0
     if isinstance(v, bool):
-        return v == False
+        return v is False
     else:
         raise NotImplementedError(v)
 
 
 def code_to_str(c: types.CodeType) -> Text:
-    _CODE_ATTRS = ['co_argcount', 'co_cellvars', 'co_code', 'co_consts', 'co_filename', 'co_firstlineno', 'co_flags', 'co_freevars', 'co_kwonlyargcount', 'co_lnotab', 'co_name', 'co_names', 'co_nlocals', 'co_stacksize', 'co_varnames']
-    guts = ', '.join('{}={!r}'.format(attr.split('_')[1], getattr(c, attr)) for attr in _CODE_ATTRS)
+    guts = ', '.join('{}={!r}'.format(attr.split('_')[1], getattr(c, attr))
+                     for attr in _CODE_ATTRS)
     return 'Code({})'.format(guts)
 
 
@@ -108,13 +115,17 @@ def interp(code: types.CodeType, globals_: Dict[Text, Any],
     prototyping.
 
     TODO(cdleary, 2019-01-20): factor.
-    TODO(cdleary, 2019-01-21): Use dis.stack_effect to cross-check stack depth change.
+
+    TODO(cdleary, 2019-01-21): Use dis.stack_effect to cross-check stack depth
+        change.
     """
     args = args or ()
     defaults = defaults or ()
     closure = closure or ()
 
-    assert len(code.co_freevars) == len(closure), (code, code.co_freevars, closure)
+    assert len(code.co_freevars) == len(closure), (
+        'Invocation did not satisfy closure requirements.', code,
+        code.co_freevars, closure)
 
     logging.debug('<bytecode>')
     logging.debug(dis_to_str(code))
@@ -122,9 +133,13 @@ def interp(code: types.CodeType, globals_: Dict[Text, Any],
     logging.debug(code_to_str(code))
 
     # Note: co_argcount includes default arguments in the count.
-    assert len(args) + len(defaults) >= code.co_argcount or code.co_flags & STARARGS_FLAG, (code, args, defaults, code.co_argcount)
+    assert (len(args) + len(defaults) >= code.co_argcount
+            or code.co_flags & STARARGS_FLAG), (
+        'Invocation did not provide enough arguments.', code, args, defaults,
+        code.co_argcount)
 
-    locals_ = list(args) + list(defaults) + [None] * (code.co_nlocals-code.co_argcount)
+    locals_ = (list(args) + list(defaults)
+               + [None] * (code.co_nlocals-code.co_argcount))
     cellvars = tuple(_Cell() for _ in range(len(code.co_cellvars))) + closure
     stack = []
     consts = code.co_consts  # LOAD_CONST indexes into this.
@@ -134,16 +149,21 @@ def interp(code: types.CodeType, globals_: Dict[Text, Any],
     # sometimes a dict and other times a module?
     builtins = globals_['__builtins__']
 
-    push = lambda x: stack.append(x)
-    pop = lambda: stack.pop()
-    peek = lambda: stack[-1]
+    def push(x): stack.append(x)
+
+    def pop(): return stack.pop()
+
+    def peek(): return stack[-1]
     instructions = tuple(dis.get_instructions(code))
-    pc_to_instruction = [None] * (instructions[-1].offset+1)  # type: List[Optional[dis.Instruction]]
-    pc_to_bc_width = [None] * (instructions[-1].offset+1)  # type: List[Optional[int]]
+    pc_to_instruction = [None] * (
+        instructions[-1].offset+1)  # type: List[Optional[dis.Instruction]]
+    pc_to_bc_width = [None] * (
+        instructions[-1].offset+1)  # type: List[Optional[int]]
     for i, instruction in enumerate(instructions):
         pc_to_instruction[instruction.offset] = instruction
         if i+1 != len(instructions):
-            pc_to_bc_width[instruction.offset] = instructions[i+1].offset-instruction.offset
+            pc_to_bc_width[instruction.offset] = (
+                instructions[i+1].offset-instruction.offset)
     del instructions
     pc = 0
     while True:
@@ -158,7 +178,7 @@ def interp(code: types.CodeType, globals_: Dict[Text, Any],
             try:
                 push(globals_[name])
             except KeyError:
-                push(builtins_get(builtins,name))
+                push(builtins_get(builtins, name))
         elif opname == 'LOAD_CONST':
             push(consts[instruction.arg])
         elif opname == 'CALL_FUNCTION':
@@ -173,7 +193,8 @@ def interp(code: types.CodeType, globals_: Dict[Text, Any],
             elif isinstance(f, _Function):
                 push(interp(f.code, globals_, args=args, closure=f.closure))
             elif isinstance(f, types.FunctionType):
-                push(interp(f.__code__, f.__globals__, defaults=f.__defaults__, args=args))
+                push(interp(f.__code__, f.__globals__, defaults=f.__defaults__,
+                            args=args))
             else:
                 raise NotImplementedError(f, args)
         elif opname == 'GET_ITER':
@@ -184,7 +205,9 @@ def interp(code: types.CodeType, globals_: Dict[Text, Any],
             except StopIteration:
                 pop()
                 pc += pc_to_bc_width[pc] + instruction.arg
-                assert pc_to_instruction[pc].is_jump_target, (pc, pc_to_instruction[pc])
+                assert pc_to_instruction[pc].is_jump_target, (
+                    'Attempted to jump to invalid target.', pc,
+                    pc_to_instruction[pc])
                 continue
         elif opname == 'STORE_FAST':
             locals_[instruction.arg] = pop()
@@ -222,7 +245,8 @@ def interp(code: types.CodeType, globals_: Dict[Text, Any],
                 raise NotImplementedError
             if instruction.arg & 0x01:
                 defaults = pop()
-            push(_Function(code, qualified_name, defaults=defaults, closure=closure))
+            push(_Function(code, qualified_name, defaults=defaults,
+                           closure=closure))
         elif opname == 'BUILD_TUPLE':
             count = instruction.arg
             stack, t = stack[:-count], tuple(stack[-count:])
@@ -237,7 +261,7 @@ def interp(code: types.CodeType, globals_: Dict[Text, Any],
             rhs = pop()
             lhs = pop()
             if {type(lhs), type(rhs)} <= _BUILTIN_TYPES:
-                push(op(lhs,rhs))
+                push(op(lhs, rhs))
             else:
                 raise NotImplementedError(lhs, rhs)
         elif opname == 'COMPARE_OP':
@@ -245,7 +269,7 @@ def interp(code: types.CodeType, globals_: Dict[Text, Any],
             lhs = pop()
             rhs = pop()
             if type(lhs) is int and type(rhs) is int:
-                push(op(lhs,rhs))
+                push(op(lhs, rhs))
             else:
                 raise NotImplementedError(lhs, rhs)
         elif opname == 'IMPORT_NAME':
@@ -280,7 +304,7 @@ def interp(code: types.CodeType, globals_: Dict[Text, Any],
             lhs = pop()
             rhs = pop()
             if type(lhs) is int and type(rhs) is int:
-                push(operator.add(lhs,rhs))
+                push(operator.add(lhs, rhs))
             else:
                 raise NotImplementedError(instruction, stack)
         elif opname == 'DUP_TOP_TWO':
@@ -293,6 +317,7 @@ def interp(code: types.CodeType, globals_: Dict[Text, Any],
         pc += pc_to_bc_width[pc]
 
 
-def run_function(f: types.FunctionType, *args: Tuple[Any, ...], globals_=None) -> Any:
+def run_function(f: types.FunctionType, *args: Tuple[Any, ...],
+                 globals_=None) -> Any:
     globals_ = globals_ or globals()
     return interp(get_code(f), globals_, defaults=f.__defaults__, args=args)

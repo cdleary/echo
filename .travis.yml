@@ -4,7 +4,9 @@ python:
 
 install:
 - pip install pytype
+- pip install pycodestyle
 
 script:
 - pytype --config=pytype.cfg
 - pytest
+- pycodestyle .

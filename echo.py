@@ -30,14 +30,16 @@ def run_path(fullpath):
 
     module_code = compile(contents, fullpath, 'exec')
     assert isinstance(module_code, types.CodeType), module_code
-    
+
     interp(module_code, globals(), in_function=False)
 
 
 def main():
     parser = optparse.OptionParser(__doc__)
-    parser.add_option('--log_level', choices=['DEBUG', 'INFO', 'WARNING'], help='Log level to use')
-    parser.add_option('--pdb', action='store_true', default=False, help='Drop into PDB on error')
+    parser.add_option('--log_level', choices=['DEBUG', 'INFO', 'WARNING'],
+                      help='Log level to use')
+    parser.add_option('--pdb', action='store_true', default=False,
+                      help='Drop into PDB on error')
     opts, args = parser.parse_args()
 
     # Path.

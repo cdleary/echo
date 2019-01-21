@@ -5,6 +5,7 @@ import types
 from typing import Any, Text
 from io import StringIO
 
+
 def get_code(x: Any) -> types.CodeType:
     return x.__code__
 
