@@ -1,7 +1,7 @@
 from io import StringIO
 from contextlib import redirect_stdout
 
-from interp import interp
+from interp import interp, run_function
 from common import get_code
 
 
@@ -65,3 +65,10 @@ def test_simple_cond_run_alternate():
         else: x = 24
         return x
     assert interp(get_code(main), globals()) == 24
+
+
+def test_kwarg_slot():
+    def f(x, y=3):
+        return x * y
+    assert run_function(f, 1) == 3
+    assert run_function(f, 1, 2) == 2

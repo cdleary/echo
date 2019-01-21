@@ -19,13 +19,14 @@ import types
 from io import StringIO
 from typing import Dict, Any, Text, Tuple, List, Optional
 
-from common import dis_to_str
+from common import dis_to_str, get_code
 
 
 STARARGS_FLAG = 0x04
 _BINARY_OPS = {
     'BINARY_ADD': operator.add,
     'BINARY_MODULO': operator.mod,
+    'BINARY_MULTIPLY': operator.mul,
 }
 _COMPARE_OPS = {
     '==': operator.eq,
@@ -47,23 +48,47 @@ def is_false(v: Any) -> bool:
         raise NotImplementedError(v)
 
 
+def code_to_str(c: types.CodeType) -> Text:
+    _CODE_ATTRS = ['co_argcount', 'co_cellvars', 'co_code', 'co_consts', 'co_filename', 'co_firstlineno', 'co_flags', 'co_freevars', 'co_kwonlyargcount', 'co_lnotab', 'co_name', 'co_names', 'co_nlocals', 'co_stacksize', 'co_varnames']
+    guts = ', '.join('{}={!r}'.format(attr.split('_')[1], getattr(c, attr)) for attr in _CODE_ATTRS)
+    return 'Code({})'.format(guts)
+
+
 def interp(code: types.CodeType, globals_: Dict[Text, Any],
-           args: Tuple[Any, ...] = ()) -> Any:
+           args: Tuple[Any, ...] = (),
+           defaults: Tuple[Any, ...] = (),
+           in_function: bool = True) -> Any:
     """Evaluates "code" using "globals_" after initializing locals with "args".
 
     Returns the result of evaluating the code object.
+
+    Args:
+        code: Code object to interpret.
+        globals_: Global mapping to use (for global references).
+        args: Arguments to populate local variables with (for a function
+            invocation).
+        defaults: Default arguments to use if the arguments haven't been
+            populated via invocation.
+        in_function: Whether this code is being interpreted at function scope;
+            this controls whether generic "name" references resolve against
+            globals (vs function locals).
 
     Implementation note: this is one giant function for the moment, unclear
     whether performance will be important, but this makes it easy for early
     prototyping.
 
     TODO(cdleary, 2019-01-20): factor.
+    TODO(cdleary, 2019-01-21): Use dis.stack_effect to cross-check stack depth change.
     """
     logging.debug('<bytecode>')
     logging.debug(dis_to_str(code))
     logging.debug('</bytecode>')
-    assert len(args) == code.co_argcount or code.co_flags & STARARGS_FLAG
-    locals_ = list(args) + [None] * (code.co_nlocals-code.co_argcount)
+    logging.debug(code_to_str(code))
+
+    # Note: co_argcount includes default arguments in the count.
+    assert len(args) + len(defaults) >= code.co_argcount or code.co_flags & STARARGS_FLAG, (code, args, defaults, code.co_argcount)
+
+    locals_ = list(args) + list(defaults) + [None] * (code.co_nlocals-code.co_argcount)
     stack = []
     consts = code.co_consts  # LOAD_CONST indexes into this.
     names = code.co_names  # LOAD_GLOBAL uses these names.
@@ -107,6 +132,8 @@ def interp(code: types.CodeType, globals_: Dict[Text, Any],
                 push(result)
             elif isinstance(f, _Function):
                 push(interp(f.code, globals_, args=args))
+            elif isinstance(f, types.FunctionType):
+                push(interp(f.__code__, globals_, args=args))
             else:
                 raise NotImplementedError(f, args)
         elif opname == 'GET_ITER':
@@ -121,6 +148,11 @@ def interp(code: types.CodeType, globals_: Dict[Text, Any],
                 continue
         elif opname == 'STORE_FAST':
             locals_[instruction.arg] = pop()
+        elif opname == 'STORE_NAME':
+            if in_function:
+                locals_[instruction.arg] = pop()
+            else:
+                globals_[instruction.argval] = pop()
         elif opname == 'LOAD_FAST':
             push(locals_[instruction.arg])
         elif opname == 'POP_TOP':
@@ -161,6 +193,28 @@ def interp(code: types.CodeType, globals_: Dict[Text, Any],
                 push(op(lhs,rhs))
             else:
                 raise NotImplementedError(lhs, rhs)
+        elif opname == 'IMPORT_NAME':
+            # TODO(leary, 2019-01-21): Use fromlist/level.
+            fromlist = pop()
+            level = pop()
+            push(__import__(instruction.argval, globals_))
+        elif opname == 'IMPORT_FROM':
+            module = peek()
+            assert isinstance(module, types.ModuleType), module
+            push(getattr(module, instruction.argval))
+        elif opname == 'LOAD_ATTR':
+            obj = pop()
+            push(getattr(obj, instruction.argval))
+        elif opname == 'LOAD_NAME':
+            if in_function:
+                raise NotImplementedError
+            else:
+                push(globals_[instruction.argval])
         else:
             raise NotImplementedError(instruction, stack)
         pc += pc_to_bc_width[pc]
+
+
+def run_function(f: types.FunctionType, *args: Tuple[Any, ...], globals_=None) -> Any:
+    globals_ = globals_ or globals()
+    return interp(get_code(f), globals_, defaults=f.__defaults__, args=args)
