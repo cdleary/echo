@@ -8,6 +8,6 @@ install:
 - pip install pycodestyle
 
 script:
-- pytype --config=pytype.cfg
+- pytype --config=pytype.cfg --python-version=$TRAVIS_PYTHON_VERSION
 - pytest
 - pycodestyle .

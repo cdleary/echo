@@ -61,5 +61,5 @@ Type annotations are used where appropriate and checked via the "pytype"
 command line utility:
 
 ```
-pytype --config=pytype.cfg 
+pytype --config=pytype.cfg --python-version=3.6
 ```
