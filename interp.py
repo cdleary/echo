@@ -345,6 +345,15 @@ def interp(code: types.CodeType, globals_: Dict[Text, Any],
             tos1 = pop()
             tos2 = pop()
             operator.setitem(tos1, tos, tos2)
+        elif opname == 'MAKE_CLOSURE':
+            # Note: removed in Python 3.6.
+            name = pop()
+            code = pop()
+            freevar_cells = pop()
+            defaults = pop_n(instruction.arg)
+            f = GuestFunction(code, globals_, name, defaults=defaults,
+                              closure=freevar_cells)
+            push(f)
         elif opname == 'LOAD_CLOSURE':
             push(cellvars[instruction.arg])
         elif opname == 'INPLACE_ADD':
