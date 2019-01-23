@@ -103,3 +103,14 @@ def test_mutating_closure_implicit_cell():
         inc()
         return x
     assert run_function(main) == 1
+
+
+def test_functools_partial():
+    def main():
+        import functools
+
+        def add(x, y): return x + y
+        curried = functools.partial(add, 1)
+        return curried(41)
+
+    assert run_function(main) == 42

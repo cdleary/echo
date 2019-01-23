@@ -12,6 +12,7 @@ co_flags:
 
 
 import dis
+import functools
 import logging
 import operator
 import types
@@ -44,17 +45,31 @@ _CODE_ATTRS = [
 ]
 
 
-class _Function(object):
-    def __init__(self, code, name, *, closure=None, defaults=None):
+class GuestFunction(object):
+    def __init__(self, code, globals_, name, *, defaults=None, closure=None):
         self.code = code
+        self.globals_ = globals_
         self.name = name
-        self.closure = closure
         self.defaults = defaults
+        self.closure = closure
 
     def __repr__(self):
         return ('_Function(code={!r}, name={!r}, closure={!r}, '
                 'defaults={!r})').format(
                     self.code, self.name, self.closure, self.defaults)
+
+    def invoke(self, args: Tuple[Any, ...]) -> Any:
+        return interp(self.code, self.globals_, args, self.defaults,
+                      self.closure, in_function=True)
+
+
+class GuestPartial(object):
+    def __init__(self, f: GuestFunction, args: Tuple[Any, ...]):
+        self.f = f
+        self.args = args
+
+    def invoke(self, args: Tuple[Any, ...]) -> Any:
+        return self.f.invoke(self.args + args)
 
 
 def is_false(v: Any) -> bool:
@@ -78,12 +93,14 @@ def builtins_get(builtins: Union[types.ModuleType, Dict], name: Text) -> Any:
     return builtins[name]
 
 
-class _Cell:
-    def __init__(self):
-        self._storage = _Cell
+class GuestCell:
+    def __init__(self, name: Text):
+        self._name = name
+        self._storage = GuestCell
 
     def get(self):
-        assert self._storage is not _Cell, 'Cell is uninitialized'
+        assert self._storage is not GuestCell, (
+            'GuestCell %r is uninitialized' % self._name)
         return self._storage
 
     def set(self, value):
@@ -93,7 +110,7 @@ class _Cell:
 def interp(code: types.CodeType, globals_: Dict[Text, Any],
            args: Optional[Tuple[Any, ...]] = None,
            defaults: Optional[Tuple[Any, ...]] = None,
-           closure: Optional[Tuple[_Cell, ...]] = None,
+           closure: Optional[Tuple[GuestCell, ...]] = None,
            in_function: bool = True) -> Any:
     """Evaluates "code" using "globals_" after initializing locals with "args".
 
@@ -140,7 +157,7 @@ def interp(code: types.CodeType, globals_: Dict[Text, Any],
 
     locals_ = (list(args) + list(defaults)
                + [None] * (code.co_nlocals-code.co_argcount))
-    cellvars = tuple(_Cell() for _ in range(len(code.co_cellvars))) + closure
+    cellvars = tuple(GuestCell(name) for name in code.co_cellvars) + closure
     stack = []
     consts = code.co_consts  # LOAD_CONST indexes into this.
     names = code.co_names  # LOAD_GLOBAL uses these names.
@@ -153,7 +170,21 @@ def interp(code: types.CodeType, globals_: Dict[Text, Any],
 
     def pop(): return stack.pop()
 
+    def pop_n(n: int, tos_is_0: bool = True) -> List[Any]:
+        nonlocal stack
+        stack, result = stack[:-n], stack[-n:]
+        if tos_is_0:
+            return list(reversed(result))
+        return result
+
     def peek(): return stack[-1]
+
+    def get_global_or_builtin(name):
+        try:
+            return globals_[name]
+        except KeyError:
+            return builtins_get(builtins, name)
+
     instructions = tuple(dis.get_instructions(code))
     pc_to_instruction = [None] * (
         instructions[-1].offset+1)  # type: List[Optional[dis.Instruction]]
@@ -175,28 +206,43 @@ def interp(code: types.CodeType, globals_: Dict[Text, Any],
         elif opname == 'LOAD_GLOBAL':
             namei = instruction.arg
             name = names[namei]
-            try:
-                push(globals_[name])
-            except KeyError:
-                push(builtins_get(builtins, name))
+            push(get_global_or_builtin(name))
         elif opname == 'LOAD_CONST':
             push(consts[instruction.arg])
         elif opname == 'CALL_FUNCTION':
             argc = instruction.arg
             f_pos = -argc-1
-            stack, f, args = stack[:f_pos], stack[f_pos], stack[-argc:]
+            stack, f, args = stack[:f_pos], stack[f_pos], tuple(stack[-argc:])
             if f is range:
                 push(range(*args))
             elif f is print:
                 result = print(*args)
                 push(result)
-            elif isinstance(f, _Function):
+            elif isinstance(f, GuestFunction):
                 push(interp(f.code, globals_, args=args, closure=f.closure))
             elif isinstance(f, types.FunctionType):
                 push(interp(f.__code__, f.__globals__, defaults=f.__defaults__,
                             args=args))
+            # TODO(cdleary, 2019-01-22): Consider using an import hook to avoid
+            # the C-extension version of functools from being imported so we
+            # don't need to consider it specially.
+            elif f is functools.partial:
+                push(GuestPartial(args[0], args[1:]))
+            elif isinstance(f, GuestPartial):
+                push(f.invoke(args))
             else:
                 raise NotImplementedError(f, args)
+        elif opname == 'CALL_FUNCTION_KW':
+            args = instruction.arg
+            kwarg_names = pop()
+            kwarg_values = pop_n(len(kwarg_names), tos_is_0=True)
+            assert len(kwarg_names) == len(kwarg_values), (
+                kwarg_names, kwarg_values)
+            kwargs = list(zip(kwarg_names, kwarg_values))
+            rest = args-len(kwargs)
+            args = pop_n(rest, tos_is_0=False)
+            to_call = pop()
+            raise NotImplementedError(to_call)
         elif opname == 'GET_ITER':
             push(pop().__iter__())
         elif opname == 'FOR_ITER':
@@ -245,8 +291,9 @@ def interp(code: types.CodeType, globals_: Dict[Text, Any],
                 raise NotImplementedError
             if instruction.arg & 0x01:
                 defaults = pop()
-            push(_Function(code, qualified_name, defaults=defaults,
-                           closure=closure))
+            f = GuestFunction(code, globals_, qualified_name,
+                              defaults=defaults, closure=closure)
+            push(f)
         elif opname == 'BUILD_TUPLE':
             count = instruction.arg
             stack, t = stack[:-count], tuple(stack[-count:])
@@ -288,7 +335,7 @@ def interp(code: types.CodeType, globals_: Dict[Text, Any],
             if in_function:
                 raise NotImplementedError
             else:
-                push(globals_[instruction.argval])
+                push(get_global_or_builtin(instruction.argval))
         elif opname == 'LOAD_DEREF':
             push(cellvars[instruction.arg].get())
         elif opname == 'STORE_DEREF':
