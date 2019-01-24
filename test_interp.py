@@ -13,7 +13,7 @@ def test_print_to_10():
     interp(get_code(main), globals())
 
 
-def test_two_plus_two():
+def test_two_plus_three():
     def add(x, y): return x+y
     assert interp(get_code(add), globals(), args=(2, 3)) == 5
 
@@ -131,3 +131,22 @@ def test_functools_function_global_keys():
                 'partial' in list(functools.update_wrapper.__globals__.keys()))
 
     assert run_function(main) is True
+
+
+def test_tuple_unpack():
+    def main():
+        x = (1, 2, 3)
+        y = (4, 5)
+        z = (6,)
+        return (*x, *y, *z)
+
+    assert run_function(main) == tuple(range(1, 7))
+
+
+# def test_stararg_invocation():
+#     def main():
+#         def add(x, y, z): return x+y+z
+#         args = (2, 3)
+#         return add(1, *args)
+#
+#     assert run_function(main) == 6

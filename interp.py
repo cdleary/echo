@@ -13,6 +13,7 @@ co_flags:
 
 import dis
 import functools
+import itertools
 import logging
 import operator
 import types
@@ -262,6 +263,17 @@ def interp(code: types.CodeType,
             args = pop_n(rest, tos_is_0=False)
             to_call = pop()
             push(do_call(to_call, args, kwargs))
+        elif opname == 'CALL_FUNCTION_EX':
+            arg = instruction.arg
+            if arg & 0x1:
+                kwargs = pop()
+            else:
+                kwargs = None
+            callargs = pop()
+            func = pop()
+            push(do_call(func, callargs, kwargs))
+        elif opname == 'CALL_FUNCTION_VAR':
+            raise NotImplementedError
         elif opname == 'GET_ITER':
             push(pop().__iter__())
         elif opname == 'FOR_ITER':
@@ -323,6 +335,9 @@ def interp(code: types.CodeType,
             count = instruction.arg
             stack, t = stack[:-count], tuple(stack[-count:])
             push(t)
+        elif opname == 'BUILD_TUPLE_UNPACK':
+            iterables = pop_n(instruction.arg, tos_is_0=False)
+            push(tuple(itertools.chain(*iterables)))
         elif opname == 'BUILD_LIST':
             count = instruction.arg
             stack, t = stack[:-count], stack[-count:]
