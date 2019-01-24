@@ -34,6 +34,7 @@ _BINARY_OPS = {
 }
 _COMPARE_OPS = {
     '==': operator.eq,
+    '>=': operator.ge,
 }
 _BUILTIN_TYPES = {
     int,
@@ -178,6 +179,7 @@ def interp(code: types.CodeType,
     locals_ = (list(args) + list(defaults)
                + [None] * (code.co_nlocals-code.co_argcount))
     cellvars = tuple(GuestCell(name) for name in code.co_cellvars) + closure
+    block_stack = []
     stack = []
     consts = code.co_consts  # LOAD_CONST indexes into this.
     names = code.co_names  # LOAD_GLOBAL uses these names.
@@ -224,7 +226,8 @@ def interp(code: types.CodeType,
         logging.debug('Running @%d %s :: %s:', pc, instruction, stack)
         opname = instruction.opname
         if opname == 'SETUP_LOOP':
-            pass
+            block_stack.append(('loop',
+                                instruction.arg + pc + pc_to_bc_width[pc]))
         elif opname == 'LOAD_GLOBAL':
             namei = instruction.arg
             name = names[namei]
@@ -298,7 +301,12 @@ def interp(code: types.CodeType,
         elif opname == 'POP_TOP':
             pop()
         elif opname == 'POP_BLOCK':
-            pass  # Ignoring blocks for now.
+            block_stack.pop()
+        elif opname == 'BREAK_LOOP':
+            loop_block = block_stack[-1]
+            assert loop_block[0] == 'loop'
+            pc = loop_block[1]
+            continue
         elif opname == 'JUMP_ABSOLUTE':
             pc = instruction.arg
             continue
@@ -352,13 +360,13 @@ def interp(code: types.CodeType,
             else:
                 raise NotImplementedError(lhs, rhs)
         elif opname == 'COMPARE_OP':
-            lhs = pop()
             rhs = pop()
+            lhs = pop()
             if instruction.argval == 'in':
-                if type(lhs) in (list, dict, set):
-                    push(rhs in lhs)
+                if type(rhs) in (list, dict, set):
+                    push(lhs in rhs)
                 else:
-                    raise NotImplementedError(rhs, lhs)
+                    raise NotImplementedError(lhs, rhs)
             else:
                 op = _COMPARE_OPS[instruction.argval]
                 if type(lhs) is int and type(rhs) is int:

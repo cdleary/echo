@@ -143,6 +143,18 @@ def test_tuple_unpack():
     assert run_function(main) == tuple(range(1, 7))
 
 
+def test_while_with_breaks():
+    def main():
+        i = 0
+        while True:
+            if i >= 3:
+                break
+            i += 1
+        return i
+
+    assert run_function(main) == 3
+
+
 # def test_stararg_invocation():
 #     def main():
 #         def add(x, y, z): return x+y+z
