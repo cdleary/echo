@@ -122,3 +122,12 @@ def test_print_dict_keys():
         return str(sorted(list(x.keys())))
 
     assert run_function(main) == "['a', 'b']"
+
+
+def test_functools_function_global_keys():
+    def main():
+        import functools
+        return ('partial' in list(functools.wraps.__globals__.keys()) and
+                'partial' in list(functools.update_wrapper.__globals__.keys()))
+
+    assert run_function(main) is True

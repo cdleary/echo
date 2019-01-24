@@ -280,6 +280,12 @@ def interp(code: types.CodeType,
             if is_false(pop()):
                 pc = instruction.arg
                 continue
+        elif opname == 'JUMP_IF_FALSE_OR_POP':
+            if is_false(peek()):
+                pc = instruction.arg
+                continue
+            else:
+                pop()
         elif opname == 'RETURN_VALUE':
             return pop()
         elif opname == 'MAKE_FUNCTION':
@@ -317,13 +323,19 @@ def interp(code: types.CodeType,
             else:
                 raise NotImplementedError(lhs, rhs)
         elif opname == 'COMPARE_OP':
-            op = _COMPARE_OPS[instruction.argval]
             lhs = pop()
             rhs = pop()
-            if type(lhs) is int and type(rhs) is int:
-                push(op(lhs, rhs))
+            if instruction.argval == 'in':
+                if type(lhs) in (list, dict, set):
+                    push(rhs in lhs)
+                else:
+                    raise NotImplementedError(rhs, lhs)
             else:
-                raise NotImplementedError(lhs, rhs)
+                op = _COMPARE_OPS[instruction.argval]
+                if type(lhs) is int and type(rhs) is int:
+                    push(op(lhs, rhs))
+                else:
+                    raise NotImplementedError(lhs, rhs)
         elif opname == 'IMPORT_NAME':
             # TODO(leary, 2019-01-21): Use fromlist/level.
             fromlist = pop()
