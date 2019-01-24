@@ -1,7 +1,14 @@
 # echo
 
-Python meta-circular evaluator. Inspired by the approach taken by
+Experimental Python meta-circular evaluator. Inspired by the approach taken by
 [Narcissus](https://github.com/mozilla/narcissus).
+
+Implements a bytecode-level guest interpreter, reusing the host VM's front-end.
+Note that the guest interpreter must be aware of the host VM's version, so it
+can interpret bytecodes appropriately.
+
+Implementation of builtin and functional constructs are the first priority for
+implementation.
 
 ## Potential
 
