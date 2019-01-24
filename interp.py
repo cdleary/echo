@@ -63,6 +63,19 @@ class GuestFunction(object):
                       self.closure, in_function=True)
 
 
+class GuestBuiltin(object):
+    def __init__(self, name: Text, bound_self: Any):
+        self.name = name
+        self.bound_self = bound_self
+
+    def invoke(self, args: Tuple[Any, ...]) -> Any:
+        if self.name == 'dict.keys':
+            assert not args, args
+            return self.bound_self.keys()
+        else:
+            raise NotImplementedError(self.name)
+
+
 class GuestPartial(object):
     def __init__(self, f: GuestFunction, args: Tuple[Any, ...]):
         self.f = f
@@ -107,8 +120,10 @@ class GuestCell:
         self._storage = value
 
 
-def interp(code: types.CodeType, globals_: Dict[Text, Any],
+def interp(code: types.CodeType,
+           globals_: Dict[Text, Any],
            args: Optional[Tuple[Any, ...]] = None,
+           kwargs: Optional[Dict[Text, Any]] = None,
            defaults: Optional[Tuple[Any, ...]] = None,
            closure: Optional[Tuple[GuestCell, ...]] = None,
            in_function: bool = True) -> Any:
@@ -136,6 +151,8 @@ def interp(code: types.CodeType, globals_: Dict[Text, Any],
     TODO(cdleary, 2019-01-21): Use dis.stack_effect to cross-check stack depth
         change.
     """
+    if kwargs:
+        raise NotImplementedError(code, kwargs)
     args = args or ()
     defaults = defaults or ()
     closure = closure or ()
@@ -166,16 +183,18 @@ def interp(code: types.CodeType, globals_: Dict[Text, Any],
     # sometimes a dict and other times a module?
     builtins = globals_['__builtins__']
 
-    def push(x): stack.append(x)
+    def push(x):
+        logging.debug(' Pushing: %r' % (x,))
+        stack.append(x)
 
     def pop(): return stack.pop()
 
-    def pop_n(n: int, tos_is_0: bool = True) -> List[Any]:
+    def pop_n(n: int, tos_is_0: bool = True) -> Tuple[Any, ...]:
         nonlocal stack
-        stack, result = stack[:-n], stack[-n:]
+        stack, result = stack[:len(stack)-n], stack[len(stack)-n:]
         if tos_is_0:
-            return list(reversed(result))
-        return result
+            return tuple(reversed(result))
+        return tuple(result)
 
     def peek(): return stack[-1]
 
@@ -211,38 +230,24 @@ def interp(code: types.CodeType, globals_: Dict[Text, Any],
             push(consts[instruction.arg])
         elif opname == 'CALL_FUNCTION':
             argc = instruction.arg
-            f_pos = -argc-1
-            stack, f, args = stack[:f_pos], stack[f_pos], tuple(stack[-argc:])
-            if f is range:
-                push(range(*args))
-            elif f is print:
-                result = print(*args)
-                push(result)
-            elif isinstance(f, GuestFunction):
-                push(interp(f.code, globals_, args=args, closure=f.closure))
-            elif isinstance(f, types.FunctionType):
-                push(interp(f.__code__, f.__globals__, defaults=f.__defaults__,
-                            args=args))
-            # TODO(cdleary, 2019-01-22): Consider using an import hook to avoid
-            # the C-extension version of functools from being imported so we
-            # don't need to consider it specially.
-            elif f is functools.partial:
-                push(GuestPartial(args[0], args[1:]))
-            elif isinstance(f, GuestPartial):
-                push(f.invoke(args))
-            else:
-                raise NotImplementedError(f, args)
+            f_pos = len(stack)-argc-1
+            stack, f, args = (stack[:f_pos], stack[f_pos],
+                              tuple(stack[len(stack)-argc:]))
+            push(do_call(f, args, kwargs=None))
         elif opname == 'CALL_FUNCTION_KW':
             args = instruction.arg
             kwarg_names = pop()
             kwarg_values = pop_n(len(kwarg_names), tos_is_0=True)
+            logging.debug(
+                'CALL_FUNCTION_KW: args: %d; kwarg_names: %r; kwarg_values: %r'
+                % (args, kwarg_names, kwarg_values))
             assert len(kwarg_names) == len(kwarg_values), (
                 kwarg_names, kwarg_values)
-            kwargs = list(zip(kwarg_names, kwarg_values))
+            kwargs = dict(zip(kwarg_names, kwarg_values))
             rest = args-len(kwargs)
             args = pop_n(rest, tos_is_0=False)
             to_call = pop()
-            raise NotImplementedError(to_call)
+            push(do_call(to_call, args, kwargs))
         elif opname == 'GET_ITER':
             push(pop().__iter__())
         elif opname == 'FOR_ITER':
@@ -330,7 +335,10 @@ def interp(code: types.CodeType, globals_: Dict[Text, Any],
             push(getattr(module, instruction.argval))
         elif opname == 'LOAD_ATTR':
             obj = pop()
-            push(getattr(obj, instruction.argval))
+            if isinstance(obj, dict) and instruction.argval == 'keys':
+                push(GuestBuiltin('dict.keys', bound_self=obj))
+            else:
+                push(getattr(obj, instruction.argval))
         elif opname == 'LOAD_NAME':
             if in_function:
                 raise NotImplementedError
@@ -371,6 +379,40 @@ def interp(code: types.CodeType, globals_: Dict[Text, Any],
         else:
             raise NotImplementedError(instruction, stack)
         pc += pc_to_bc_width[pc]
+
+
+def do_call(f, args: Tuple[Any, ...],
+            kwargs: Optional[Dict[Text, Any]] = None):
+    kwargs = kwargs or {}
+    if f is dict:
+        return dict(*args, **kwargs)
+    elif f is range:
+        return range(*args)
+    elif f is print:
+        return print(*args)
+    elif f is sorted:
+        return sorted(*args, **kwargs)
+    elif f is str:
+        return str(*args, **kwargs)
+    elif f is list:
+        return list(*args, **kwargs)
+    elif isinstance(f, GuestFunction):
+        return interp(f.code, globals_=f.globals_, args=args, kwargs=kwargs,
+                      closure=f.closure)
+    elif isinstance(f, types.FunctionType):
+        return interp(f.__code__, f.__globals__, defaults=f.__defaults__,
+                      args=args, kwargs=kwargs)
+    # TODO(cdleary, 2019-01-22): Consider using an import hook to avoid
+    # the C-extension version of functools from being imported so we
+    # don't need to consider it specially.
+    elif f is functools.partial:
+        return GuestPartial(args[0], args[1:])
+    elif isinstance(f, GuestPartial):
+        return f.invoke(args)
+    elif isinstance(f, GuestBuiltin):
+        return f.invoke(args)
+    else:
+        raise NotImplementedError(f, args, kwargs)
 
 
 def run_function(f: types.FunctionType, *args: Tuple[Any, ...],

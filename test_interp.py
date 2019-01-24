@@ -114,3 +114,11 @@ def test_functools_partial():
         return curried(41)
 
     assert run_function(main) == 42
+
+
+def test_print_dict_keys():
+    def main():
+        x = dict(a=1, b=2)
+        return str(sorted(list(x.keys())))
+
+    assert run_function(main) == "['a', 'b']"
