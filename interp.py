@@ -16,6 +16,7 @@ import functools
 import logging
 import operator
 import types
+import sys
 
 from io import StringIO
 from typing import Dict, Any, Text, Tuple, List, Optional, Union
@@ -78,6 +79,7 @@ class GuestBuiltin(object):
 
 class GuestPartial(object):
     def __init__(self, f: GuestFunction, args: Tuple[Any, ...]):
+        assert isinstance(f, GuestFunction), f
         self.f = f
         self.args = args
 
@@ -229,11 +231,23 @@ def interp(code: types.CodeType,
         elif opname == 'LOAD_CONST':
             push(consts[instruction.arg])
         elif opname == 'CALL_FUNCTION':
-            argc = instruction.arg
-            f_pos = len(stack)-argc-1
-            stack, f, args = (stack[:f_pos], stack[f_pos],
-                              tuple(stack[len(stack)-argc:]))
-            push(do_call(f, args, kwargs=None))
+            # As of Python 3.6 this only supports calls for functions with
+            # positional arguments.
+            if sys.version_info >= (3, 6):
+                argc = instruction.arg
+                kwargc = 0
+            else:
+                argc = instruction.arg & 0xff
+                kwargc = instruction.arg >> 8
+            logging.debug('CALL_FUNCTION; argc: %d; kwargc: %d', argc, kwargc)
+            kwarg_stack = pop_n(2 * kwargc, tos_is_0=False)
+            logging.debug('CALL_FUNCTION; kwarg_stack: %r', kwarg_stack)
+            kwargs = dict(zip(kwarg_stack[::2], kwarg_stack[1::2]))
+            args = pop_n(argc, tos_is_0=False)
+            f = pop()
+            logging.debug('CALL_FUNCTION; f: %r; args: %r; kwargs: %r', f,
+                          args, kwargs)
+            push(do_call(f, args, kwargs=kwargs))
         elif opname == 'CALL_FUNCTION_KW':
             args = instruction.arg
             kwarg_names = pop()
