@@ -22,9 +22,12 @@ import sys
 from io import StringIO
 from typing import Dict, Any, Text, Tuple, List, Optional, Union
 
+import termcolor
+
 from common import dis_to_str, get_code
 
 
+COLOR_TRACE = False
 STARARGS_FLAG = 0x04
 _BINARY_OPS = {
     'BINARY_ADD': operator.add,
@@ -34,6 +37,7 @@ _BINARY_OPS = {
 }
 _COMPARE_OPS = {
     '==': operator.eq,
+    '<': operator.lt,
     '>=': operator.ge,
 }
 _BUILTIN_TYPES = {
@@ -115,13 +119,34 @@ class GuestCell:
         self._name = name
         self._storage = GuestCell
 
-    def get(self):
+    def initialized(self) -> bool:
+        return self._storage is not GuestCell
+
+    def get(self) -> Any:
         assert self._storage is not GuestCell, (
             'GuestCell %r is uninitialized' % self._name)
         return self._storage
 
-    def set(self, value):
+    def set(self, value: Any):
         self._storage = value
+
+
+def cprint_lines_after(filename: Text, lineno: int):
+    with open(filename) as f:
+        lines = f.readlines()
+    lines = lines[lineno-1:]
+    saw_def = False
+    for lineno, line in enumerate(lines, lineno-1):
+        # TODO(cdleary, 2019-01-24): Should detect the original indent level
+        # and terminate the line printout at the first point where the indent
+        # decreases (first dedent).
+        if line.startswith('def'):
+            if saw_def:
+                break
+            else:
+                saw_def = True
+        termcolor.cprint('%05d: ' % lineno, color='yellow', end='')
+        termcolor.cprint(line.rstrip(), color='blue')
 
 
 def interp(code: types.CodeType,
@@ -179,10 +204,38 @@ def interp(code: types.CodeType,
     locals_ = (list(args) + list(defaults)
                + [None] * (code.co_nlocals-code.co_argcount))
     cellvars = tuple(GuestCell(name) for name in code.co_cellvars) + closure
+
+    # Cellvars that match argument names get populated with the argument value,
+    # and it seems as though locals_ for that value is never referenced in the
+    # bytecode.
+    for i, cellvar_name in enumerate(code.co_cellvars):
+        try:
+            index = code.co_cellvars.index(cellvar_name)
+        except ValueError:
+            continue
+        else:
+            cellvars[i].set(locals_[index])
+
     block_stack = []
     stack = []
     consts = code.co_consts  # LOAD_CONST indexes into this.
     names = code.co_names  # LOAD_GLOBAL uses these names.
+
+    if COLOR_TRACE:
+        def gprint(*args): termcolor.cprint(*args, color='green')
+        gprint('interpreting:')
+        gprint('  co_name:     %r' % code.co_name)
+        gprint('  co_argcount: %d' % code.co_argcount)
+        gprint('  co_nlocals:  %d' % code.co_nlocals)
+        gprint('  co_cellvars: %r' % (code.co_cellvars,))
+        gprint('  co_freevars: %r' % (code.co_freevars,))
+        gprint('  co_varnames: %r' % (code.co_varnames,))
+        gprint('  co_names:    %r' % (code.co_names,))
+        gprint('  closure:     %r' % (closure,))
+        gprint('  len(args):   %d' % len(args))
+        gprint('  loc:         %s:%d' % (code.co_filename,
+                                         code.co_firstlineno))
+        cprint_lines_after(code.co_filename, code.co_firstlineno)
 
     # TODO(cdleary, 2019-01-21): Investigate why this "builtins" ref is
     # sometimes a dict and other times a module?
@@ -412,7 +465,8 @@ def interp(code: types.CodeType,
                               closure=freevar_cells)
             push(f)
         elif opname == 'LOAD_CLOSURE':
-            push(cellvars[instruction.arg])
+            cellvar = cellvars[instruction.arg]
+            push(cellvar)
         elif opname == 'INPLACE_ADD':
             lhs = pop()
             rhs = pop()

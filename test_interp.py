@@ -97,12 +97,27 @@ def test_mutating_closure_implicit_cell():
     def main():
         x = 0
 
+        x += 1
+
         def inc():
             nonlocal x
             x += 1
         inc()
+        x += 1
         return x
-    assert run_function(main) == 1
+    assert run_function(main) == 3
+
+
+def test_closed_over_argument():
+    def main():
+        def outer(x):
+            def inner():
+                return x
+            x += 2
+            return inner
+        return outer(42)()
+
+    assert run_function(main) == 44
 
 
 def test_functools_partial():
@@ -143,12 +158,15 @@ def test_tuple_unpack():
     assert run_function(main) == tuple(range(1, 7))
 
 
-def test_while_with_breaks():
+def test_while_with_break_and_continue():
     def main():
         i = 0
         while True:
             if i >= 3:
                 break
+            if i < 1:
+                i += 2
+                continue
             i += 1
         return i
 

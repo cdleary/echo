@@ -6,6 +6,7 @@ python:
 install:
 - pip install pytype
 - pip install pycodestyle
+- pip install termcolor
 
 script:
 - pytype --config=pytype.cfg --python-version=$TRAVIS_PYTHON_VERSION
