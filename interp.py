@@ -506,7 +506,7 @@ def do_call(f, args: Tuple[Any, ...],
     # don't need to consider it specially.
     elif f is functools.partial:
         return GuestPartial(args[0], args[1:])
-    elif f is builtins.__build_class__:
+    elif f is getattr(builtins, '__build_class__'):
         raise NotImplementedError('Build GuestClass', args, kwargs)
     elif isinstance(f, GuestPartial):
         return f.invoke(args)
