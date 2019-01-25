@@ -15,7 +15,7 @@ import os
 import pdb
 import types
 
-from interp import interp
+import interp
 
 
 def run_path(fullpath):
@@ -31,7 +31,7 @@ def run_path(fullpath):
     module_code = compile(contents, fullpath, 'exec')
     assert isinstance(module_code, types.CodeType), module_code
 
-    interp(module_code, globals(), in_function=False)
+    interp.interp(module_code, globals(), in_function=False)
 
 
 def main():
@@ -40,6 +40,8 @@ def main():
                       help='Log level to use')
     parser.add_option('--pdb', action='store_true', default=False,
                       help='Drop into PDB on error')
+    parser.add_option('--ctrace', action='store_true', default=False,
+                      help='Color call trace')
     opts, args = parser.parse_args()
 
     # Path.
@@ -50,6 +52,8 @@ def main():
     # Options.
     if opts.log_level:
         logging.basicConfig(level=getattr(logging, opts.log_level))
+
+    interp.COLOR_TRACE = opts.ctrace
 
     try:
         run_path(fullpath)

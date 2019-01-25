@@ -10,7 +10,7 @@ co_flags:
 * 0x20: generator function
 """
 
-
+import builtins
 import dis
 import functools
 import itertools
@@ -242,6 +242,8 @@ def interp(code: types.CodeType,
     builtins = globals_['__builtins__']
 
     def push(x):
+        if COLOR_TRACE:
+            termcolor.cprint(' =(push)=> %r' % (x,), color='blue')
         logging.debug(' Pushing: %r' % (x,))
         stack.append(x)
 
@@ -276,6 +278,8 @@ def interp(code: types.CodeType,
     pc = 0
     while True:
         instruction = pc_to_instruction[pc]
+        if COLOR_TRACE:
+            termcolor.cprint('%s' % (instruction,), color='yellow')
         logging.debug('Running @%d %s :: %s:', pc, instruction, stack)
         opname = instruction.opname
         if opname == 'SETUP_LOOP':
@@ -351,6 +355,8 @@ def interp(code: types.CodeType,
                 globals_[instruction.argval] = pop()
         elif opname == 'LOAD_FAST':
             push(locals_[instruction.arg])
+        elif opname == 'LOAD_BUILD_CLASS':
+            push(builtins_get(builtins, '__build_class__'))
         elif opname == 'POP_TOP':
             pop()
         elif opname == 'POP_BLOCK':
@@ -487,18 +493,8 @@ def interp(code: types.CodeType,
 def do_call(f, args: Tuple[Any, ...],
             kwargs: Optional[Dict[Text, Any]] = None):
     kwargs = kwargs or {}
-    if f is dict:
-        return dict(*args, **kwargs)
-    elif f is range:
-        return range(*args)
-    elif f is print:
-        return print(*args)
-    elif f is sorted:
-        return sorted(*args, **kwargs)
-    elif f is str:
-        return str(*args, **kwargs)
-    elif f is list:
-        return list(*args, **kwargs)
+    if f in (dict, range, print, sorted, str, list):
+        return f(*args, **kwargs)
     elif isinstance(f, GuestFunction):
         return interp(f.code, globals_=f.globals_, args=args, kwargs=kwargs,
                       closure=f.closure)
@@ -510,6 +506,8 @@ def do_call(f, args: Tuple[Any, ...],
     # don't need to consider it specially.
     elif f is functools.partial:
         return GuestPartial(args[0], args[1:])
+    elif f is builtins.__build_class__:
+        raise NotImplementedError('Build GuestClass', args, kwargs)
     elif isinstance(f, GuestPartial):
         return f.invoke(args)
     elif isinstance(f, GuestBuiltin):
