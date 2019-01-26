@@ -13,25 +13,10 @@ import logging
 import optparse
 import os
 import pdb
+import sys
 import types
 
 import interp
-
-
-def run_path(fullpath):
-    path, basename = os.path.split(fullpath)
-    module_name, _ = os.path.splitext(basename)
-    # Note: if we import the module it'll execute via the host interpreter.
-    #
-    # Instead, we need to go through the steps ourselves (read file, parse to
-    # AST, bytecode emit, interpret bytecode).
-    with open(fullpath) as f:
-        contents = f.read()
-
-    module_code = compile(contents, fullpath, 'exec')
-    assert isinstance(module_code, types.CodeType), module_code
-
-    interp.interp(module_code, globals(), in_function=False)
 
 
 def main():
@@ -55,8 +40,13 @@ def main():
 
     interp.COLOR_TRACE = opts.ctrace
 
+    globals_ = dict(globals())
+    globals_['__file__'] = fullpath
+
+    sys.path[0] = os.path.dirname(fullpath)
+
     try:
-        run_path(fullpath)
+        interp.import_path(fullpath)
     except Exception as e:
         if opts.pdb:
             pdb.post_mortem(e.__traceback__)

@@ -10,12 +10,14 @@ co_flags:
 * 0x20: generator function
 """
 
+import abc
 import builtins
 import dis
 import functools
 import itertools
 import logging
 import operator
+import os
 import types
 import sys
 
@@ -52,7 +54,26 @@ _CODE_ATTRS = [
 ]
 
 
-class GuestFunction(object):
+class GuestPyObject:
+
+    __metaclass__ = abc.ABCMeta
+
+    @abc.abstractmethod
+    def getattr(self, name: Text) -> Any:
+        raise NotImplementedError(self, name)
+
+
+class GuestModule(GuestPyObject):
+    def __init__(self, name, code, globals_):
+        self.name = name
+        self.code = code
+        self.globals_ = globals_
+
+    def getattr(self, name: Text) -> Any:
+        return self.globals_[name]
+
+
+class GuestFunction(GuestPyObject):
     def __init__(self, code, globals_, name, *, defaults=None, closure=None):
         self.code = code
         self.globals_ = globals_
@@ -69,8 +90,11 @@ class GuestFunction(object):
         return interp(self.code, self.globals_, args, self.defaults,
                       self.closure, in_function=True)
 
+    def getattr(self, name: Text) -> Any:
+        raise NotImplementedError
 
-class GuestBuiltin(object):
+
+class GuestBuiltin(GuestPyObject):
     def __init__(self, name: Text, bound_self: Any):
         self.name = name
         self.bound_self = bound_self
@@ -81,6 +105,9 @@ class GuestBuiltin(object):
             return self.bound_self.keys()
         else:
             raise NotImplementedError(self.name)
+
+    def getattr(self, name: Text) -> Any:
+        raise NotImplementedError
 
 
 class GuestPartial(object):
@@ -100,6 +127,10 @@ def is_false(v: Any) -> bool:
         return v is False
     else:
         raise NotImplementedError(v)
+
+
+def is_true(v: Any) -> bool:
+    return not is_false(v)
 
 
 def code_to_str(c: types.CodeType) -> Text:
@@ -373,6 +404,10 @@ def interp(code: types.CodeType,
             if is_false(pop()):
                 pc = instruction.arg
                 continue
+        elif opname == 'POP_JUMP_IF_TRUE':
+            if is_true(pop()):
+                pc = instruction.arg
+                continue
         elif opname == 'JUMP_IF_FALSE_OR_POP':
             if is_false(peek()):
                 pc = instruction.arg
@@ -436,7 +471,7 @@ def interp(code: types.CodeType,
             # TODO(leary, 2019-01-21): Use fromlist/level.
             fromlist = pop()
             level = pop()
-            push(__import__(instruction.argval, globals_))
+            push(do_import(instruction.argval, globals_))
         elif opname == 'IMPORT_FROM':
             module = peek()
             assert isinstance(module, types.ModuleType), module
@@ -445,6 +480,8 @@ def interp(code: types.CodeType,
             obj = pop()
             if isinstance(obj, dict) and instruction.argval == 'keys':
                 push(GuestBuiltin('dict.keys', bound_self=obj))
+            elif isinstance(obj, GuestPyObject):
+                push(obj.getattr(instruction.argval))
             else:
                 push(getattr(obj, instruction.argval))
         elif opname == 'LOAD_NAME':
@@ -512,8 +549,63 @@ def do_call(f, args: Tuple[Any, ...],
         return f.invoke(args)
     elif isinstance(f, GuestBuiltin):
         return f.invoke(args)
+    elif isinstance(f, types.MethodType):
+        # Builtin object method.
+        return f(*args, **kwargs)
     else:
         raise NotImplementedError(f, args, kwargs)
+
+
+def import_path(path: Text):
+    fullpath = path
+    path, basename = os.path.split(fullpath)
+    module_name, _ = os.path.splitext(basename)
+    # Note: if we import the module it'll execute via the host interpreter.
+    #
+    # Instead, we need to go through the steps ourselves (read file, parse to
+    # AST, bytecode emit, interpret bytecode).
+    with open(fullpath) as f:
+        contents = f.read()
+
+    module_code = compile(contents, fullpath, 'exec')
+    assert isinstance(module_code, types.CodeType), module_code
+
+    globals_ = {'__builtins__': builtins}
+    interp(module_code, globals_, in_function=False)
+    return GuestModule(module_name, module_code, globals_)
+
+
+def _find_module_path(search_path, pieces):
+    *leaders, last = pieces
+    candidate = os.path.join(search_path, *leaders)
+    logging.debug('Candidate: %r', candidate)
+    if os.path.exists(candidate):
+        if os.path.isdir(os.path.join(candidate, last)):
+            init_path = os.path.join(candidate, last, '__init__.py')
+            if os.path.exists(init_path):
+                return init_path
+        target = os.path.join(candidate, last + '.py')
+        if os.path.exists(target):
+            return target
+    return None
+
+
+def find_module_path(name: Text) -> Text:
+    pieces = name.split('.')
+
+    for search_path in sys.path:
+        result = _find_module_path(search_path, pieces)
+        if result:
+            return result
+    raise NotImplementedError('Not found on python paths:', name)
+
+
+def do_import(name: Text, globals_: Dict[Text, Any]) -> types.ModuleType:
+    if name in ('functools', 'os'):
+        return __import__(name, globals_)
+
+    path = find_module_path(name)
+    return import_path(path)
 
 
 def run_function(f: types.FunctionType, *args: Tuple[Any, ...],
