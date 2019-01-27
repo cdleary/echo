@@ -39,11 +39,14 @@ _BINARY_OPS = {
 }
 _COMPARE_OPS = {
     '==': operator.eq,
+    '!=': operator.ne,
     '<': operator.lt,
     '>=': operator.ge,
+    'is not': operator.is_not
 }
 _BUILTIN_TYPES = {
     int,
+    str,
     list,
 }
 _CODE_ATTRS = [
@@ -61,6 +64,10 @@ class GuestPyObject:
     @abc.abstractmethod
     def getattr(self, name: Text) -> Any:
         raise NotImplementedError(self, name)
+
+    @abc.abstractmethod
+    def setattr(self, name: Text, value: Any) -> Any:
+        raise NotImplementedError(self, name, value)
 
 
 class GuestModule(GuestPyObject):
@@ -93,6 +100,49 @@ class GuestFunction(GuestPyObject):
     def getattr(self, name: Text) -> Any:
         raise NotImplementedError
 
+    def setattr(self, name: Text, value: Any) -> Any:
+        raise NotImplementedError
+
+
+class GuestInstance(GuestPyObject):
+
+    def __init__(self, cls: 'GuestClass'):
+        self.cls = cls
+        self.dict = {}
+
+    def getattr(self, name: Text) -> Any:
+        return self.dict[name]
+
+    def setattr(self, name: Text, value: Any):
+        self.dict[name] = value
+
+
+class GuestClass(GuestPyObject):
+    def __init__(self, name, dict_, bases=None, metaclass=None, kwargs=None):
+        self.name = name
+        self.dict_ = dict_
+        self.bases = bases or ()
+        self.metaclass = metaclass
+        self.kwargs = kwargs
+
+    def __repr__(self) -> Text:
+        return 'GuestClass(name={!r}, ...)'.format(self.name)
+
+    def instantiate(self, args: Tuple[Any, ...]) -> GuestInstance:
+        guest_instance = GuestInstance(self)
+        if '__init__' in self.dict_:
+            init_f = self.dict_['__init__']
+            # TODO(cdleary, 2019-01-26) What does Python do when you return
+            # something non-None from initializer? Ignore?
+            do_call(init_f, (guest_instance,) + args)
+        return guest_instance
+
+    def getattr(self, name: Text) -> Any:
+        raise NotImplementedError
+
+    def setattr(self, name: Text, value: Any) -> Any:
+        raise NotImplementedError
+
 
 class GuestBuiltin(GuestPyObject):
     def __init__(self, name: Text, bound_self: Any):
@@ -107,6 +157,9 @@ class GuestBuiltin(GuestPyObject):
             raise NotImplementedError(self.name)
 
     def getattr(self, name: Text) -> Any:
+        raise NotImplementedError
+
+    def setattr(self, name: Text, value: Any) -> Any:
         raise NotImplementedError
 
 
@@ -463,7 +516,11 @@ def interp(code: types.CodeType,
                     raise NotImplementedError(lhs, rhs)
             else:
                 op = _COMPARE_OPS[instruction.argval]
-                if type(lhs) is int and type(rhs) is int:
+                if {type(lhs), type(rhs)} <= _BUILTIN_TYPES:
+                    push(op(lhs, rhs))
+                elif (isinstance(lhs, GuestInstance) and
+                      isinstance(rhs, GuestInstance) and
+                      instruction.argval in ('is not', 'is')):
                     push(op(lhs, rhs))
                 else:
                     raise NotImplementedError(lhs, rhs)
@@ -484,6 +541,13 @@ def interp(code: types.CodeType,
                 push(obj.getattr(instruction.argval))
             else:
                 push(getattr(obj, instruction.argval))
+        elif opname == 'STORE_ATTR':
+            obj = pop()
+            value = pop()
+            if isinstance(obj, GuestPyObject):
+                obj.setattr(instruction.argval, value)
+            else:
+                raise NotImplementedError
         elif opname == 'LOAD_NAME':
             if in_function:
                 raise NotImplementedError
@@ -544,11 +608,16 @@ def do_call(f, args: Tuple[Any, ...],
     elif f is functools.partial:
         return GuestPartial(args[0], args[1:])
     elif f is getattr(builtins, '__build_class__'):
-        raise NotImplementedError('Build GuestClass', args, kwargs)
+        body_f, name, *rest = args
+        dict_ = {'__builtins__': builtins}
+        interp(body_f.code, dict_, in_function=False)
+        return GuestClass(name, dict_, *rest, **kwargs)
     elif isinstance(f, GuestPartial):
         return f.invoke(args)
     elif isinstance(f, GuestBuiltin):
         return f.invoke(args)
+    elif isinstance(f, GuestClass):
+        return f.instantiate(args)
     elif isinstance(f, types.MethodType):
         # Builtin object method.
         return f(*args, **kwargs)
