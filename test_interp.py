@@ -1,8 +1,8 @@
 from io import StringIO
 from contextlib import redirect_stdout
 
-from interp import interp, run_function
-from common import get_code
+from .interp import interp, run_function
+from .common import get_code
 
 
 def test_print_to_10():
@@ -15,14 +15,14 @@ def test_print_to_10():
 
 def test_two_plus_three():
     def add(x, y): return x+y
-    assert interp(get_code(add), globals(), args=(2, 3)) == 5
+    assert run_function(add, 2, 3) == 5
 
 
 def test_call_other():
     def main():
         def sub(addend): return 42+addend
         return sub(0) + sub(1)
-    assert interp(get_code(main), globals()) == 85
+    assert run_function(main) == 85
 
 
 def test_fizzbuzz():
@@ -36,7 +36,7 @@ def test_fizzbuzz():
                 print('buzz', i)
     out = StringIO()
     with redirect_stdout(out):
-        interp(get_code(fizzbuzz), globals(), args=(16,))
+        run_function(fizzbuzz, 16)
     assert out.getvalue() == """fizz 3
 buzz 5
 fizz 6
@@ -56,7 +56,7 @@ def test_cond_with_bindings():
             x = 24
             y = 42
         return x, y
-    assert interp(get_code(main), globals()) == (42, 24)
+    assert run_function(main) == (42, 24)
 
 
 def test_built_list_and_index():
@@ -73,7 +73,7 @@ def test_simple_cond_run_alternate():
         else:
             x = 24
         return x
-    assert interp(get_code(main), globals()) == 24
+    assert run_function(main) == 24
 
 
 def test_kwarg_slot():

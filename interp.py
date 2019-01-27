@@ -12,6 +12,7 @@ co_flags:
 
 import abc
 import builtins
+import collections
 import dis
 import functools
 import itertools
@@ -21,12 +22,14 @@ import os
 import types
 import sys
 
+from enum import Enum
 from io import StringIO
-from typing import Dict, Any, Text, Tuple, List, Optional, Union
+from typing import (Dict, Any, Text, Tuple, List, Optional, Union, TypeVar,
+                    Generic, Sequence)
 
 import termcolor
 
-from common import dis_to_str, get_code
+from .common import dis_to_str, get_code
 
 
 COLOR_TRACE = False
@@ -36,6 +39,7 @@ _BINARY_OPS = {
     'BINARY_MODULO': operator.mod,
     'BINARY_MULTIPLY': operator.mul,
     'BINARY_SUBSCR': operator.getitem,
+    'BINARY_TRUE_DIVIDE': operator.truediv,
 }
 _COMPARE_OPS = {
     '==': operator.eq,
@@ -55,6 +59,33 @@ _CODE_ATTRS = [
     'co_lnotab', 'co_name', 'co_names', 'co_nlocals', 'co_stacksize',
     'co_varnames',
 ]
+
+
+class ResultKind(Enum):
+    VALUE = 'value'
+    EXCEPTION = 'exception'
+
+
+T = TypeVar('T')
+ExceptionData = collections.namedtuple('ExceptionData',
+                                       'traceback parameter exception')
+
+
+class Result(Generic[T]):
+
+    def __init__(self, value: Union[T, ExceptionData]):
+        self.value = value
+
+    def is_exception(self) -> bool:
+        return isinstance(self.value, ExceptionData)
+
+    def get_value(self) -> T:
+        assert not isinstance(self.value, ExceptionData)
+        return self.value
+
+    def get_exception(self) -> ExceptionData:
+        assert isinstance(self.value, ExceptionData)
+        return self.value
 
 
 class GuestPyObject:
@@ -93,7 +124,7 @@ class GuestFunction(GuestPyObject):
                 'defaults={!r})').format(
                     self.code, self.name, self.closure, self.defaults)
 
-    def invoke(self, args: Tuple[Any, ...]) -> Any:
+    def invoke(self, args: Tuple[Any, ...]) -> Result[Any]:
         return interp(self.code, self.globals_, args, self.defaults,
                       self.closure, in_function=True)
 
@@ -128,14 +159,16 @@ class GuestClass(GuestPyObject):
     def __repr__(self) -> Text:
         return 'GuestClass(name={!r}, ...)'.format(self.name)
 
-    def instantiate(self, args: Tuple[Any, ...]) -> GuestInstance:
+    def instantiate(self, args: Tuple[Any, ...]) -> Result[GuestInstance]:
         guest_instance = GuestInstance(self)
         if '__init__' in self.dict_:
             init_f = self.dict_['__init__']
             # TODO(cdleary, 2019-01-26) What does Python do when you return
             # something non-None from initializer? Ignore?
-            do_call(init_f, (guest_instance,) + args)
-        return guest_instance
+            result = do_call(init_f, (guest_instance,) + args)
+            if result.is_exception():
+                return result
+        return Result(guest_instance)
 
     def getattr(self, name: Text) -> Any:
         raise NotImplementedError
@@ -149,10 +182,10 @@ class GuestBuiltin(GuestPyObject):
         self.name = name
         self.bound_self = bound_self
 
-    def invoke(self, args: Tuple[Any, ...]) -> Any:
+    def invoke(self, args: Tuple[Any, ...]) -> Result[Any]:
         if self.name == 'dict.keys':
             assert not args, args
-            return self.bound_self.keys()
+            return Result(self.bound_self.keys())
         else:
             raise NotImplementedError(self.name)
 
@@ -233,13 +266,23 @@ def cprint_lines_after(filename: Text, lineno: int):
         termcolor.cprint(line.rstrip(), color='blue')
 
 
+def _run_binop(opname: Text, lhs: Any, rhs: Any) -> Result[Any]:
+    if (opname in ('BINARY_TRUE_DIVIDE', 'BINARY_MODULO') and type(rhs) is int
+            and rhs == 0):
+        raise NotImplementedError(opname, lhs, rhs)
+    if {type(lhs), type(rhs)} <= _BUILTIN_TYPES:
+        op = _BINARY_OPS[opname]
+        return Result(op(lhs, rhs))
+    raise NotImplementedError(opname, lhs, rhs)
+
+
 def interp(code: types.CodeType,
            globals_: Dict[Text, Any],
            args: Optional[Tuple[Any, ...]] = None,
            kwargs: Optional[Dict[Text, Any]] = None,
            defaults: Optional[Tuple[Any, ...]] = None,
            closure: Optional[Tuple[GuestCell, ...]] = None,
-           in_function: bool = True) -> Any:
+           in_function: bool = True) -> Result[Any]:
     """Evaluates "code" using "globals_" after initializing locals with "args".
 
     Returns the result of evaluating the code object.
@@ -329,6 +372,7 @@ def interp(code: types.CodeType,
         if COLOR_TRACE:
             termcolor.cprint(' =(push)=> %r' % (x,), color='blue')
         logging.debug(' Pushing: %r' % (x,))
+        assert not isinstance(x, Result), x
         stack.append(x)
 
     def pop(): return stack.pop()
@@ -369,6 +413,28 @@ def interp(code: types.CodeType,
         if opname == 'SETUP_LOOP':
             block_stack.append(('loop',
                                 instruction.arg + pc + pc_to_bc_width[pc]))
+        elif opname == 'SETUP_EXCEPT':
+            block_stack.append(('except',
+                                instruction.arg+pc+pc_to_bc_width[pc]))
+        elif opname == 'END_FINALLY':
+            # From the Python docs: "The interpreter recalls whether the
+            # exception has to be re-raised, or whether the function returns,
+            # and continues with the outer-next block."
+            raise NotImplementedError
+        elif opname == 'RAISE_VARARGS':
+            argc = instruction.arg
+            traceback, parameter, exception = (None, None, None)
+            if argc > 0:
+                traceback = pop()
+            if argc > 1:
+                parameter = pop()
+            if argc > 2:
+                exception = pop()
+            if COLOR_TRACE:
+                termcolor.cprint(' ! exception %r' % (traceback, parameter,
+                                                      exception),
+                                 color='purple')
+            return Result(ExceptionData(traceback, parameter, exception))
         elif opname == 'LOAD_GLOBAL':
             namei = instruction.arg
             name = names[namei]
@@ -392,7 +458,11 @@ def interp(code: types.CodeType,
             f = pop()
             logging.debug('CALL_FUNCTION; f: %r; args: %r; kwargs: %r', f,
                           args, kwargs)
-            push(do_call(f, args, kwargs=kwargs))
+            result = do_call(f, args, kwargs=kwargs)
+            if result.is_exception():
+                raise NotImplementedError
+            else:
+                push(result.get_value())
         elif opname == 'CALL_FUNCTION_KW':
             args = instruction.arg
             kwarg_names = pop()
@@ -406,7 +476,11 @@ def interp(code: types.CodeType,
             rest = args-len(kwargs)
             args = pop_n(rest, tos_is_0=False)
             to_call = pop()
-            push(do_call(to_call, args, kwargs))
+            result = do_call(to_call, args, kwargs)
+            if result.is_exception():
+                raise NotImplementedError
+            else:
+                push(result.get_value())
         elif opname == 'CALL_FUNCTION_EX':
             arg = instruction.arg
             if arg & 0x1:
@@ -415,7 +489,11 @@ def interp(code: types.CodeType,
                 kwargs = None
             callargs = pop()
             func = pop()
-            push(do_call(func, callargs, kwargs))
+            result = do_call(func, callargs, kwargs)
+            if result.is_exception():
+                raise NotImplementedError
+            else:
+                push(result.get_value())
         elif opname == 'CALL_FUNCTION_VAR':
             raise NotImplementedError
         elif opname == 'GET_ITER':
@@ -453,6 +531,9 @@ def interp(code: types.CodeType,
         elif opname == 'JUMP_ABSOLUTE':
             pc = instruction.arg
             continue
+        elif opname == 'JUMP_FORWARD':
+            pc += instruction.arg
+            continue
         elif opname == 'POP_JUMP_IF_FALSE':
             if is_false(pop()):
                 pc = instruction.arg
@@ -468,7 +549,7 @@ def interp(code: types.CodeType,
             else:
                 pop()
         elif opname == 'RETURN_VALUE':
-            return pop()
+            return Result(pop())
         elif opname == 'MAKE_FUNCTION':
             qualified_name = pop()
             code = pop()
@@ -499,13 +580,13 @@ def interp(code: types.CodeType,
             push(t)
         elif opname.startswith('BINARY'):
             # Probably need to handle radd and such here.
-            op = _BINARY_OPS[opname]
             rhs = pop()
             lhs = pop()
-            if {type(lhs), type(rhs)} <= _BUILTIN_TYPES:
-                push(op(lhs, rhs))
+            result = _run_binop(opname, lhs, rhs)
+            if result.is_exception():
+                raise NotImplementedError
             else:
-                raise NotImplementedError(lhs, rhs)
+                push(result.get_value())
         elif opname == 'COMPARE_OP':
             rhs = pop()
             lhs = pop()
@@ -528,11 +609,19 @@ def interp(code: types.CodeType,
             # TODO(leary, 2019-01-21): Use fromlist/level.
             fromlist = pop()
             level = pop()
-            push(do_import(instruction.argval, globals_))
+            result = do_import(instruction.argval, globals_)
+            if result.is_exception():
+                raise NotImplementedError
+            else:
+                push(result.get_value())
         elif opname == 'IMPORT_FROM':
             module = peek()
-            assert isinstance(module, types.ModuleType), module
-            push(getattr(module, instruction.argval))
+            if isinstance(module, types.ModuleType):
+                push(getattr(module, instruction.argval))
+            elif isinstance(module, GuestModule):
+                push(module.getattr(instruction.argval))
+            else:
+                raise NotImplementedError(module)
         elif opname == 'LOAD_ATTR':
             obj = pop()
             if isinstance(obj, dict) and instruction.argval == 'keys':
@@ -563,7 +652,7 @@ def interp(code: types.CodeType,
             tos2 = pop()
             operator.setitem(tos1, tos, tos2)
         elif opname == 'MAKE_CLOSURE':
-            # Note: removed in Python 3.6.
+            # Note: this bytecode was removed in Python 3.6.
             name = pop()
             code = pop()
             freevar_cells = pop()
@@ -577,10 +666,14 @@ def interp(code: types.CodeType,
         elif opname == 'INPLACE_ADD':
             lhs = pop()
             rhs = pop()
-            if type(lhs) is int and type(rhs) is int:
-                push(operator.add(lhs, rhs))
+            if {type(lhs), type(rhs)} <= _BUILTIN_TYPES:
+                result = _run_binop('BINARY_ADD', lhs, rhs)
+                if result.is_exception():
+                    raise NotImplementedError
+                else:
+                    push(result.get_value())
             else:
-                raise NotImplementedError(instruction, stack)
+                raise NotImplementedError(instruction, lhs, rhs)
         elif opname == 'DUP_TOP_TWO':
             stack = stack + stack[-2:]
         elif opname == 'ROT_THREE':
@@ -591,41 +684,53 @@ def interp(code: types.CodeType,
         pc += pc_to_bc_width[pc]
 
 
+def _do_call_functools_partial(
+        args: Tuple[Any, ...],
+        kwargs: Optional[Dict[Text, Any]]) -> Result[Any]:
+    if kwargs:
+        raise NotImplementedError(kwargs)
+    guest_partial = GuestPartial(args[0], args[1:])
+    return Result(guest_partial)
+
+
 def do_call(f, args: Tuple[Any, ...],
-            kwargs: Optional[Dict[Text, Any]] = None):
+            kwargs: Optional[Dict[Text, Any]] = None) -> Result[Any]:
     kwargs = kwargs or {}
     if f in (dict, range, print, sorted, str, list):
-        return f(*args, **kwargs)
+        return Result(f(*args, **kwargs))
     elif isinstance(f, GuestFunction):
         return interp(f.code, globals_=f.globals_, args=args, kwargs=kwargs,
                       closure=f.closure)
     elif isinstance(f, types.FunctionType):
         return interp(f.__code__, f.__globals__, defaults=f.__defaults__,
                       args=args, kwargs=kwargs)
+    elif isinstance(f, types.MethodType):
+        # Builtin object method.
+        return Result(f(*args, **kwargs))
     # TODO(cdleary, 2019-01-22): Consider using an import hook to avoid
     # the C-extension version of functools from being imported so we
     # don't need to consider it specially.
     elif f is functools.partial:
-        return GuestPartial(args[0], args[1:])
+        return _do_call_functools_partial(args, kwargs)
     elif f is getattr(builtins, '__build_class__'):
         body_f, name, *rest = args
         dict_ = {'__builtins__': builtins}
-        interp(body_f.code, dict_, in_function=False)
-        return GuestClass(name, dict_, *rest, **kwargs)
+        class_body_result = interp(body_f.code, dict_, in_function=False)
+        if class_body_result.is_exception():
+            return class_body_result
+        guest_class = GuestClass(name, dict_, *rest, **kwargs)
+        return Result(guest_class)
     elif isinstance(f, GuestPartial):
         return f.invoke(args)
     elif isinstance(f, GuestBuiltin):
         return f.invoke(args)
     elif isinstance(f, GuestClass):
         return f.instantiate(args)
-    elif isinstance(f, types.MethodType):
-        # Builtin object method.
-        return f(*args, **kwargs)
     else:
         raise NotImplementedError(f, args, kwargs)
 
 
-def import_path(path: Text):
+def import_path(path: Text) -> Result[GuestModule]:
     fullpath = path
     path, basename = os.path.split(fullpath)
     module_name, _ = os.path.splitext(basename)
@@ -641,10 +746,11 @@ def import_path(path: Text):
 
     globals_ = {'__builtins__': builtins}
     interp(module_code, globals_, in_function=False)
-    return GuestModule(module_name, module_code, globals_)
+    return Result(GuestModule(module_name, module_code, globals_))
 
 
-def _find_module_path(search_path, pieces):
+def _find_module_path(search_path: Text,
+                      pieces: Sequence[Text]) -> Optional[Text]:
     *leaders, last = pieces
     candidate = os.path.join(search_path, *leaders)
     logging.debug('Candidate: %r', candidate)
@@ -669,15 +775,23 @@ def find_module_path(name: Text) -> Text:
     raise NotImplementedError('Not found on python paths:', name)
 
 
-def do_import(name: Text, globals_: Dict[Text, Any]) -> types.ModuleType:
-    if name in ('functools', 'os'):
-        return __import__(name, globals_)
-
-    path = find_module_path(name)
-    return import_path(path)
+def do_import(name: Text,
+              globals_: Dict[Text, Any]) -> Result[
+                Union[types.ModuleType, GuestModule]]:
+    if name in ('functools', 'os', 'itertools', 'builtins'):
+        module = __import__(name, globals_)  # type: types.ModuleType
+    else:
+        path = find_module_path(name)
+        result = import_path(path)
+        if result.is_exception():
+            raise NotImplementedError
+        module = result.get_value()
+    return Result(module)
 
 
 def run_function(f: types.FunctionType, *args: Tuple[Any, ...],
                  globals_=None) -> Any:
+    """Interprets f in the echo interpreter, returns unwrapped result."""
     globals_ = globals_ or globals()
-    return interp(get_code(f), globals_, defaults=f.__defaults__, args=args)
+    result = interp(get_code(f), globals_, defaults=f.__defaults__, args=args)
+    return result.get_value()
