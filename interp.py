@@ -41,13 +41,6 @@ _BINARY_OPS = {
     'BINARY_SUBSCR': operator.getitem,
     'BINARY_TRUE_DIVIDE': operator.truediv,
 }
-_COMPARE_OPS = {
-    '==': operator.eq,
-    '!=': operator.ne,
-    '<': operator.lt,
-    '>=': operator.ge,
-    'is not': operator.is_not
-}
 _BUILTIN_TYPES = {
     int,
     str,
@@ -59,6 +52,13 @@ _CODE_ATTRS = [
     'co_lnotab', 'co_name', 'co_names', 'co_nlocals', 'co_stacksize',
     'co_varnames',
 ]
+_COMPARE_OPS = {
+    '==': operator.eq,
+    '!=': operator.ne,
+    '<': operator.lt,
+    '>=': operator.ge,
+    'is not': operator.is_not,
+}
 
 
 class ResultKind(Enum):
@@ -276,6 +276,14 @@ def _run_binop(opname: Text, lhs: Any, rhs: Any) -> Result[Any]:
     raise NotImplementedError(opname, lhs, rhs)
 
 
+def _exception_match(lhs, rhs) -> bool:
+    if isinstance(lhs, rhs):
+        return True
+    if lhs is rhs:
+        return True
+    raise NotImplementedError(lhs, rhs)
+
+
 def interp(code: types.CodeType,
            globals_: Dict[Text, Any],
            args: Optional[Tuple[Any, ...]] = None,
@@ -370,12 +378,17 @@ def interp(code: types.CodeType,
 
     def push(x):
         if COLOR_TRACE:
-            termcolor.cprint(' =(push)=> %r' % (x,), color='blue')
-        logging.debug(' Pushing: %r' % (x,))
+            termcolor.cprint(' =(push)=> %r [depth after: %d]' %
+                             (x, len(stack)+1), color='blue')
         assert not isinstance(x, Result), x
         stack.append(x)
 
-    def pop(): return stack.pop()
+    def pop():
+        x = stack.pop()
+        if COLOR_TRACE:
+            termcolor.cprint(' <=(pop)= %r [depth after: %d]' %
+                             (x, len(stack)), color='blue')
+        return x
 
     def pop_n(n: int, tos_is_0: bool = True) -> Tuple[Any, ...]:
         nonlocal stack
@@ -392,11 +405,30 @@ def interp(code: types.CodeType,
         except KeyError:
             return builtins_get(builtins, name)
 
+    def handle_exception():
+        """Returns whether the exception was handled in this function."""
+        nonlocal pc
+        if block_stack and block_stack[-1][0] == 'except':
+            pc = block_stack[-1][1]
+            termcolor.cprint(' ! moved PC to %d' % pc,
+                             color='magenta')
+            push(exception_data.traceback)
+            push(exception_data.parameter)
+            push(exception_data.exception)
+            return True
+        elif not any(entry[0] == 'except' for entry in block_stack):
+            return False  # Definitely unhandled.
+        else:
+            # Need to pop block stack entries appropriately, then handle the
+            # exception.
+            raise NotImplementedError
+
     instructions = tuple(dis.get_instructions(code))
     pc_to_instruction = [None] * (
         instructions[-1].offset+1)  # type: List[Optional[dis.Instruction]]
     pc_to_bc_width = [None] * (
         instructions[-1].offset+1)  # type: List[Optional[int]]
+    exception_data = None  # type: Optional[ExceptionData]
     for i, instruction in enumerate(instructions):
         pc_to_instruction[instruction.offset] = instruction
         if i+1 != len(instructions):
@@ -407,8 +439,7 @@ def interp(code: types.CodeType,
     while True:
         instruction = pc_to_instruction[pc]
         if COLOR_TRACE:
-            termcolor.cprint('%s' % (instruction,), color='yellow')
-        logging.debug('Running @%d %s :: %s:', pc, instruction, stack)
+            termcolor.cprint('%4d: %s' % (pc, instruction), color='yellow')
         opname = instruction.opname
         if opname == 'SETUP_LOOP':
             block_stack.append(('loop',
@@ -416,6 +447,9 @@ def interp(code: types.CodeType,
         elif opname == 'SETUP_EXCEPT':
             block_stack.append(('except',
                                 instruction.arg+pc+pc_to_bc_width[pc]))
+        elif opname == 'POP_EXCEPT':
+            popped = block_stack.pop()
+            assert popped[0] == 'except', 'Popped non-except block.'
         elif opname == 'END_FINALLY':
             # From the Python docs: "The interpreter recalls whether the
             # exception has to be re-raised, or whether the function returns,
@@ -424,17 +458,21 @@ def interp(code: types.CodeType,
         elif opname == 'RAISE_VARARGS':
             argc = instruction.arg
             traceback, parameter, exception = (None, None, None)
-            if argc > 0:
+            if argc > 2:
                 traceback = pop()
             if argc > 1:
                 parameter = pop()
-            if argc > 2:
+            if argc > 0:
                 exception = pop()
             if COLOR_TRACE:
-                termcolor.cprint(' ! exception %r' % (traceback, parameter,
-                                                      exception),
-                                 color='purple')
-            return Result(ExceptionData(traceback, parameter, exception))
+                termcolor.cprint(' ! exception %r %r %r' % (
+                                    traceback, parameter, exception),
+                                 color='magenta')
+            exception_data = ExceptionData(traceback, parameter, exception)
+            if handle_exception():
+                continue
+            else:
+                return Result(exception_data)
         elif opname == 'LOAD_GLOBAL':
             namei = instruction.arg
             name = names[namei]
@@ -450,26 +488,26 @@ def interp(code: types.CodeType,
             else:
                 argc = instruction.arg & 0xff
                 kwargc = instruction.arg >> 8
-            logging.debug('CALL_FUNCTION; argc: %d; kwargc: %d', argc, kwargc)
             kwarg_stack = pop_n(2 * kwargc, tos_is_0=False)
-            logging.debug('CALL_FUNCTION; kwarg_stack: %r', kwarg_stack)
             kwargs = dict(zip(kwarg_stack[::2], kwarg_stack[1::2]))
             args = pop_n(argc, tos_is_0=False)
             f = pop()
-            logging.debug('CALL_FUNCTION; f: %r; args: %r; kwargs: %r', f,
-                          args, kwargs)
             result = do_call(f, args, kwargs=kwargs)
             if result.is_exception():
-                raise NotImplementedError
+                exception_data = result.get_exception()
+                if COLOR_TRACE:
+                    termcolor.cprint(' =(call exception)=> %r' % (
+                                        exception_data,), color='magenta')
+                if handle_exception():
+                    continue
+                else:
+                    return result
             else:
                 push(result.get_value())
         elif opname == 'CALL_FUNCTION_KW':
             args = instruction.arg
             kwarg_names = pop()
             kwarg_values = pop_n(len(kwarg_names), tos_is_0=True)
-            logging.debug(
-                'CALL_FUNCTION_KW: args: %d; kwarg_names: %r; kwarg_values: %r'
-                % (args, kwarg_names, kwarg_values))
             assert len(kwarg_names) == len(kwarg_values), (
                 kwarg_names, kwarg_values)
             kwargs = dict(zip(kwarg_names, kwarg_values))
@@ -532,7 +570,7 @@ def interp(code: types.CodeType,
             pc = instruction.arg
             continue
         elif opname == 'JUMP_FORWARD':
-            pc += instruction.arg
+            pc += instruction.arg + pc_to_bc_width[pc]
             continue
         elif opname == 'POP_JUMP_IF_FALSE':
             if is_false(pop()):
@@ -595,9 +633,12 @@ def interp(code: types.CodeType,
                     push(lhs in rhs)
                 else:
                     raise NotImplementedError(lhs, rhs)
+            elif instruction.argval == 'exception match':
+                push(_exception_match(lhs, rhs))
             else:
                 op = _COMPARE_OPS[instruction.argval]
-                if {type(lhs), type(rhs)} <= _BUILTIN_TYPES:
+                types_ = {type(lhs), type(rhs)}
+                if types_ <= _BUILTIN_TYPES:
                     push(op(lhs, rhs))
                 elif (isinstance(lhs, GuestInstance) and
                       isinstance(rhs, GuestInstance) and
@@ -676,6 +717,9 @@ def interp(code: types.CodeType,
                 raise NotImplementedError(instruction, lhs, rhs)
         elif opname == 'DUP_TOP_TWO':
             stack = stack + stack[-2:]
+        elif opname == 'DUP_TOP':
+            assert stack, 'Cannot DUP_TOP of empty stack.'
+            stack = stack + stack[-1:]
         elif opname == 'ROT_THREE':
             #                                  old first  old second  old third
             stack[-3], stack[-1], stack[-2] = stack[-1], stack[-2], stack[-3]
@@ -696,7 +740,7 @@ def _do_call_functools_partial(
 def do_call(f, args: Tuple[Any, ...],
             kwargs: Optional[Dict[Text, Any]] = None) -> Result[Any]:
     kwargs = kwargs or {}
-    if f in (dict, range, print, sorted, str, list):
+    if f in (dict, range, print, sorted, str, list, ValueError):
         return Result(f(*args, **kwargs))
     elif isinstance(f, GuestFunction):
         return interp(f.code, globals_=f.globals_, args=args, kwargs=kwargs,
