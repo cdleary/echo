@@ -25,7 +25,7 @@ import sys
 from enum import Enum
 from io import StringIO
 from typing import (Dict, Any, Text, Tuple, List, Optional, Union, TypeVar,
-                    Generic, Sequence)
+                    Generic, Sequence, Iterable)
 
 import termcolor
 
@@ -102,10 +102,13 @@ class GuestPyObject:
 
 
 class GuestModule(GuestPyObject):
-    def __init__(self, name, code, globals_):
+    def __init__(self, name: Text, code, globals_: Dict[Text, Any]):
         self.name = name
         self.code = code
         self.globals_ = globals_
+
+    def keys(self) -> Iterable[Text]:
+        return self.globals_.keys()
 
     def getattr(self, name: Text) -> Any:
         return self.globals_[name]
@@ -159,13 +162,15 @@ class GuestClass(GuestPyObject):
     def __repr__(self) -> Text:
         return 'GuestClass(name={!r}, ...)'.format(self.name)
 
-    def instantiate(self, args: Tuple[Any, ...]) -> Result[GuestInstance]:
+    def instantiate(self, args: Tuple[Any, ...],
+                    globals_: Dict[Text, Any]) -> Result[GuestInstance]:
         guest_instance = GuestInstance(self)
         if '__init__' in self.dict_:
             init_f = self.dict_['__init__']
             # TODO(cdleary, 2019-01-26) What does Python do when you return
             # something non-None from initializer? Ignore?
-            result = do_call(init_f, (guest_instance,) + args)
+            result = do_call(init_f, args=(guest_instance,) + args,
+                             globals_=globals_)
             if result.is_exception():
                 return result
         return Result(guest_instance)
@@ -181,6 +186,9 @@ class GuestBuiltin(GuestPyObject):
     def __init__(self, name: Text, bound_self: Any):
         self.name = name
         self.bound_self = bound_self
+
+    def __repr__(self):
+        return 'GuestBuiltin(name={!r}, ...)'.format(self.name)
 
     def invoke(self, args: Tuple[Any, ...]) -> Result[Any]:
         if self.name == 'dict.keys':
@@ -444,6 +452,8 @@ def interp(code: types.CodeType,
         if opname == 'SETUP_LOOP':
             block_stack.append(('loop',
                                 instruction.arg + pc + pc_to_bc_width[pc]))
+        elif opname == 'EXTENDED_ARG':
+            pass  # The to-instruction decoding step already extended the args?
         elif opname == 'SETUP_EXCEPT':
             block_stack.append(('except',
                                 instruction.arg+pc+pc_to_bc_width[pc]))
@@ -492,7 +502,7 @@ def interp(code: types.CodeType,
             kwargs = dict(zip(kwarg_stack[::2], kwarg_stack[1::2]))
             args = pop_n(argc, tos_is_0=False)
             f = pop()
-            result = do_call(f, args, kwargs=kwargs)
+            result = do_call(f, args, kwargs=kwargs, globals_=globals_)
             if result.is_exception():
                 exception_data = result.get_exception()
                 if COLOR_TRACE:
@@ -514,7 +524,7 @@ def interp(code: types.CodeType,
             rest = args-len(kwargs)
             args = pop_n(rest, tos_is_0=False)
             to_call = pop()
-            result = do_call(to_call, args, kwargs)
+            result = do_call(to_call, args, kwargs=kwargs, globals_=globals_)
             if result.is_exception():
                 raise NotImplementedError
             else:
@@ -527,7 +537,7 @@ def interp(code: types.CodeType,
                 kwargs = None
             callargs = pop()
             func = pop()
-            result = do_call(func, callargs, kwargs)
+            result = do_call(func, callargs, kwargs=kwargs, globals_=globals_)
             if result.is_exception():
                 raise NotImplementedError
             else:
@@ -628,9 +638,12 @@ def interp(code: types.CodeType,
         elif opname == 'COMPARE_OP':
             rhs = pop()
             lhs = pop()
-            if instruction.argval == 'in':
+            if instruction.argval in ('in', 'not in'):
+                op = ((lambda x, y: operator.contains(x, y))
+                      if instruction.argval == 'in'
+                      else lambda x, y: not operator.contains(x, y))
                 if type(rhs) in (list, dict, set):
-                    push(lhs in rhs)
+                    push(op(rhs, lhs))
                 else:
                     raise NotImplementedError(lhs, rhs)
             elif instruction.argval == 'exception match':
@@ -659,6 +672,12 @@ def interp(code: types.CodeType,
                     return result
             else:
                 push(result.get_value())
+        elif opname == 'IMPORT_STAR':
+            module = peek()
+            for name in module.keys():
+                if not name.startswith('_'):
+                    globals_[name] = module.getattr(name)
+            pop()  # Docs say 'module is popped after loading all names'.
         elif opname == 'IMPORT_FROM':
             module = peek()
             if isinstance(module, types.ModuleType):
@@ -742,10 +761,14 @@ def _do_call_functools_partial(
 
 
 def do_call(f, args: Tuple[Any, ...],
+            *,
+            globals_: Dict[Text, Any],
             kwargs: Optional[Dict[Text, Any]] = None) -> Result[Any]:
     kwargs = kwargs or {}
     if f in (dict, range, print, sorted, str, list, ValueError):
         return Result(f(*args, **kwargs))
+    if f is globals:
+        return Result(globals_)
     elif isinstance(f, GuestFunction):
         return interp(f.code, globals_=f.globals_, args=args, kwargs=kwargs,
                       closure=f.closure)
@@ -773,7 +796,7 @@ def do_call(f, args: Tuple[Any, ...],
     elif isinstance(f, GuestBuiltin):
         return f.invoke(args)
     elif isinstance(f, GuestClass):
-        return f.instantiate(args)
+        return f.instantiate(args, globals_)
     else:
         raise NotImplementedError(f, args, kwargs)
 
