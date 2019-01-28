@@ -826,19 +826,23 @@ def find_module_path(name: Text) -> Optional[Text]:
 def do_import(name: Text,
               globals_: Dict[Text, Any]) -> Result[
                 Union[types.ModuleType, GuestModule]]:
+    def import_error(name: Text) -> Result[Any]:
+        return Result(ExceptionData(
+            None,
+            'Could not find module with name {!r}'.format(name),
+            ImportError))
+
     if name in ('functools', 'os', 'itertools', 'builtins'):
         module = __import__(name, globals_)  # type: types.ModuleType
     else:
         path = find_module_path(name)
         if path is None:
-            return Result(ExceptionData(
-                None,
-                'Could not find module with name {!r}'.format(name),
-                ImportError))
-        result = import_path(path)
-        if result.is_exception():
-            raise NotImplementedError
-        module = result.get_value()
+            return import_error(name)
+        else:
+            result = import_path(path)
+            if result.is_exception():
+                raise NotImplementedError
+            module = result.get_value()
     return Result(module)
 
 
