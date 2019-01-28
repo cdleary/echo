@@ -29,7 +29,7 @@ from typing import (Dict, Any, Text, Tuple, List, Optional, Union, TypeVar,
 
 import termcolor
 
-from .common import dis_to_str, get_code
+from common import dis_to_str, get_code
 
 
 COLOR_TRACE = False

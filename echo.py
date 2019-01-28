@@ -16,7 +16,7 @@ import pdb
 import sys
 import types
 
-from . import interp
+import interp
 
 
 def main():

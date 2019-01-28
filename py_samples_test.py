@@ -3,7 +3,7 @@ import sys
 
 import pytest
 
-from . import interp
+import interp
 
 
 SAMPLE_DIR = 'py_samples'
