@@ -652,7 +652,11 @@ def interp(code: types.CodeType,
             level = pop()
             result = do_import(instruction.argval, globals_)
             if result.is_exception():
-                raise NotImplementedError
+                exception_data = result.get_exception()
+                if handle_exception():
+                    continue
+                else:
+                    return result
             else:
                 push(result.get_value())
         elif opname == 'IMPORT_FROM':
@@ -809,14 +813,14 @@ def _find_module_path(search_path: Text,
     return None
 
 
-def find_module_path(name: Text) -> Text:
+def find_module_path(name: Text) -> Optional[Text]:
     pieces = name.split('.')
 
     for search_path in sys.path:
         result = _find_module_path(search_path, pieces)
         if result:
             return result
-    raise NotImplementedError('Not found on python paths:', name)
+    return None
 
 
 def do_import(name: Text,
@@ -826,6 +830,11 @@ def do_import(name: Text,
         module = __import__(name, globals_)  # type: types.ModuleType
     else:
         path = find_module_path(name)
+        if path is None:
+            return Result(ExceptionData(
+                None,
+                'Could not find module with name {!r}'.format(name),
+                ImportError))
         result = import_path(path)
         if result.is_exception():
             raise NotImplementedError
