@@ -19,4 +19,6 @@ def test_echo_on_sample(path):
     globals_ = dict(globals())
     globals_['__file__'] = path
     sys.path[0] = os.path.dirname(path)
-    interp.import_path(path)
+    fully_qualified = '__main__'
+    state = interp.InterpreterState()
+    interp.import_path(path, fully_qualified, state)

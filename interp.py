@@ -32,6 +32,9 @@ from termcolor import cprint
 from common import dis_to_str, get_code
 
 
+_GLOBAL_BYTECODE_COUNT = 0
+COLOR_TRACE_FUNC = False
+COLOR_TRACE_STACK = False
 COLOR_TRACE = False
 STARARGS_FLAG = 0x04
 _BINARY_OPS = {
@@ -137,9 +140,11 @@ class GuestFunction(GuestPyObject):
                 'defaults={!r})').format(
                     self.code, self.name, self.closure, self.defaults)
 
-    def invoke(self, args: Tuple[Any, ...]) -> Result[Any]:
-        return interp(self.code, self.globals_, args, self.defaults,
-                      self.closure, in_function=True)
+    def invoke(self, args: Tuple[Any, ...],
+               state: 'InterpreterState') -> Result[Any]:
+        return interp(self.code, globals_=self.globals_, args=args,
+                      defaults=self.defaults, closure=self.closure,
+                      in_function=True, state=state)
 
     def getattr(self, name: Text) -> Any:
         raise NotImplementedError
@@ -173,14 +178,15 @@ class GuestClass(GuestPyObject):
         return 'GuestClass(name={!r}, ...)'.format(self.name)
 
     def instantiate(self, args: Tuple[Any, ...],
-                    globals_: Dict[Text, Any]) -> Result[GuestInstance]:
+                    globals_: Dict[Text, Any],
+                    state: 'InterpreterState') -> Result[GuestInstance]:
         guest_instance = GuestInstance(self)
         if '__init__' in self.dict_:
             init_f = self.dict_['__init__']
             # TODO(cdleary, 2019-01-26) What does Python do when you return
             # something non-None from initializer? Ignore?
             result = do_call(init_f, args=(guest_instance,) + args,
-                             globals_=globals_)
+                             state=state, globals_=globals_)
             if result.is_exception():
                 return result
         return Result(guest_instance)
@@ -200,7 +206,8 @@ class GuestBuiltin(GuestPyObject):
     def __repr__(self):
         return 'GuestBuiltin(name={!r}, ...)'.format(self.name)
 
-    def invoke(self, args: Tuple[Any, ...]) -> Result[Any]:
+    def invoke(self, args: Tuple[Any, ...],
+               state: 'InterpreterState') -> Result[Any]:
         if self.name == 'dict.keys':
             assert not args, args
             return Result(self.bound_self.keys())
@@ -220,8 +227,8 @@ class GuestPartial(object):
         self.f = f
         self.args = args
 
-    def invoke(self, args: Tuple[Any, ...]) -> Any:
-        return self.f.invoke(self.args + args)
+    def invoke(self, args: Tuple[Any, ...], state: 'InterpreterState') -> Any:
+        return self.f.invoke(self.args + args, state=state)
 
 
 def is_false(v: Any) -> bool:
@@ -302,8 +309,23 @@ def _exception_match(lhs, rhs) -> bool:
     raise NotImplementedError(lhs, rhs)
 
 
+class InterpreterState:
+
+    def __init__(self):
+        self.sys_modules = {}  # type: Union[types.ModuleType, GuestModule]
+
+
+def module_getattr(module: Union[types.ModuleType, GuestModule],
+                   name: Text) -> Any:
+    if isinstance(module, GuestModule):
+        return module.getattr(name)
+    return getattr(module, name)
+
+
 def interp(code: types.CodeType,
+           *,
            globals_: Dict[Text, Any],
+           state: InterpreterState,
            args: Optional[Tuple[Any, ...]] = None,
            kwargs: Optional[Dict[Text, Any]] = None,
            defaults: Optional[Tuple[Any, ...]] = None,
@@ -374,9 +396,13 @@ def interp(code: types.CodeType,
     consts = code.co_consts  # LOAD_CONST indexes into this.
     names = code.co_names  # LOAD_GLOBAL uses these names.
 
-    if COLOR_TRACE:
-        def gprint(*args): cprint(*args, color='green')
+    def gprint(*args): cprint(*args, color='green')
+
+    if COLOR_TRACE_FUNC:
         gprint('interpreting:')
+        gprint('  loc:         %s:%d' % (code.co_filename,
+                                         code.co_firstlineno))
+    if COLOR_TRACE:
         gprint('  co_name:     %r' % code.co_name)
         gprint('  co_argcount: %d' % code.co_argcount)
         gprint('  co_nlocals:  %d' % code.co_nlocals)
@@ -386,8 +412,6 @@ def interp(code: types.CodeType,
         gprint('  co_names:    %r' % (code.co_names,))
         gprint('  closure:     %r' % (closure,))
         gprint('  len(args):   %d' % len(args))
-        gprint('  loc:         %s:%d' % (code.co_filename,
-                                         code.co_firstlineno))
         cprint_lines_after(code.co_filename, code.co_firstlineno)
 
     # TODO(cdleary, 2019-01-21): Investigate why this "builtins" ref is
@@ -395,7 +419,7 @@ def interp(code: types.CodeType,
     builtins = globals_['__builtins__']
 
     def push(x):
-        if COLOR_TRACE:
+        if COLOR_TRACE_STACK:
             cprint(' =(push)=> %r [depth after: %d]' %
                    (x, len(stack)+1), color='blue')
         assert not isinstance(x, Result), x
@@ -403,7 +427,7 @@ def interp(code: types.CodeType,
 
     def pop():
         x = stack.pop()
-        if COLOR_TRACE:
+        if COLOR_TRACE_STACK:
             cprint(' <=(pop)= %r [depth after: %d]' %
                    (x, len(stack)), color='blue')
         return x
@@ -440,6 +464,13 @@ def interp(code: types.CodeType,
             # exception.
             raise NotImplementedError
 
+    def import_star(module):
+        for name in module.keys():
+            if COLOR_TRACE_FUNC:
+                cprint('IMPORT_STAR module key: %r' % name, color='green')
+            if not name.startswith('_'):
+                globals_[name] = module.getattr(name)
+
     instructions = tuple(dis.get_instructions(code))
     pc_to_instruction = [None] * (
         instructions[-1].offset+1)  # type: List[Optional[dis.Instruction]]
@@ -455,8 +486,11 @@ def interp(code: types.CodeType,
     pc = 0
     while True:
         instruction = pc_to_instruction[pc]
+        global _GLOBAL_BYTECODE_COUNT
+        _GLOBAL_BYTECODE_COUNT += 1
         if COLOR_TRACE:
-            cprint('%4d: %s @ %s' % (pc, instruction, code.co_filename),
+            cprint('%4d: %s @ %s %8d' % (pc, instruction, code.co_filename,
+                   _GLOBAL_BYTECODE_COUNT),
                    color='yellow')
         opname = instruction.opname
         if opname == 'SETUP_LOOP':
@@ -512,7 +546,8 @@ def interp(code: types.CodeType,
             kwargs = dict(zip(kwarg_stack[::2], kwarg_stack[1::2]))
             args = pop_n(argc, tos_is_0=False)
             f = pop()
-            result = do_call(f, args, kwargs=kwargs, globals_=globals_)
+            result = do_call(f, args, state=state, kwargs=kwargs,
+                             globals_=globals_)
             if result.is_exception():
                 exception_data = result.get_exception()
                 if COLOR_TRACE:
@@ -538,7 +573,8 @@ def interp(code: types.CodeType,
             rest = args-len(kwargs)
             args = pop_n(rest, tos_is_0=False)
             to_call = pop()
-            result = do_call(to_call, args, kwargs=kwargs, globals_=globals_)
+            result = do_call(to_call, args, state=state, kwargs=kwargs,
+                             globals_=globals_)
             if result.is_exception():
                 raise NotImplementedError
             else:
@@ -677,20 +713,31 @@ def interp(code: types.CodeType,
             # TODO(leary, 2019-01-21): Use fromlist/level.
             fromlist = pop()
             level = pop()
-            result = do_import(instruction.argval, globals_)
+            if COLOR_TRACE_FUNC:
+                cprint('IMPORT_NAME argval: %r; fromlist: %r' %
+                       (instruction.argval, fromlist), color='green')
+            assert not level, level
+            result = do_import(instruction.argval, globals_=globals_,
+                               state=state)
             if result.is_exception():
                 exception_data = result.get_exception()
                 if handle_exception():
                     continue
                 else:
                     return result
-            else:
-                push(result.get_value())
+            else:  # Not an exception.
+                module = result.get_value()
+                for name in fromlist or ():
+                    if name == '*':
+                        import_star(module)
+                    else:
+                        globals_[name] = module_getattr(module, name)
+                if True:
+                    cprint('IMPORT_NAME result: %r' % module, color='green')
+                push(module)
         elif opname == 'IMPORT_STAR':
             module = peek()
-            for name in module.keys():
-                if not name.startswith('_'):
-                    globals_[name] = module.getattr(name)
+            import_star(module)
             pop()  # Docs say 'module is popped after loading all names'.
         elif opname == 'IMPORT_FROM':
             module = peek()
@@ -702,6 +749,7 @@ def interp(code: types.CodeType,
                 raise NotImplementedError(module)
         elif opname == 'LOAD_ATTR':
             obj = pop()
+            logging.debug('obj: %r; argval: %r', obj, instruction.argval)
             if isinstance(obj, dict) and instruction.argval == 'keys':
                 push(GuestBuiltin('dict.keys', bound_self=obj))
             elif isinstance(obj, GuestPyObject):
@@ -776,6 +824,7 @@ def _do_call_functools_partial(
 
 def do_call(f, args: Tuple[Any, ...],
             *,
+            state: InterpreterState,
             globals_: Dict[Text, Any],
             kwargs: Optional[Dict[Text, Any]] = None) -> Result[Any]:
     kwargs = kwargs or {}
@@ -785,11 +834,11 @@ def do_call(f, args: Tuple[Any, ...],
     if f is globals:
         return Result(globals_)
     elif isinstance(f, GuestFunction):
-        return interp(f.code, globals_=f.globals_, args=args, kwargs=kwargs,
-                      closure=f.closure)
+        return interp(f.code, state=state, globals_=f.globals_, args=args,
+                      kwargs=kwargs, closure=f.closure)
     elif isinstance(f, types.FunctionType):
-        return interp(f.__code__, f.__globals__, defaults=f.__defaults__,
-                      args=args, kwargs=kwargs)
+        return interp(f.__code__, state=state, globals_=f.__globals__,
+                      defaults=f.__defaults__, args=args, kwargs=kwargs)
     elif isinstance(f, types.MethodType):
         # Builtin object method.
         return Result(f(*args, **kwargs))
@@ -801,22 +850,24 @@ def do_call(f, args: Tuple[Any, ...],
     elif f is getattr(builtins, '__build_class__'):
         body_f, name, *rest = args
         dict_ = {'__builtins__': builtins}
-        class_body_result = interp(body_f.code, dict_, in_function=False)
+        class_body_result = interp(body_f.code, globals_=dict_, state=state,
+                                   in_function=False)
         if class_body_result.is_exception():
             return class_body_result
         guest_class = GuestClass(name, dict_, *rest, **kwargs)
         return Result(guest_class)
     elif isinstance(f, GuestPartial):
-        return f.invoke(args)
+        return f.invoke(args, state=state)
     elif isinstance(f, GuestBuiltin):
-        return f.invoke(args)
+        return f.invoke(args, state=state)
     elif isinstance(f, GuestClass):
-        return f.instantiate(args, globals_)
+        return f.instantiate(args, globals_=globals_, state=state)
     else:
         raise NotImplementedError(f, args, kwargs)
 
 
-def import_path(path: Text) -> Result[GuestModule]:
+def import_path(path: Text, fully_qualified: Text,
+                state: InterpreterState) -> Result[GuestModule]:
     logging.debug('Importing path: %r', path)
     fullpath = path
     path, basename = os.path.split(fullpath)
@@ -832,9 +883,17 @@ def import_path(path: Text) -> Result[GuestModule]:
     assert isinstance(module_code, types.CodeType), module_code
 
     globals_ = {'__builtins__': builtins}
-    interp(module_code, globals_, in_function=False)
-    return Result(GuestModule(module_name, code=module_code, globals_=globals_,
-                              filename=fullpath))
+    if COLOR_TRACE_FUNC:
+        cprint('=> interpreting module code: %s' % module_code, color='green')
+    module = GuestModule(module_name, code=module_code, globals_=globals_,
+                         filename=fullpath)
+    logging.debug('fully_qualified: %r module: %r', fully_qualified, module)
+    state.sys_modules[fully_qualified] = module
+    interp(module_code, globals_=globals_, state=state, in_function=False)
+    if COLOR_TRACE_FUNC:
+        cprint('<= done interpreting module code: %s' % module_code,
+               color='green')
+    return Result(module)
 
 
 def _find_module_path(search_path: Text,
@@ -866,7 +925,10 @@ def find_module_path(name: Text,
 
 
 def _do_import(name: Text,
+               *,
+               fully_qualified: Text,
                globals_: Dict[Text, Any],
+               state: InterpreterState,
                module_path: Optional[Text] = None) -> Result[
                 Union[types.ModuleType, GuestModule]]:
     def import_error(name: Text) -> Result[Any]:
@@ -875,6 +937,11 @@ def _do_import(name: Text,
             'Could not find module with name {!r}'.format(name),
             ImportError))
 
+    if fully_qualified in state.sys_modules:
+        logging.debug('Hit fully_qualified in sys_modules: %r',
+                      fully_qualified)
+        return Result(state.sys_modules[fully_qualified])
+
     if name in ('functools', 'os', 'itertools', 'builtins'):
         module = __import__(name, globals_)  # type: types.ModuleType
     else:
@@ -882,26 +949,40 @@ def _do_import(name: Text,
         if path is None:
             return import_error(name)
         else:
-            result = import_path(path)
+            result = import_path(path, fully_qualified, state)
             if result.is_exception():
                 raise NotImplementedError
             module = result.get_value()
+
     return Result(module)
 
 
 def do_import(name: Text,
+              *,
+              state: InterpreterState,
               globals_: Dict[Text, Any]) -> Result[
                 Union[types.ModuleType, GuestModule]]:
+    """Imports a given module `name` which may have dots in it."""
     assert name, 'Name to import must not be empty.'
     outermost = None
     outer = None
+
+    def outer_filename() -> Text:
+        if isinstance(outer, types.ModuleType):
+            return outer.__file__
+        else:
+            assert isinstance(outer, GuestModule)
+            return outer.filename
+
     pieces = name.split('.')
-    for piece in pieces:
+    for i, piece in enumerate(pieces):
         logging.debug('Importing piece %r; outer: %r; pieces: %r', piece,
                       outer, pieces)
         module_path = (None if outer is None
-                       else os.path.dirname(outer.filename))
-        new_outer = _do_import(piece, globals_, module_path)
+                       else os.path.dirname(outer_filename()))
+        new_outer = _do_import(piece, fully_qualified='.'.join(pieces[:i+1]),
+                               globals_=globals_, state=state,
+                               module_path=module_path)
         if new_outer.is_exception():
             return new_outer
         if outer:
@@ -915,6 +996,8 @@ def do_import(name: Text,
 def run_function(f: types.FunctionType, *args: Tuple[Any, ...],
                  globals_=None) -> Any:
     """Interprets f in the echo interpreter, returns unwrapped result."""
+    state = InterpreterState()
     globals_ = globals_ or globals()
-    result = interp(get_code(f), globals_, defaults=f.__defaults__, args=args)
+    result = interp(get_code(f), globals_=globals_, defaults=f.__defaults__,
+                    args=args, state=state)
     return result.get_value()

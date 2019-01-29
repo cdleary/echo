@@ -10,7 +10,7 @@ def test_print_to_10():
         for i in range(10):
             print(i)
 
-    interp(get_code(main), globals())
+    run_function(main)
 
 
 def test_two_plus_three():

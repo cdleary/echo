@@ -44,9 +44,11 @@ def main():
     globals_['__file__'] = fullpath
 
     sys.path[0] = os.path.dirname(fullpath)
+    state = interp.InterpreterState()
+    fully_qualified = '__main__'
 
     try:
-        interp.import_path(fullpath)
+        interp.import_path(fullpath, fully_qualified, state)
     except Exception as e:
         if opts.pdb:
             pdb.post_mortem(e.__traceback__)
