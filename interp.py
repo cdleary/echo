@@ -892,6 +892,7 @@ def _do_import(name: Text,
 def do_import(name: Text,
               globals_: Dict[Text, Any]) -> Result[
                 Union[types.ModuleType, GuestModule]]:
+    assert name, 'Name to import must not be empty.'
     outermost = None
     outer = None
     pieces = name.split('.')
@@ -907,6 +908,7 @@ def do_import(name: Text,
             outer.setattr(piece, new_outer.get_value())
         outer = new_outer.get_value()
         outermost = outermost or new_outer.get_value()
+    assert outermost is not None
     return Result(outermost)
 
 
