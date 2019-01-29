@@ -967,7 +967,7 @@ def do_import(name: Text,
                 Union[types.ModuleType, GuestModule]]:
     """Imports a given module `name` which may have dots in it."""
     assert name, 'Name to import must not be empty.'
-    outermost = None
+    outermost = None  # type: Optional[Union[types.ModuleType, GuestModule]]
     outer = None
 
     def outer_filename() -> Text:
@@ -993,6 +993,7 @@ def do_import(name: Text,
         outer = new_outer.get_value()
         outermost = outermost or new_outer.get_value()
     assert isinstance(outermost, (types.ModuleType, GuestModule)), outermost
+    assert outermost is not None
     return Result(outermost)
 
 
