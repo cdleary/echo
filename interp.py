@@ -312,7 +312,8 @@ def _exception_match(lhs, rhs) -> bool:
 class InterpreterState:
 
     def __init__(self):
-        self.sys_modules = {}  # type: Union[types.ModuleType, GuestModule]
+        self.sys_modules = {
+        }  # type: Dict[Text, Union[types.ModuleType, GuestModule]]
 
 
 def module_getattr(module: Union[types.ModuleType, GuestModule],
@@ -587,7 +588,8 @@ def interp(code: types.CodeType,
                 kwargs = None
             callargs = pop()
             func = pop()
-            result = do_call(func, callargs, kwargs=kwargs, globals_=globals_)
+            result = do_call(func, callargs, kwargs=kwargs, globals_=globals_,
+                             state=state)
             if result.is_exception():
                 raise NotImplementedError
             else:
@@ -940,7 +942,8 @@ def _do_import(name: Text,
     if fully_qualified in state.sys_modules:
         logging.debug('Hit fully_qualified in sys_modules: %r',
                       fully_qualified)
-        return Result(state.sys_modules[fully_qualified])
+        already_imported = state.sys_modules[fully_qualified]
+        return Result(already_imported)
 
     if name in ('functools', 'os', 'itertools', 'builtins'):
         module = __import__(name, globals_)  # type: types.ModuleType
@@ -989,7 +992,7 @@ def do_import(name: Text,
             outer.setattr(piece, new_outer.get_value())
         outer = new_outer.get_value()
         outermost = outermost or new_outer.get_value()
-    assert outermost is not None
+    assert isinstance(outermost, (types.ModuleType, GuestModule)), outermost
     return Result(outermost)
 
 
