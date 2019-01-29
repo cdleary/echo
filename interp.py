@@ -27,7 +27,7 @@ from io import StringIO
 from typing import (Dict, Any, Text, Tuple, List, Optional, Union, TypeVar,
                     Generic, Sequence, Iterable)
 
-import termcolor
+from termcolor import cprint
 
 from common import dis_to_str, get_code
 
@@ -102,16 +102,26 @@ class GuestPyObject:
 
 
 class GuestModule(GuestPyObject):
-    def __init__(self, name: Text, code, globals_: Dict[Text, Any]):
+    def __init__(self, name: Text, *, filename: Text, code: types.CodeType,
+                 globals_: Dict[Text, Any]):
         self.name = name
+        self.filename = filename
         self.code = code
         self.globals_ = globals_
+
+    def __repr__(self):
+        return 'GuestModule(name={!r}, filename={!r}, ...)'.format(
+            self.name, self.filename)
 
     def keys(self) -> Iterable[Text]:
         return self.globals_.keys()
 
     def getattr(self, name: Text) -> Any:
         return self.globals_[name]
+
+    def setattr(self, name: Text, value: Any):
+        assert not isinstance(value, Result), value
+        self.globals_[name] = value
 
 
 class GuestFunction(GuestPyObject):
@@ -270,8 +280,8 @@ def cprint_lines_after(filename: Text, lineno: int):
                 break
             else:
                 saw_def = True
-        termcolor.cprint('%05d: ' % lineno, color='yellow', end='')
-        termcolor.cprint(line.rstrip(), color='blue')
+        cprint('%05d: ' % lineno, color='yellow', end='')
+        cprint(line.rstrip(), color='blue')
 
 
 def _run_binop(opname: Text, lhs: Any, rhs: Any) -> Result[Any]:
@@ -365,7 +375,7 @@ def interp(code: types.CodeType,
     names = code.co_names  # LOAD_GLOBAL uses these names.
 
     if COLOR_TRACE:
-        def gprint(*args): termcolor.cprint(*args, color='green')
+        def gprint(*args): cprint(*args, color='green')
         gprint('interpreting:')
         gprint('  co_name:     %r' % code.co_name)
         gprint('  co_argcount: %d' % code.co_argcount)
@@ -386,16 +396,16 @@ def interp(code: types.CodeType,
 
     def push(x):
         if COLOR_TRACE:
-            termcolor.cprint(' =(push)=> %r [depth after: %d]' %
-                             (x, len(stack)+1), color='blue')
+            cprint(' =(push)=> %r [depth after: %d]' %
+                   (x, len(stack)+1), color='blue')
         assert not isinstance(x, Result), x
         stack.append(x)
 
     def pop():
         x = stack.pop()
         if COLOR_TRACE:
-            termcolor.cprint(' <=(pop)= %r [depth after: %d]' %
-                             (x, len(stack)), color='blue')
+            cprint(' <=(pop)= %r [depth after: %d]' %
+                   (x, len(stack)), color='blue')
         return x
 
     def pop_n(n: int, tos_is_0: bool = True) -> Tuple[Any, ...]:
@@ -418,8 +428,7 @@ def interp(code: types.CodeType,
         nonlocal pc
         if block_stack and block_stack[-1][0] == 'except':
             pc = block_stack[-1][1]
-            termcolor.cprint(' ! moved PC to %d' % pc,
-                             color='magenta')
+            cprint(' ! moved PC to %d' % pc, color='magenta')
             push(exception_data.traceback)
             push(exception_data.parameter)
             push(exception_data.exception)
@@ -447,7 +456,8 @@ def interp(code: types.CodeType,
     while True:
         instruction = pc_to_instruction[pc]
         if COLOR_TRACE:
-            termcolor.cprint('%4d: %s' % (pc, instruction), color='yellow')
+            cprint('%4d: %s @ %s' % (pc, instruction, code.co_filename),
+                   color='yellow')
         opname = instruction.opname
         if opname == 'SETUP_LOOP':
             block_stack.append(('loop',
@@ -475,9 +485,9 @@ def interp(code: types.CodeType,
             if argc > 0:
                 exception = pop()
             if COLOR_TRACE:
-                termcolor.cprint(' ! exception %r %r %r' % (
-                                    traceback, parameter, exception),
-                                 color='magenta')
+                cprint(' ! exception %r %r %r' % (
+                            traceback, parameter, exception),
+                       color='magenta')
             exception_data = ExceptionData(traceback, parameter, exception)
             if handle_exception():
                 continue
@@ -506,13 +516,17 @@ def interp(code: types.CodeType,
             if result.is_exception():
                 exception_data = result.get_exception()
                 if COLOR_TRACE:
-                    termcolor.cprint(' =(call exception)=> %r' % (
-                                        exception_data,), color='magenta')
+                    cprint(' =(call exception)=> %r' % (exception_data,),
+                           color='magenta')
                 if handle_exception():
                     continue
                 else:
                     return result
             else:
+                if COLOR_TRACE:
+                    cprint(' =(call return)=> %r @ %s:%d' % (
+                            result.get_value(), code.co_filename,
+                            code.co_firstlineno), color='green')
                 push(result.get_value())
         elif opname == 'CALL_FUNCTION_KW':
             args = instruction.arg
@@ -765,7 +779,8 @@ def do_call(f, args: Tuple[Any, ...],
             globals_: Dict[Text, Any],
             kwargs: Optional[Dict[Text, Any]] = None) -> Result[Any]:
     kwargs = kwargs or {}
-    if f in (dict, range, print, sorted, str, list, ValueError):
+    if f in (dict, range, print, sorted, str, list, ValueError,
+             AssertionError):
         return Result(f(*args, **kwargs))
     if f is globals:
         return Result(globals_)
@@ -802,6 +817,7 @@ def do_call(f, args: Tuple[Any, ...],
 
 
 def import_path(path: Text) -> Result[GuestModule]:
+    logging.debug('Importing path: %r', path)
     fullpath = path
     path, basename = os.path.split(fullpath)
     module_name, _ = os.path.splitext(basename)
@@ -817,7 +833,8 @@ def import_path(path: Text) -> Result[GuestModule]:
 
     globals_ = {'__builtins__': builtins}
     interp(module_code, globals_, in_function=False)
-    return Result(GuestModule(module_name, module_code, globals_))
+    return Result(GuestModule(module_name, code=module_code, globals_=globals_,
+                              filename=fullpath))
 
 
 def _find_module_path(search_path: Text,
@@ -836,18 +853,21 @@ def _find_module_path(search_path: Text,
     return None
 
 
-def find_module_path(name: Text) -> Optional[Text]:
+def find_module_path(name: Text,
+                     path: Optional[Text] = None) -> Optional[Text]:
     pieces = name.split('.')
+    paths = sys.path if path is None else [path]
 
-    for search_path in sys.path:
+    for search_path in paths:
         result = _find_module_path(search_path, pieces)
         if result:
             return result
     return None
 
 
-def do_import(name: Text,
-              globals_: Dict[Text, Any]) -> Result[
+def _do_import(name: Text,
+               globals_: Dict[Text, Any],
+               module_path: Optional[Text] = None) -> Result[
                 Union[types.ModuleType, GuestModule]]:
     def import_error(name: Text) -> Result[Any]:
         return Result(ExceptionData(
@@ -858,7 +878,7 @@ def do_import(name: Text,
     if name in ('functools', 'os', 'itertools', 'builtins'):
         module = __import__(name, globals_)  # type: types.ModuleType
     else:
-        path = find_module_path(name)
+        path = find_module_path(name, module_path)
         if path is None:
             return import_error(name)
         else:
@@ -867,6 +887,27 @@ def do_import(name: Text,
                 raise NotImplementedError
             module = result.get_value()
     return Result(module)
+
+
+def do_import(name: Text,
+              globals_: Dict[Text, Any]) -> Result[
+                Union[types.ModuleType, GuestModule]]:
+    outermost = None
+    outer = None
+    pieces = name.split('.')
+    for piece in pieces:
+        logging.debug('Importing piece %r; outer: %r; pieces: %r', piece,
+                      outer, pieces)
+        module_path = (None if outer is None
+                       else os.path.dirname(outer.filename))
+        new_outer = _do_import(piece, globals_, module_path)
+        if new_outer.is_exception():
+            return new_outer
+        if outer:
+            outer.setattr(piece, new_outer.get_value())
+        outer = new_outer.get_value()
+        outermost = outermost or new_outer.get_value()
+    return Result(outermost)
 
 
 def run_function(f: types.FunctionType, *args: Tuple[Any, ...],
