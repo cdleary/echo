@@ -992,9 +992,14 @@ def do_import(name: Text,
             outer.setattr(piece, new_outer.get_value())
         outer = new_outer.get_value()
         outermost = outermost or new_outer.get_value()
-    assert isinstance(outermost, (types.ModuleType, GuestModule)), outermost
+
+    # Workaround for erroneous-seeming pytype deduction.
+    def _to_result(x: Union[types.ModuleType, GuestModule]) -> Result[
+            Union[types.ModuleType, GuestModule]]:
+        return Result(x)
+
     assert outermost is not None
-    return Result(outermost)
+    return _to_result(outermost)
 
 
 def run_function(f: types.FunctionType, *args: Tuple[Any, ...],
