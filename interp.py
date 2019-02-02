@@ -30,6 +30,7 @@ from typing import (Dict, Any, Text, Tuple, List, Optional, Union, TypeVar,
 from termcolor import cprint
 
 from common import dis_to_str, get_code
+from interp_result import Result, ExceptionData
 
 
 _GLOBAL_BYTECODE_COUNT = 0
@@ -62,33 +63,6 @@ _COMPARE_OPS = {
     '>=': operator.ge,
     'is not': operator.is_not,
 }
-
-
-class ResultKind(Enum):
-    VALUE = 'value'
-    EXCEPTION = 'exception'
-
-
-T = TypeVar('T')
-ExceptionData = collections.namedtuple('ExceptionData',
-                                       'traceback parameter exception')
-
-
-class Result(Generic[T]):
-
-    def __init__(self, value: Union[T, ExceptionData]):
-        self.value = value
-
-    def is_exception(self) -> bool:
-        return isinstance(self.value, ExceptionData)
-
-    def get_value(self) -> T:
-        assert not isinstance(self.value, ExceptionData)
-        return self.value
-
-    def get_exception(self) -> ExceptionData:
-        assert isinstance(self.value, ExceptionData)
-        return self.value
 
 
 class GuestPyObject:
@@ -718,7 +692,12 @@ def interp(code: types.CodeType,
             if COLOR_TRACE_FUNC:
                 cprint('IMPORT_NAME argval: %r; fromlist: %r' %
                        (instruction.argval, fromlist), color='green')
-            assert not level, level
+            # "Positive values for level indicate the number of parent
+            # directories to search relative to the directory of the module
+            # calling __import__() (see PEP 328 for the details)."
+            #
+            # -- https://docs.python.org/3.6/library/functions.html#__import__
+            assert not level, (fromlist, level, code.co_filename, code.co_firstlineno)
             result = do_import(instruction.argval, globals_=globals_,
                                state=state)
             if result.is_exception():
