@@ -24,8 +24,8 @@ import sys
 
 from enum import Enum
 from io import StringIO
-from typing import (Dict, Any, Text, Tuple, List, Optional, Union, TypeVar,
-                    Generic, Sequence, Iterable)
+from typing import (Dict, Any, Text, Tuple, List, Optional, Union, Sequence,
+                    Iterable)
 
 from termcolor import cprint
 
@@ -697,7 +697,8 @@ def interp(code: types.CodeType,
             # calling __import__() (see PEP 328 for the details)."
             #
             # -- https://docs.python.org/3.6/library/functions.html#__import__
-            assert not level, (fromlist, level, code.co_filename, code.co_firstlineno)
+            assert not level, (fromlist, level, code.co_filename,
+                               code.co_firstlineno)
             result = do_import(instruction.argval, globals_=globals_,
                                state=state)
             if result.is_exception():
