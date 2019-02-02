@@ -234,6 +234,8 @@ def interp(code: types.CodeType,
     consts = code.co_consts  # LOAD_CONST indexes into this.
     names = code.co_names  # LOAD_GLOBAL uses these names.
 
+    interp_callback = functools.partial(interp, state=state)
+
     def gprint(*args): cprint(*args, color='green')
 
     if COLOR_TRACE_FUNC:
@@ -661,6 +663,7 @@ def interp(code: types.CodeType,
 def _do_call_functools_partial(
         args: Tuple[Any, ...],
         kwargs: Optional[Dict[Text, Any]]) -> Result[Any]:
+    """Helper for calling `functools.partial`."""
     if kwargs:
         raise NotImplementedError(kwargs)
     guest_partial = GuestPartial(args[0], args[1:])
@@ -672,6 +675,8 @@ def do_call(f, args: Tuple[Any, ...],
             state: InterpreterState,
             globals_: Dict[Text, Any],
             kwargs: Optional[Dict[Text, Any]] = None) -> Result[Any]:
+    interp_callback = functools.partial(interp, state=state)
+    do_call_callback = functools.partial(do_call, state=state)
     kwargs = kwargs or {}
     if f in (dict, range, print, sorted, str, list, ValueError,
              AssertionError):
@@ -702,12 +707,11 @@ def do_call(f, args: Tuple[Any, ...],
         guest_class = GuestClass(name, dict_, *rest, **kwargs)
         return Result(guest_class)
     elif isinstance(f, GuestPartial):
-        return f.invoke(args, interp=interp, state=state)
+        return f.invoke(args, interp=interp_callback)
     elif isinstance(f, GuestBuiltin):
-        return f.invoke(args, interp=interp, state=state)
+        return f.invoke(args, interp=interp_callback)
     elif isinstance(f, GuestClass):
-        return f.instantiate(args, do_call=do_call, globals_=globals_,
-                             state=state)
+        return f.instantiate(args, do_call=do_call_callback, globals_=globals_)
     else:
         raise NotImplementedError(f, args, kwargs)
 

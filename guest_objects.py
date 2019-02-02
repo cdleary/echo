@@ -54,11 +54,10 @@ class GuestFunction(GuestPyObject):
                 'defaults={!r})').format(
                     self.code, self.name, self.closure, self.defaults)
 
-    def invoke(self, args: Tuple[Any, ...], interp,
-               state: 'InterpreterState') -> Result[Any]:
+    def invoke(self, args: Tuple[Any, ...], interp) -> Result[Any]:
         return interp(self.code, globals_=self.globals_, args=args,
                       defaults=self.defaults, closure=self.closure,
-                      in_function=True, state=state)
+                      in_function=True)
 
     def getattr(self, name: Text) -> Any:
         raise NotImplementedError
@@ -92,15 +91,14 @@ class GuestClass(GuestPyObject):
         return 'GuestClass(name={!r}, ...)'.format(self.name)
 
     def instantiate(self, args: Tuple[Any, ...], do_call,
-                    globals_: Dict[Text, Any],
-                    state: 'InterpreterState') -> Result[GuestInstance]:
+                    globals_: Dict[Text, Any]) -> Result[GuestInstance]:
         guest_instance = GuestInstance(self)
         if '__init__' in self.dict_:
             init_f = self.dict_['__init__']
             # TODO(cdleary, 2019-01-26) What does Python do when you return
             # something non-None from initializer? Ignore?
             result = do_call(init_f, args=(guest_instance,) + args,
-                             state=state, globals_=globals_)
+                             globals_=globals_)
             if result.is_exception():
                 return result
         return Result(guest_instance)
@@ -120,8 +118,7 @@ class GuestBuiltin(GuestPyObject):
     def __repr__(self):
         return 'GuestBuiltin(name={!r}, ...)'.format(self.name)
 
-    def invoke(self, args: Tuple[Any, ...], interp,
-               state: 'InterpreterState') -> Result[Any]:
+    def invoke(self, args: Tuple[Any, ...], interp) -> Result[Any]:
         if self.name == 'dict.keys':
             assert not args, args
             return Result(self.bound_self.keys())
@@ -141,6 +138,5 @@ class GuestPartial(object):
         self.f = f
         self.args = args
 
-    def invoke(self, args: Tuple[Any, ...], interp,
-               state: 'InterpreterState') -> Any:
-        return self.f.invoke(self.args + args, interp=interp, state=state)
+    def invoke(self, args: Tuple[Any, ...], interp) -> Any:
+        return self.f.invoke(self.args + args, interp=interp)
