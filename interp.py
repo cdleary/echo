@@ -323,7 +323,229 @@ def interp(code: types.CodeType,
             pc_to_bc_width[instruction.offset] = (
                 instructions[i+1].offset-instruction.offset)
     del instructions
+
     pc = 0
+
+    DISPATCH_TABLE = {}
+
+    def dispatched(f):
+        f_name = f.__name__
+        assert f_name.startswith('run_')
+        opname = f_name[len('run_'):]
+        DISPATCH_TABLE[opname] = f
+        return f
+
+    @dispatched
+    def run_SETUP_LOOP(arg, argval):
+        block_stack.append(('loop',
+                            arg + pc + pc_to_bc_width[pc]))
+
+    @dispatched
+    def run_SETUP_EXCEPT(arg, argval):
+        block_stack.append(('except',
+                            arg+pc+pc_to_bc_width[pc]))
+
+    @dispatched
+    def run_EXTENDED_ARG(arg, argval):
+        pass  # The to-instruction decoding step already extended the args?
+
+    @dispatched
+    def run_POP_EXCEPT(arg, argval):
+        popped = block_stack.pop()
+        assert popped[0] == 'except', 'Popped non-except block.'
+
+    @dispatched
+    def run_RAISE_VARARGS(arg, argval):
+        argc = arg
+        traceback, parameter, exception = (None, None, None)
+        if argc > 2:
+            traceback = pop()
+        if argc > 1:
+            parameter = pop()
+        if argc > 0:
+            exception = pop()
+        if COLOR_TRACE:
+            cprint(' ! exception %r %r %r' % (
+                        traceback, parameter, exception),
+                   color='magenta')
+        return Result(ExceptionData(traceback, parameter, exception))
+
+    @dispatched
+    def run_LOAD_GLOBAL(arg, argval):
+        namei = arg
+        name = names[namei]
+        return Result(get_global_or_builtin(name))
+
+    @dispatched
+    def run_LOAD_CONST(arg, argval):
+        return Result(consts[arg])
+
+    @dispatched
+    def run_STORE_FAST(arg, argval):
+        locals_[instruction.arg] = pop()
+
+    @dispatched
+    def run_IMPORT_NAME(arg, argval):
+        # TODO(leary, 2019-01-21): Use fromlist/level.
+        fromlist = pop()
+        level = pop()
+        if COLOR_TRACE_FUNC:
+            cprint('IMPORT_NAME argval: %r; fromlist: %r' %
+                   (instruction.argval, fromlist), color='green')
+        # "Positive values for level indicate the number of parent
+        # directories to search relative to the directory of the module
+        # calling __import__() (see PEP 328 for the details)."
+        #
+        # -- https://docs.python.org/3.6/library/functions.html#__import__
+        assert not level, (fromlist, level, code.co_filename,
+                           code.co_firstlineno)
+        result = do_import(instruction.argval, globals_=globals_,
+                           state=state)
+        if result.is_exception():
+            return result
+        # Not an exception.
+        module = result.get_value()
+        for name in fromlist or ():
+            if name == '*':
+                import_star(module)
+            else:
+                globals_[name] = module_getattr(module, name)
+        if True:
+            cprint('IMPORT_NAME result: %r' % module, color='green')
+        return Result(module)
+
+    @dispatched
+    def run_IMPORT_STAR(arg, argval):
+        module = peek()
+        import_star(module)
+        pop()  # Docs say 'module is popped after loading all names'.
+
+    @dispatched
+    def run_IMPORT_FROM(arg, argval):
+        module = peek()
+        if isinstance(module, types.ModuleType):
+            return Result(getattr(module, argval))
+        elif isinstance(module, GuestModule):
+            return Result(module.getattr(argval))
+        else:
+            raise NotImplementedError(module)
+
+    @dispatched
+    def run_LOAD_ATTR(arg, argval):
+        obj = pop()
+        logging.debug('obj: %r; argval: %r', obj, argval)
+        if isinstance(obj, dict) and instruction.argval == 'keys':
+            return Result(GuestBuiltin('dict.keys', bound_self=obj))
+        elif isinstance(obj, GuestPyObject):
+            return Result(obj.getattr(instruction.argval))
+        else:
+            return Result(getattr(obj, instruction.argval))
+
+    @dispatched
+    def run_STORE_ATTR(arg, argval):
+        obj = pop()
+        value = pop()
+        if isinstance(obj, GuestPyObject):
+            obj.setattr(argval, value)
+        else:
+            raise NotImplementedError
+
+    @dispatched
+    def run_COMPARE_OP(arg, argval):
+        rhs = pop()
+        lhs = pop()
+        if argval in ('in', 'not in'):
+            op = ((lambda x, y: operator.contains(x, y))
+                  if argval == 'in'
+                  else lambda x, y: not operator.contains(x, y))
+            if type(rhs) in (list, dict, set):
+                return Result(op(rhs, lhs))
+            else:
+                raise NotImplementedError(lhs, rhs)
+        elif argval == 'exception match':
+            return Result(_exception_match(lhs, rhs))
+        else:
+            op = _COMPARE_OPS[argval]
+            types_ = {type(lhs), type(rhs)}
+            if types_ <= _BUILTIN_TYPES:
+                push(op(lhs, rhs))
+            elif (isinstance(lhs, GuestInstance) and
+                  isinstance(rhs, GuestInstance) and
+                  argval in ('is not', 'is')):
+                return Result(op(lhs, rhs))
+            else:
+                raise NotImplementedError(lhs, rhs)
+
+    @dispatched
+    def run_CALL_FUNCTION_KW(arg, argval):
+        args = arg
+        kwarg_names = pop()
+        kwarg_values = pop_n(len(kwarg_names), tos_is_0=True)
+        assert len(kwarg_names) == len(kwarg_values), (
+            kwarg_names, kwarg_values)
+        kwargs = dict(zip(kwarg_names, kwarg_values))
+        rest = args-len(kwargs)
+        args = pop_n(rest, tos_is_0=False)
+        to_call = pop()
+        return do_call(to_call, args, state=state, kwargs=kwargs,
+                       globals_=globals_)
+
+    @dispatched
+    def run_CALL_FUNCTION_EX(arg, argval):
+        if arg & 0x1:
+            kwargs = pop()
+        else:
+            kwargs = None
+        callargs = pop()
+        func = pop()
+        return do_call(func, callargs, kwargs=kwargs, globals_=globals_,
+                       state=state)
+
+    @dispatched
+    def run_CALL_FUNCTION(arg, argval):
+        # As of Python 3.6 this only supports calls for functions with
+        # positional arguments.
+        if sys.version_info >= (3, 6):
+            argc = arg
+            kwargc = 0
+        else:
+            argc = arg & 0xff
+            kwargc = arg >> 8
+        kwarg_stack = pop_n(2 * kwargc, tos_is_0=False)
+        kwargs = dict(zip(kwarg_stack[::2], kwarg_stack[1::2]))
+        args = pop_n(argc, tos_is_0=False)
+        f = pop()
+        return do_call(f, args, state=state, kwargs=kwargs,
+                       globals_=globals_)
+
+    @dispatched
+    def run_INPLACE_ADD(arg, argval):
+        lhs = pop()
+        rhs = pop()
+        if {type(lhs), type(rhs)} <= _BUILTIN_TYPES:
+            return _run_binop('BINARY_ADD', lhs, rhs)
+        else:
+            raise NotImplementedError(lhs, rhs)
+
+    @dispatched
+    def run_MAKE_FUNCTION(arg, argval):
+        qualified_name = pop()
+        code = pop()
+        closure = None
+        defaults = None
+        if arg & 0x08:
+            assert isinstance(peek(), tuple), peek()
+            closure = pop()
+        if arg & 0x04:
+            raise NotImplementedError
+        if arg & 0x02:
+            raise NotImplementedError
+        if arg & 0x01:
+            defaults = pop()
+        f = GuestFunction(code, globals_, qualified_name,
+                          defaults=defaults, closure=closure)
+        return Result(f)
+
     while True:
         instruction = pc_to_instruction[pc]
         global _GLOBAL_BYTECODE_COUNT
@@ -333,106 +555,26 @@ def interp(code: types.CodeType,
                    _GLOBAL_BYTECODE_COUNT),
                    color='yellow')
         opname = instruction.opname
-        if opname == 'SETUP_LOOP':
-            block_stack.append(('loop',
-                                instruction.arg + pc + pc_to_bc_width[pc]))
-        elif opname == 'EXTENDED_ARG':
-            pass  # The to-instruction decoding step already extended the args?
-        elif opname == 'SETUP_EXCEPT':
-            block_stack.append(('except',
-                                instruction.arg+pc+pc_to_bc_width[pc]))
-        elif opname == 'POP_EXCEPT':
-            popped = block_stack.pop()
-            assert popped[0] == 'except', 'Popped non-except block.'
+        f = DISPATCH_TABLE.get(opname)
+        if f:
+            result = f(arg=instruction.arg, argval=instruction.argval)
+            if result is None:
+                pass
+            else:
+                assert isinstance(result, Result)
+                if result.is_exception():
+                    exception_data = result.get_exception()
+                    if handle_exception():
+                        continue
+                    else:
+                        return result
+                else:
+                    push(result.get_value())
         elif opname == 'END_FINALLY':
             # From the Python docs: "The interpreter recalls whether the
             # exception has to be re-raised, or whether the function returns,
             # and continues with the outer-next block."
             raise NotImplementedError
-        elif opname == 'RAISE_VARARGS':
-            argc = instruction.arg
-            traceback, parameter, exception = (None, None, None)
-            if argc > 2:
-                traceback = pop()
-            if argc > 1:
-                parameter = pop()
-            if argc > 0:
-                exception = pop()
-            if COLOR_TRACE:
-                cprint(' ! exception %r %r %r' % (
-                            traceback, parameter, exception),
-                       color='magenta')
-            exception_data = ExceptionData(traceback, parameter, exception)
-            if handle_exception():
-                continue
-            else:
-                return Result(exception_data)
-        elif opname == 'LOAD_GLOBAL':
-            namei = instruction.arg
-            name = names[namei]
-            push(get_global_or_builtin(name))
-        elif opname == 'LOAD_CONST':
-            push(consts[instruction.arg])
-        elif opname == 'CALL_FUNCTION':
-            # As of Python 3.6 this only supports calls for functions with
-            # positional arguments.
-            if sys.version_info >= (3, 6):
-                argc = instruction.arg
-                kwargc = 0
-            else:
-                argc = instruction.arg & 0xff
-                kwargc = instruction.arg >> 8
-            kwarg_stack = pop_n(2 * kwargc, tos_is_0=False)
-            kwargs = dict(zip(kwarg_stack[::2], kwarg_stack[1::2]))
-            args = pop_n(argc, tos_is_0=False)
-            f = pop()
-            result = do_call(f, args, state=state, kwargs=kwargs,
-                             globals_=globals_)
-            if result.is_exception():
-                exception_data = result.get_exception()
-                if COLOR_TRACE:
-                    cprint(' =(call exception)=> %r' % (exception_data,),
-                           color='magenta')
-                if handle_exception():
-                    continue
-                else:
-                    return result
-            else:
-                if COLOR_TRACE:
-                    cprint(' =(call return)=> %r @ %s:%d' % (
-                            result.get_value(), code.co_filename,
-                            code.co_firstlineno), color='green')
-                push(result.get_value())
-        elif opname == 'CALL_FUNCTION_KW':
-            args = instruction.arg
-            kwarg_names = pop()
-            kwarg_values = pop_n(len(kwarg_names), tos_is_0=True)
-            assert len(kwarg_names) == len(kwarg_values), (
-                kwarg_names, kwarg_values)
-            kwargs = dict(zip(kwarg_names, kwarg_values))
-            rest = args-len(kwargs)
-            args = pop_n(rest, tos_is_0=False)
-            to_call = pop()
-            result = do_call(to_call, args, state=state, kwargs=kwargs,
-                             globals_=globals_)
-            if result.is_exception():
-                raise NotImplementedError
-            else:
-                push(result.get_value())
-        elif opname == 'CALL_FUNCTION_EX':
-            arg = instruction.arg
-            if arg & 0x1:
-                kwargs = pop()
-            else:
-                kwargs = None
-            callargs = pop()
-            func = pop()
-            result = do_call(func, callargs, kwargs=kwargs, globals_=globals_,
-                             state=state)
-            if result.is_exception():
-                raise NotImplementedError
-            else:
-                push(result.get_value())
         elif opname == 'CALL_FUNCTION_VAR':
             raise NotImplementedError
         elif opname == 'GET_ITER':
@@ -447,8 +589,6 @@ def interp(code: types.CodeType,
                     'Attempted to jump to invalid target.', pc,
                     pc_to_instruction[pc])
                 continue
-        elif opname == 'STORE_FAST':
-            locals_[instruction.arg] = pop()
         elif opname == 'STORE_NAME':
             if in_function:
                 locals_[instruction.arg] = pop()
@@ -489,23 +629,6 @@ def interp(code: types.CodeType,
                 pop()
         elif opname == 'RETURN_VALUE':
             return Result(pop())
-        elif opname == 'MAKE_FUNCTION':
-            qualified_name = pop()
-            code = pop()
-            closure = None
-            defaults = None
-            if instruction.arg & 0x08:
-                assert isinstance(peek(), tuple), peek()
-                closure = pop()
-            if instruction.arg & 0x04:
-                raise NotImplementedError
-            if instruction.arg & 0x02:
-                raise NotImplementedError
-            if instruction.arg & 0x01:
-                defaults = pop()
-            f = GuestFunction(code, globals_, qualified_name,
-                              defaults=defaults, closure=closure)
-            push(f)
         elif opname == 'BUILD_TUPLE':
             count = instruction.arg
             stack, t = stack[:-count], tuple(stack[-count:])
@@ -526,90 +649,6 @@ def interp(code: types.CodeType,
                 raise NotImplementedError
             else:
                 push(result.get_value())
-        elif opname == 'COMPARE_OP':
-            rhs = pop()
-            lhs = pop()
-            if instruction.argval in ('in', 'not in'):
-                op = ((lambda x, y: operator.contains(x, y))
-                      if instruction.argval == 'in'
-                      else lambda x, y: not operator.contains(x, y))
-                if type(rhs) in (list, dict, set):
-                    push(op(rhs, lhs))
-                else:
-                    raise NotImplementedError(lhs, rhs)
-            elif instruction.argval == 'exception match':
-                push(_exception_match(lhs, rhs))
-            else:
-                op = _COMPARE_OPS[instruction.argval]
-                types_ = {type(lhs), type(rhs)}
-                if types_ <= _BUILTIN_TYPES:
-                    push(op(lhs, rhs))
-                elif (isinstance(lhs, GuestInstance) and
-                      isinstance(rhs, GuestInstance) and
-                      instruction.argval in ('is not', 'is')):
-                    push(op(lhs, rhs))
-                else:
-                    raise NotImplementedError(lhs, rhs)
-        elif opname == 'IMPORT_NAME':
-            # TODO(leary, 2019-01-21): Use fromlist/level.
-            fromlist = pop()
-            level = pop()
-            if COLOR_TRACE_FUNC:
-                cprint('IMPORT_NAME argval: %r; fromlist: %r' %
-                       (instruction.argval, fromlist), color='green')
-            # "Positive values for level indicate the number of parent
-            # directories to search relative to the directory of the module
-            # calling __import__() (see PEP 328 for the details)."
-            #
-            # -- https://docs.python.org/3.6/library/functions.html#__import__
-            assert not level, (fromlist, level, code.co_filename,
-                               code.co_firstlineno)
-            result = do_import(instruction.argval, globals_=globals_,
-                               state=state)
-            if result.is_exception():
-                exception_data = result.get_exception()
-                if handle_exception():
-                    continue
-                else:
-                    return result
-            else:  # Not an exception.
-                module = result.get_value()
-                for name in fromlist or ():
-                    if name == '*':
-                        import_star(module)
-                    else:
-                        globals_[name] = module_getattr(module, name)
-                if True:
-                    cprint('IMPORT_NAME result: %r' % module, color='green')
-                push(module)
-        elif opname == 'IMPORT_STAR':
-            module = peek()
-            import_star(module)
-            pop()  # Docs say 'module is popped after loading all names'.
-        elif opname == 'IMPORT_FROM':
-            module = peek()
-            if isinstance(module, types.ModuleType):
-                push(getattr(module, instruction.argval))
-            elif isinstance(module, GuestModule):
-                push(module.getattr(instruction.argval))
-            else:
-                raise NotImplementedError(module)
-        elif opname == 'LOAD_ATTR':
-            obj = pop()
-            logging.debug('obj: %r; argval: %r', obj, instruction.argval)
-            if isinstance(obj, dict) and instruction.argval == 'keys':
-                push(GuestBuiltin('dict.keys', bound_self=obj))
-            elif isinstance(obj, GuestPyObject):
-                push(obj.getattr(instruction.argval))
-            else:
-                push(getattr(obj, instruction.argval))
-        elif opname == 'STORE_ATTR':
-            obj = pop()
-            value = pop()
-            if isinstance(obj, GuestPyObject):
-                obj.setattr(instruction.argval, value)
-            else:
-                raise NotImplementedError
         elif opname == 'LOAD_NAME':
             if in_function:
                 raise NotImplementedError
@@ -636,17 +675,6 @@ def interp(code: types.CodeType,
         elif opname == 'LOAD_CLOSURE':
             cellvar = cellvars[instruction.arg]
             push(cellvar)
-        elif opname == 'INPLACE_ADD':
-            lhs = pop()
-            rhs = pop()
-            if {type(lhs), type(rhs)} <= _BUILTIN_TYPES:
-                result = _run_binop('BINARY_ADD', lhs, rhs)
-                if result.is_exception():
-                    raise NotImplementedError
-                else:
-                    push(result.get_value())
-            else:
-                raise NotImplementedError(instruction, lhs, rhs)
         elif opname == 'DUP_TOP_TWO':
             stack = stack + stack[-2:]
         elif opname == 'DUP_TOP':
