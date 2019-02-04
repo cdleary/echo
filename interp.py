@@ -382,7 +382,7 @@ def interp(code: types.CodeType,
 
     @dispatched
     def run_STORE_FAST(arg, argval):
-        locals_[instruction.arg] = pop()
+        locals_[arg] = pop()
 
     @dispatched
     def run_IMPORT_NAME(arg, argval):
@@ -391,7 +391,7 @@ def interp(code: types.CodeType,
         level = pop()
         if COLOR_TRACE_FUNC:
             cprint('IMPORT_NAME argval: %r; fromlist: %r' %
-                   (instruction.argval, fromlist), color='green')
+                   (argval, fromlist), color='green')
         # "Positive values for level indicate the number of parent
         # directories to search relative to the directory of the module
         # calling __import__() (see PEP 328 for the details)."
@@ -399,7 +399,7 @@ def interp(code: types.CodeType,
         # -- https://docs.python.org/3.6/library/functions.html#__import__
         assert not level, (fromlist, level, code.co_filename,
                            code.co_firstlineno)
-        result = do_import(instruction.argval, globals_=globals_,
+        result = do_import(argval, globals_=globals_,
                            state=state)
         if result.is_exception():
             return result
@@ -434,12 +434,12 @@ def interp(code: types.CodeType,
     def run_LOAD_ATTR(arg, argval):
         obj = pop()
         logging.debug('obj: %r; argval: %r', obj, argval)
-        if isinstance(obj, dict) and instruction.argval == 'keys':
+        if isinstance(obj, dict) and argval == 'keys':
             return Result(GuestBuiltin('dict.keys', bound_self=obj))
         elif isinstance(obj, GuestPyObject):
-            return Result(obj.getattr(instruction.argval))
+            return Result(obj.getattr(argval))
         else:
-            return Result(getattr(obj, instruction.argval))
+            return Result(getattr(obj, argval))
 
     @dispatched
     def run_STORE_ATTR(arg, argval):
@@ -548,6 +548,7 @@ def interp(code: types.CodeType,
 
     while True:
         instruction = pc_to_instruction[pc]
+        assert instruction is not None
         global _GLOBAL_BYTECODE_COUNT
         _GLOBAL_BYTECODE_COUNT += 1
         if COLOR_TRACE:
