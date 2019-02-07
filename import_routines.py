@@ -62,7 +62,10 @@ def import_path(path: Text, fully_qualified: Text,
                          filename=fullpath)
     logging.debug('fully_qualified: %r module: %r', fully_qualified, module)
     state.sys_modules[fully_qualified] = module
-    interp(module_code, globals_=globals_, in_function=False, state=state)
+    result = interp(module_code, globals_=globals_, in_function=False,
+                    state=state)
+    if result.is_exception():
+        return result
     return Result(module)
 
 
@@ -85,7 +88,7 @@ def _do_import(name: Text,
         already_imported = state.sys_modules[fully_qualified]
         return Result(already_imported)
 
-    if name in ('functools', 'os', 'itertools', 'builtins'):
+    if name in ('functools', 'os', 'sys', 'itertools', 'builtins'):
         module = __import__(name, globals_)  # type: types.ModuleType
     else:
         paths = [module_path] if module_path else state.paths
@@ -96,7 +99,7 @@ def _do_import(name: Text,
         else:
             result = import_path(path, fully_qualified, interp, state=state)
             if result.is_exception():
-                raise NotImplementedError
+                return result
             module = result.get_value()
 
     return Result(module)

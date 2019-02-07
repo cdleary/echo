@@ -56,8 +56,7 @@ def main():
         else:
             raise
 
-    if result.is_exception():
-        print(result.get_exception(), file=sys.stderr)
+    print(result, file=sys.stderr)
 
 
 if __name__ == '__main__':

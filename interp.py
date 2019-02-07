@@ -41,6 +41,7 @@ from guest_objects import (GuestModule, GuestFunction, GuestInstance,
 _GLOBAL_BYTECODE_COUNT = 0
 COLOR_TRACE_FUNC = False
 COLOR_TRACE_STACK = False
+COLOR_TRACE_MOD = False
 COLOR_TRACE = False
 STARARGS_FLAG = 0x04
 _BINARY_OPS = {
@@ -287,7 +288,8 @@ def interp(code: types.CodeType,
         nonlocal pc
         if block_stack and block_stack[-1][0] == 'except':
             pc = block_stack[-1][1]
-            cprint(' ! moved PC to %d' % pc, color='magenta')
+            if COLOR_TRACE:
+                cprint(' ! moved PC to %d' % pc, color='magenta')
             push(exception_data.traceback)
             push(exception_data.parameter)
             push(exception_data.exception)
@@ -419,7 +421,7 @@ def interp(code: types.CodeType,
                         return result
                     module = result.get_value()
 
-        if True:
+        if COLOR_TRACE:
             cprint('IMPORT_NAME result: %r' % module, color='green')
         return Result(module)
 
@@ -672,6 +674,12 @@ def interp(code: types.CodeType,
             count = instruction.arg
             stack, t = stack[:-count], tuple(stack[-count:])
             push(t)
+        elif opname == 'BUILD_CONST_KEY_MAP':
+            count = instruction.arg
+            ks = pop()
+            stack, vs = stack[:-count], tuple(stack[-count:])
+            assert len(ks) == len(vs)
+            push(dict(zip(ks, vs)))
         elif opname == 'BUILD_TUPLE_UNPACK':
             iterables = pop_n(instruction.arg, tos_is_0=False)
             push(tuple(itertools.chain(*iterables)))
@@ -781,4 +789,10 @@ def run_function(f: types.FunctionType, *args: Tuple[Any, ...],
 
 def import_path(path: Text, fully_qualified: Text,
                 state: InterpreterState) -> Result[GuestModule]:
-    return import_routines.import_path(path, fully_qualified, interp, state)
+    if COLOR_TRACE_MOD:
+        cprint('Importing; path: %r; fq: %r' % (path, fully_qualified),
+               color='blue')
+    result = import_routines.import_path(path, fully_qualified, interp, state)
+    if COLOR_TRACE_MOD:
+        cprint('Imported; result: %r' % (result), color='blue')
+    return result
