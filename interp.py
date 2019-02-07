@@ -546,6 +546,39 @@ def interp(code: types.CodeType,
                           defaults=defaults, closure=closure)
         return Result(f)
 
+    @dispatched
+    def run_STORE_SUBSCR(arg, argval):
+        tos = pop()
+        tos1 = pop()
+        tos2 = pop()
+        operator.setitem(tos1, tos, tos2)
+
+    @dispatched
+    def run_MAKE_CLOSURE(arg, argval):
+        # Note: this bytecode was removed in Python 3.6.
+        name = pop()
+        code = pop()
+        freevar_cells = pop()
+        defaults = pop_n(arg)
+        f = GuestFunction(code, globals_, name, defaults=defaults,
+                          closure=freevar_cells)
+        return Result(f)
+
+    @dispatched
+    def run_STORE_NAME(arg, argval):
+        if in_function:
+            locals_[arg] = pop()
+        else:
+            globals_[argval] = pop()
+
+    @dispatched
+    def run_POP_TOP(arg, argval):
+        pop()
+
+    @dispatched
+    def run_POP_BLOCK(arg, argval):
+        block_stack.pop()
+
     while True:
         instruction = pc_to_instruction[pc]
         assert instruction is not None
@@ -590,19 +623,10 @@ def interp(code: types.CodeType,
                     'Attempted to jump to invalid target.', pc,
                     pc_to_instruction[pc])
                 continue
-        elif opname == 'STORE_NAME':
-            if in_function:
-                locals_[instruction.arg] = pop()
-            else:
-                globals_[instruction.argval] = pop()
         elif opname == 'LOAD_FAST':
             push(locals_[instruction.arg])
         elif opname == 'LOAD_BUILD_CLASS':
             push(builtins_get(builtins, '__build_class__'))
-        elif opname == 'POP_TOP':
-            pop()
-        elif opname == 'POP_BLOCK':
-            block_stack.pop()
         elif opname == 'BREAK_LOOP':
             loop_block = block_stack[-1]
             assert loop_block[0] == 'loop'
@@ -659,20 +683,6 @@ def interp(code: types.CodeType,
             push(cellvars[instruction.arg].get())
         elif opname == 'STORE_DEREF':
             cellvars[instruction.arg].set(pop())
-        elif opname == 'STORE_SUBSCR':
-            tos = pop()
-            tos1 = pop()
-            tos2 = pop()
-            operator.setitem(tos1, tos, tos2)
-        elif opname == 'MAKE_CLOSURE':
-            # Note: this bytecode was removed in Python 3.6.
-            name = pop()
-            code = pop()
-            freevar_cells = pop()
-            defaults = pop_n(instruction.arg)
-            f = GuestFunction(code, globals_, name, defaults=defaults,
-                              closure=freevar_cells)
-            push(f)
         elif opname == 'LOAD_CLOSURE':
             cellvar = cellvars[instruction.arg]
             push(cellvar)
