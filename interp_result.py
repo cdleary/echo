@@ -2,7 +2,7 @@
 
 import collections
 from enum import Enum
-from typing import TypeVar, Union, Generic
+from typing import TypeVar, Union, Generic, Text
 
 
 T = TypeVar('T')
@@ -14,6 +14,9 @@ class Result(Generic[T]):
 
     def __init__(self, value: Union[T, ExceptionData]):
         self.value = value
+
+    def __repr__(self) -> Text:
+        return 'Result({!r})'.format(self.value)
 
     def is_exception(self) -> bool:
         return isinstance(self.value, ExceptionData)

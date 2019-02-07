@@ -391,6 +391,8 @@ def interp(code: types.CodeType,
         result = import_routines.do_import(
             argval, globals_=globals_, interp=interp_callback, state=state,
             more_paths=more_paths)
+        if COLOR_TRACE:
+            cprint('IMPORT_NAME result: %r' % result, color='blue')
         if result.is_exception():
             return result
         # Not an exception.

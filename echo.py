@@ -39,20 +39,25 @@ def main():
         logging.basicConfig(level=getattr(logging, opts.log_level))
 
     interp.COLOR_TRACE = opts.ctrace
+    interp.COLOR_TRACE_FUNC = opts.ctrace
 
     globals_ = dict(globals())
     globals_['__file__'] = fullpath
 
     state = interp.InterpreterState(os.path.dirname(fullpath))
+    state.paths += sys.path[1:]
     fully_qualified = '__main__'
 
     try:
-        interp.import_path(fullpath, fully_qualified, state)
+        result = interp.import_path(fullpath, fully_qualified, state)
     except Exception as e:
         if opts.pdb:
             pdb.post_mortem(e.__traceback__)
         else:
             raise
+
+    if result.is_exception():
+        print(result.get_exception(), file=sys.stderr)
 
 
 if __name__ == '__main__':
