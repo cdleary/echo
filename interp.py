@@ -674,6 +674,11 @@ def interp(code: types.CodeType,
             count = instruction.arg
             stack, t = stack[:-count], tuple(stack[-count:])
             push(t)
+        elif opname == 'BUILD_MAP':
+            items = pop_n(2 * instruction.arg, tos_is_0=False)
+            ks = items[::2]
+            vs = items[1::2]
+            push(dict(zip(ks, vs)))
         elif opname == 'BUILD_CONST_KEY_MAP':
             count = instruction.arg
             ks = pop()
