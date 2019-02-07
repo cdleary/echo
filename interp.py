@@ -595,6 +595,22 @@ def interp(code: types.CodeType,
     def run_POP_BLOCK(arg, argval):
         block_stack.pop()
 
+    @dispatched
+    def run_MAKE_FUNCTION(arg, argval):
+        qualified_name = pop()
+        code = pop()
+        freevar_cells = pop() if arg & 0x08 else None
+        annotation_dict = pop() if arg & 0x04 else None
+        kwarg_defaults = pop() if arg & 0x02 else None
+        positional_defaults = pop() if arg & 0x01 else None
+        if kwarg_defaults:
+            raise NotImplementedError(kwarg_defaults)
+        if annotation_dict:
+            raise NotImplementedError(annotation_dict)
+        f = GuestFunction(code, globals_, qualified_name,
+                          defaults=positional_defaults, closure=freevar_cells)
+        return Result(f)
+
     while True:
         instruction = pc_to_instruction[pc]
         assert instruction is not None

@@ -57,7 +57,10 @@ def import_path(path: Text, fully_qualified: Text,
     module_code = compile(contents, fullpath, 'exec')
     assert isinstance(module_code, types.CodeType), module_code
 
-    globals_ = {'__builtins__': builtins}
+    globals_ = {
+        '__builtins__': builtins,
+        '__name__': fully_qualified,
+    }
     module = GuestModule(module_name, code=module_code, globals_=globals_,
                          filename=fullpath)
     logging.debug('fully_qualified: %r module: %r', fully_qualified, module)

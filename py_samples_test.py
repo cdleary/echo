@@ -20,4 +20,5 @@ def test_echo_on_sample(path):
     globals_['__file__'] = path
     fully_qualified = '__main__'
     state = interp.InterpreterState(os.path.dirname(path))
-    interp.import_path(path, fully_qualified, state)
+    result = interp.import_path(path, fully_qualified, state)
+    assert not result.is_exception(), result.get_exception()
