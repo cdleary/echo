@@ -43,8 +43,7 @@ def main():
     globals_ = dict(globals())
     globals_['__file__'] = fullpath
 
-    sys.path[0] = os.path.dirname(fullpath)
-    state = interp.InterpreterState()
+    state = interp.InterpreterState(os.path.dirname(fullpath))
     fully_qualified = '__main__'
 
     try:

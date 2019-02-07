@@ -381,21 +381,16 @@ def interp(code: types.CodeType,
 
     @dispatched
     def run_IMPORT_NAME(arg, argval):
-        # TODO(leary, 2019-01-21): Use fromlist/level.
         fromlist = pop()
         level = pop()
         if COLOR_TRACE_FUNC:
-            cprint('IMPORT_NAME argval: %r; fromlist: %r' %
-                   (argval, fromlist), color='green')
-        # "Positive values for level indicate the number of parent
-        # directories to search relative to the directory of the module
-        # calling __import__() (see PEP 328 for the details)."
-        #
-        # -- https://docs.python.org/3.6/library/functions.html#__import__
-        assert not level, (fromlist, level, code.co_filename,
-                           code.co_firstlineno)
+            cprint('IMPORT_NAME argval: %r; fromlist: %r; level: %r' %
+                   (argval, fromlist, level), color='green')
+        more_paths = import_routines.resolve_level_to_dirpaths(
+            code.co_filename, level)
         result = import_routines.do_import(
-            argval, globals_=globals_, interp=interp_callback, state=state)
+            argval, globals_=globals_, interp=interp_callback, state=state,
+            more_paths=more_paths)
         if result.is_exception():
             return result
         # Not an exception.
@@ -404,7 +399,24 @@ def interp(code: types.CodeType,
             if name == '*':
                 import_star(module)
             else:
-                globals_[name] = module_getattr(module, name)
+                try:
+                    globals_[name] = module_getattr(module, name)
+                except KeyError:
+                    # "Note that when using from package import item, the item
+                    # can be either a submodule (or subpackage) of the package,
+                    # or some other name defined in the package, like a
+                    # function, class or variable. The import statement first
+                    # tests whether the item is defined in the package; if not,
+                    # it assumes it is a module and attempts to load it. If it
+                    # fails to find it, an ImportError exception is raised."
+                    # -- https://docs.python.org/3/tutorial/modules.html
+                    result = import_routines.do_subimport(
+                        module, name, interp=interp_callback, state=state,
+                        globals_=globals_)
+                    if result.is_exception():
+                        return result
+                    module = result.get_value()
+
         if True:
             cprint('IMPORT_NAME result: %r' % module, color='green')
         return Result(module)
@@ -421,7 +433,12 @@ def interp(code: types.CodeType,
         if isinstance(module, types.ModuleType):
             return Result(getattr(module, argval))
         elif isinstance(module, GuestModule):
-            return Result(module.getattr(argval))
+            try:
+                return Result(module.getattr(argval))
+            except KeyError:
+                return import_routines.do_subimport(
+                    module, argval, interp=interp_callback, state=state,
+                    globals_=globals_)
         else:
             raise NotImplementedError(module)
 
@@ -753,7 +770,7 @@ def do_call(f, args: Tuple[Any, ...],
 def run_function(f: types.FunctionType, *args: Tuple[Any, ...],
                  globals_=None) -> Any:
     """Interprets f in the echo interpreter, returns unwrapped result."""
-    state = InterpreterState()
+    state = InterpreterState(script_directory=None)
     globals_ = globals_ or globals()
     result = interp(get_code(f), globals_=globals_, defaults=f.__defaults__,
                     args=args, state=state)

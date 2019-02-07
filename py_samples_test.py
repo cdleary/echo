@@ -18,7 +18,6 @@ def test_echo_on_sample(path):
         pytest.xfail('Known-failing sample.')
     globals_ = dict(globals())
     globals_['__file__'] = path
-    sys.path[0] = os.path.dirname(path)
     fully_qualified = '__main__'
-    state = interp.InterpreterState()
+    state = interp.InterpreterState(os.path.dirname(path))
     interp.import_path(path, fully_qualified, state)

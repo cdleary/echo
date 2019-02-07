@@ -3,11 +3,14 @@ import logging
 import os
 import sys
 import types
-from typing import Text, Dict, Any, Optional, Union, Sequence
+from typing import Text, Dict, Any, Optional, Union, Sequence, List
 
 from interp_result import Result, ExceptionData
 from interpreter_state import InterpreterState
 from guest_objects import GuestModule
+
+
+ModuleT = Union[types.ModuleType, GuestModule]
 
 
 def _find_module_path(search_path: Text,
@@ -27,9 +30,8 @@ def _find_module_path(search_path: Text,
 
 
 def find_module_path(name: Text,
-                     path: Optional[Text] = None) -> Optional[Text]:
+                     paths: Sequence[Text]) -> Optional[Text]:
     pieces = name.split('.')
-    paths = sys.path if path is None else [path]
 
     for search_path in paths:
         result = _find_module_path(search_path, pieces)
@@ -69,8 +71,8 @@ def _do_import(name: Text,
                fully_qualified: Text,
                globals_: Dict[Text, Any],
                interp, state: InterpreterState,
-               module_path: Optional[Text] = None) -> Result[
-                Union[types.ModuleType, GuestModule]]:
+               more_paths: List[Text],
+               module_path: Optional[Text] = None) -> Result[ModuleT]:
     def import_error(name: Text) -> Result[Any]:
         return Result(ExceptionData(
             None,
@@ -86,7 +88,9 @@ def _do_import(name: Text,
     if name in ('functools', 'os', 'itertools', 'builtins'):
         module = __import__(name, globals_)  # type: types.ModuleType
     else:
-        path = find_module_path(name, module_path)
+        paths = [module_path] if module_path else state.paths
+        assert isinstance(paths, list), paths
+        path = find_module_path(name, more_paths + paths)
         if path is None:
             return import_error(name)
         else:
@@ -100,13 +104,27 @@ def _do_import(name: Text,
 
 def do_import(name: Text,
               *,
-              interp, state: InterpreterState,
-              globals_: Dict[Text, Any]) -> Result[
-                Union[types.ModuleType, GuestModule]]:
-    """Imports a given module `name` which may have dots in it."""
-    assert name, 'Name to import must not be empty.'
-    outermost = None  # type: Optional[Union[types.ModuleType, GuestModule]]
+              interp,
+              state: InterpreterState,
+              globals_: Dict[Text, Any],
+              more_paths: Optional[List[Text]] = None) -> Result[ModuleT]:
+    """Imports a given module `name` which may have dots in it.
+
+    Note that in the process of importing a module we import and run code for
+    packages that lead up to that final module value.
+
+    Args:
+        name: Name of the module to import, may have dots in it.
+        interp: Interpreter callback.
+        state: Interpreter state (used for determining search paths).
+        globals_: Global bindings for the import operation.
+
+    Returns:
+        The module that has been imported.
+    """
+    outermost = None  # type: Optional[ModuleT]
     outer = None
+    more_paths = more_paths or []
 
     def outer_filename() -> Text:
         if isinstance(outer, types.ModuleType):
@@ -124,7 +142,8 @@ def do_import(name: Text,
         new_outer = _do_import(piece, fully_qualified='.'.join(pieces[:i+1]),
                                globals_=globals_,
                                interp=interp, state=state,
-                               module_path=module_path)
+                               module_path=module_path,
+                               more_paths=more_paths)
         if new_outer.is_exception():
             return new_outer
         if outer:
@@ -133,9 +152,30 @@ def do_import(name: Text,
         outermost = outermost or new_outer.get_value()
 
     # Workaround for erroneous-seeming pytype deduction.
-    def _to_result(x: Union[types.ModuleType, GuestModule]) -> Result[
-            Union[types.ModuleType, GuestModule]]:
+    def _to_result(x: ModuleT) -> Result[ModuleT]:
         return Result(x)
 
     assert outermost is not None
     return _to_result(outermost)
+
+
+def do_subimport(module: ModuleT, name: Text, *,
+                 interp, state: InterpreterState, globals_: Dict[Text, Any]):
+    return do_import(name, interp=interp, state=state, globals_=globals_,
+                     more_paths=[module.filename])
+
+
+def resolve_level_to_dirpaths(importing_filename: Text,
+                              level: int) -> List[Text]:
+    # "Positive values for level indicate the number of parent
+    # directories to search relative to the directory of the module
+    # calling __import__() (see PEP 328 for the details)."
+    #
+    # -- https://docs.python.org/3.6/library/functions.html#__import__
+    paths = []
+    dirname = os.path.dirname(importing_filename)
+    for _ in range(level):
+        (dirname, _) = os.path.split(dirname)
+        paths.append(dirname)
+
+    return paths
