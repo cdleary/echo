@@ -163,6 +163,7 @@ def interp(code: types.CodeType,
            args: Optional[Tuple[Any, ...]] = None,
            kwargs: Optional[Dict[Text, Any]] = None,
            defaults: Optional[Tuple[Any, ...]] = None,
+           kwarg_defaults: Optional[Dict[Text, Any]] = None,
            closure: Optional[Tuple[GuestCell, ...]] = None,
            in_function: bool = True) -> Result[Any]:
     """Evaluates "code" using "globals_" after initializing locals with "args".
@@ -202,9 +203,9 @@ def interp(code: types.CodeType,
 
     attrs = CodeAttributes.from_code(code)
     arg_locals, additional_local_count = resolve_args(
-        attrs, args, kwargs, defaults)
+        attrs, args, kwargs, defaults, kwarg_defaults)
 
-    locals_ = list(arg_locals + (None,) * additional_local_count)
+    locals_ = arg_locals + [None] * additional_local_count
     cellvars = tuple(GuestCell(name) for name in code.co_cellvars) + closure
 
     # Cellvars that match argument names get populated with the argument value,
@@ -321,6 +322,7 @@ def interp(code: types.CodeType,
         f_name = f.__name__
         assert f_name.startswith('run_')
         opname = f_name[len('run_'):]
+        assert opname not in DISPATCH_TABLE, opname
         DISPATCH_TABLE[opname] = f
         return f
 
@@ -536,25 +538,6 @@ def interp(code: types.CodeType,
             raise NotImplementedError(lhs, rhs)
 
     @dispatched
-    def run_MAKE_FUNCTION(arg, argval):
-        qualified_name = pop()
-        code = pop()
-        closure = None
-        defaults = None
-        if arg & 0x08:
-            assert isinstance(peek(), tuple), peek()
-            closure = pop()
-        if arg & 0x04:
-            raise NotImplementedError
-        if arg & 0x02:
-            raise NotImplementedError
-        if arg & 0x01:
-            defaults = pop()
-        f = GuestFunction(code, globals_, qualified_name,
-                          defaults=defaults, closure=closure)
-        return Result(f)
-
-    @dispatched
     def run_STORE_SUBSCR(arg, argval):
         tos = pop()
         tos1 = pop()
@@ -595,16 +578,11 @@ def interp(code: types.CodeType,
         annotation_dict = pop() if arg & 0x04 else None
         kwarg_defaults = pop() if arg & 0x02 else None
         positional_defaults = pop() if arg & 0x01 else None
-        if kwarg_defaults:
-            print('co_argcount:', code.co_argcount, file=sys.stderr)
-            print('co_kwonlyargcount:', code.co_kwonlyargcount,
-                  file=sys.stderr)
-            print(code, kwarg_defaults, file=sys.stderr)
-            raise NotImplementedError(kwarg_defaults)
         if annotation_dict:
             raise NotImplementedError(annotation_dict)
         f = GuestFunction(code, globals_, qualified_name,
-                          defaults=positional_defaults, closure=freevar_cells)
+                          defaults=positional_defaults,
+                          kwarg_defaults=kwarg_defaults, closure=freevar_cells)
         return Result(f)
 
     while True:
@@ -763,10 +741,13 @@ def do_call(f, args: Tuple[Any, ...],
         return Result(globals_)
     elif isinstance(f, GuestFunction):
         return interp(f.code, state=state, globals_=f.globals_, args=args,
-                      kwargs=kwargs, closure=f.closure)
+                      kwargs=kwargs, defaults=f.defaults,
+                      kwarg_defaults=f.kwarg_defaults, closure=f.closure)
     elif isinstance(f, types.FunctionType):
         return interp(f.__code__, state=state, globals_=f.__globals__,
-                      defaults=f.__defaults__, args=args, kwargs=kwargs)
+                      defaults=f.__defaults__,
+                      kwarg_defaults=f.__kwarg_defaults__, args=args,
+                      kwargs=kwargs)
     elif isinstance(f, types.MethodType):
         # Builtin object method.
         return Result(f(*args, **kwargs))

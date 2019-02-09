@@ -1,6 +1,6 @@
 import abc
 import types
-from typing import Text, Any, Dict, Iterable, Tuple
+from typing import Text, Any, Dict, Iterable, Tuple, Optional
 
 from interp_result import Result
 
@@ -42,21 +42,26 @@ class GuestModule(GuestPyObject):
 
 
 class GuestFunction(GuestPyObject):
-    def __init__(self, code, globals_, name, *, defaults=None, closure=None):
+    def __init__(self, code, globals_, name, *, defaults=None,
+                 kwarg_defaults: Optional[Dict[Text, Any]] = None,
+                 closure=None):
         self.code = code
         self.globals_ = globals_
         self.name = name
         self.defaults = defaults
+        self.kwarg_defaults = kwarg_defaults
         self.closure = closure
 
     def __repr__(self):
-        return ('_Function(code={!r}, name={!r}, closure={!r}, '
-                'defaults={!r})').format(
-                    self.code, self.name, self.closure, self.defaults)
+        return ('GuestFunction(code={!r}, name={!r}, closure={!r}, '
+                'defaults={!r}, kwarg_defaults={!r})').format(
+                    self.code, self.name, self.closure, self.defaults,
+                    self.kwarg_defaults)
 
     def invoke(self, args: Tuple[Any, ...], interp) -> Result[Any]:
         return interp(self.code, globals_=self.globals_, args=args,
-                      defaults=self.defaults, closure=self.closure,
+                      defaults=self.defaults,
+                      kwarg_defaults=self.kwarg_defaults, closure=self.closure,
                       in_function=True)
 
     def getattr(self, name: Text) -> Any:
