@@ -590,14 +590,32 @@ def interp(code: types.CodeType,
 
     @dispatched
     def run_MAKE_FUNCTION(arg, argval):
-        qualified_name = pop()
-        code = pop()
-        freevar_cells = pop() if arg & 0x08 else None
-        annotation_dict = pop() if arg & 0x04 else None
-        kwarg_defaults = pop() if arg & 0x02 else None
-        positional_defaults = pop() if arg & 0x01 else None
-        if annotation_dict:
-            raise NotImplementedError(annotation_dict)
+        if sys.version_info >= (3, 6):
+            qualified_name = pop()
+            code = pop()
+            freevar_cells = pop() if arg & 0x08 else None
+            annotation_dict = pop() if arg & 0x04 else None
+            kwarg_defaults = pop() if arg & 0x02 else None
+            positional_defaults = pop() if arg & 0x01 else None
+            if annotation_dict:
+                raise NotImplementedError(annotation_dict)
+        else:
+            # 3.5 documentation:
+            # https://docs.python.org/3.5/library/dis.html#opcode-MAKE_FUNCTION
+            default_argc = arg & 0xff
+            name_and_default_pairs = (arg >> 8) & 0xff
+            annotation_objects = (arg >> 16) & 0x7fff
+            if annotation_objects:
+                raise NotImplementedError(annotation_objects)
+            qualified_name = pop()
+            code = pop()
+            kwarg_default_items = pop_n(2 * name_and_default_pairs,
+                                        tos_is_0=False)
+            kwarg_defaults = dict(zip(kwarg_default_items[::2],
+                                      kwarg_default_items[1::2]))
+            positional_defaults = pop_n(default_argc, tos_is_0=False)
+            freevar_cells = None
+
         f = GuestFunction(code, globals_, qualified_name,
                           defaults=positional_defaults,
                           kwarg_defaults=kwarg_defaults, closure=freevar_cells)
@@ -749,6 +767,9 @@ def do_call(f, args: Tuple[Any, ...],
             state: InterpreterState,
             globals_: Dict[Text, Any],
             kwargs: Optional[Dict[Text, Any]] = None) -> Result[Any]:
+    if COLOR_TRACE:
+        cprint('Call; f: %r args: %r kwargs: %r' % (f, args, kwargs),
+               color='red')
     interp_callback = functools.partial(interp, state=state)
     do_call_callback = functools.partial(do_call, state=state)
     kwargs = kwargs or {}
