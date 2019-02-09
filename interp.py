@@ -578,6 +578,10 @@ def interp(code: types.CodeType,
         return Result(f)
 
     @dispatched
+    def run_STORE_GLOBAL(arg, argval):
+        globals_[argval] = pop()
+
+    @dispatched
     def run_STORE_NAME(arg, argval):
         if in_function:
             locals_[arg] = pop()
