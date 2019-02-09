@@ -32,6 +32,7 @@ from termcolor import cprint
 from common import dis_to_str, get_code
 from interp_result import Result, ExceptionData
 import import_routines
+from arg_resolver import resolve_args, CodeAttributes
 from interpreter_state import InterpreterState
 from guest_objects import (GuestModule, GuestFunction, GuestInstance,
                            GuestBuiltin, GuestPyObject, GuestPartial,
@@ -43,7 +44,6 @@ COLOR_TRACE_FUNC = False
 COLOR_TRACE_STACK = False
 COLOR_TRACE_MOD = False
 COLOR_TRACE = False
-STARARGS_FLAG = 0x04
 _BINARY_OPS = {
     'BINARY_ADD': operator.add,
     'BINARY_MODULO': operator.mod,
@@ -189,10 +189,6 @@ def interp(code: types.CodeType,
     TODO(cdleary, 2019-01-21): Use dis.stack_effect to cross-check stack depth
         change.
     """
-    if kwargs:
-        raise NotImplementedError(code, kwargs)
-    args = args or ()
-    defaults = defaults or ()
     closure = closure or ()
 
     assert len(code.co_freevars) == len(closure), (
@@ -204,14 +200,11 @@ def interp(code: types.CodeType,
     logging.debug('</bytecode>')
     logging.debug(code_to_str(code))
 
-    # Note: co_argcount includes default arguments in the count.
-    assert (len(args) + len(defaults) >= code.co_argcount
-            or code.co_flags & STARARGS_FLAG), (
-        'Invocation did not provide enough arguments.', code, args, defaults,
-        code.co_argcount)
+    attrs = CodeAttributes.from_code(code)
+    arg_locals, additional_local_count = resolve_args(
+        attrs, args, kwargs, defaults)
 
-    locals_ = (list(args) + list(defaults)
-               + [None] * (code.co_nlocals-code.co_argcount))
+    locals_ = list(arg_locals + (None,) * additional_local_count)
     cellvars = tuple(GuestCell(name) for name in code.co_cellvars) + closure
 
     # Cellvars that match argument names get populated with the argument value,
@@ -247,7 +240,6 @@ def interp(code: types.CodeType,
         gprint('  co_varnames: %r' % (code.co_varnames,))
         gprint('  co_names:    %r' % (code.co_names,))
         gprint('  closure:     %r' % (closure,))
-        gprint('  len(args):   %d' % len(args))
         cprint_lines_after(code.co_filename, code.co_firstlineno)
 
     # TODO(cdleary, 2019-01-21): Investigate why this "builtins" ref is
@@ -604,6 +596,10 @@ def interp(code: types.CodeType,
         kwarg_defaults = pop() if arg & 0x02 else None
         positional_defaults = pop() if arg & 0x01 else None
         if kwarg_defaults:
+            print('co_argcount:', code.co_argcount, file=sys.stderr)
+            print('co_kwonlyargcount:', code.co_kwonlyargcount,
+                  file=sys.stderr)
+            print(code, kwarg_defaults, file=sys.stderr)
             raise NotImplementedError(kwarg_defaults)
         if annotation_dict:
             raise NotImplementedError(annotation_dict)
