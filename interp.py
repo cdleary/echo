@@ -202,8 +202,13 @@ def interp(code: types.CodeType,
     logging.debug(code_to_str(code))
 
     attrs = CodeAttributes.from_code(code)
-    arg_locals, additional_local_count = resolve_args(
+    arg_result = resolve_args(
         attrs, args, kwargs, defaults, kwarg_defaults)
+    if arg_result.is_exception():
+        raise NotImplementedError('Exception while resolving args.',
+                                  arg_result.get_exception())
+
+    arg_locals, additional_local_count = arg_result.get_value()
 
     locals_ = arg_locals + [None] * additional_local_count
     cellvars = tuple(GuestCell(name) for name in code.co_cellvars) + closure

@@ -72,4 +72,4 @@ def resolve_args(attrs: CodeAttributes,
     # For convenience we inform the caller how many slots should be appended to
     # reach the number of local slots.
     remaining = attrs.nlocals - attrs.argcount
-    return list(result), remaining
+    return Result((list(result), remaining))
