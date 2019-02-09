@@ -18,6 +18,9 @@ class Result(Generic[T]):
     def __repr__(self) -> Text:
         return 'Result({!r})'.format(self.value)
 
+    def __int__(self) -> None:
+        raise TypeError('Call get_value() to unwrap a result.')
+
     def is_exception(self) -> bool:
         return isinstance(self.value, ExceptionData)
 

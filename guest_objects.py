@@ -115,6 +115,13 @@ class GuestClass(GuestPyObject):
         raise NotImplementedError
 
 
+def _do_isinstance(args: Tuple[Any, ...]) -> Result[bool]:
+    assert len(args) == 2, args
+    if args[1] is int and isinstance(args[0], int):
+        return Result(True)
+    raise NotImplementedError(args)
+
+
 class GuestBuiltin(GuestPyObject):
     def __init__(self, name: Text, bound_self: Any):
         self.name = name
@@ -127,6 +134,10 @@ class GuestBuiltin(GuestPyObject):
         if self.name == 'dict.keys':
             assert not args, args
             return Result(self.bound_self.keys())
+        if self.name == 'list.append':
+            return Result(self.bound_self.append(*args))
+        if self.name == 'isinstance':
+            return _do_isinstance(args)
         else:
             raise NotImplementedError(self.name)
 

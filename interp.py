@@ -54,6 +54,7 @@ _BINARY_OPS = {
 _BUILTIN_VALUE_TYPES = {
     int,
     str,
+    type(None),
 }
 _BUILTIN_VALUE_TYPES_TUP = tuple(_BUILTIN_VALUE_TYPES)
 _CODE_ATTRS = [
@@ -68,6 +69,7 @@ _COMPARE_OPS = {
     '<': operator.lt,
     '>=': operator.ge,
     'is not': operator.is_not,
+    'is': operator.is_,
 }
 
 
@@ -91,6 +93,8 @@ def code_to_str(c: types.CodeType) -> Text:
 
 
 def builtins_get(builtins: Union[types.ModuleType, Dict], name: Text) -> Any:
+    if name == 'isinstance':
+        return GuestBuiltin('isinstance', None)
     if isinstance(builtins, types.ModuleType):
         return getattr(builtins, name)
     return builtins[name]
@@ -167,9 +171,23 @@ def _compare(opname, lhs, rhs) -> Result[bool]:
         if len(lhs) != len(rhs):
             return Result(False)
         for e, f in zip(lhs, rhs):
-            if not _compare(opname, e, f):
+            e_result = _compare(opname, e, f)
+            if e_result.is_exception():
+                return e_result
+            if not e_result.get_value():
                 return Result(False)
         return Result(True)
+    if opname in ('in', 'not in') and type(rhs) in (tuple, list, dict):
+        for e in rhs:
+            e_result = _compare('==', lhs, e)
+            if e_result.is_exception():
+                return e_result
+            if e_result.get_value():
+                return Result(opname == 'in')
+        return Result(opname == 'not in')
+    if opname == 'is not':
+        if isinstance(lhs, GuestInstance) and isinstance(rhs, GuestInstance):
+            return Result(lhs is not rhs)
     raise NotImplementedError(opname, lhs, rhs)
 
 
@@ -274,6 +292,9 @@ def interp(code: types.CodeType,
             cprint(' =(push)=> %r [depth after: %d]' %
                    (x, len(stack)+1), color='blue')
         assert not isinstance(x, Result), x
+        # If the user can observe the real isinstance they can break the
+        # virtualization abstraction, which is undesirable.
+        assert x is not isinstance
         stack.append(x)
 
     def pop():
@@ -468,6 +489,8 @@ def interp(code: types.CodeType,
         logging.debug('obj: %r; argval: %r', obj, argval)
         if isinstance(obj, dict) and argval == 'keys':
             return Result(GuestBuiltin('dict.keys', bound_self=obj))
+        if isinstance(obj, list) and argval == 'append':
+            return Result(GuestBuiltin('list.append', bound_self=obj))
         elif isinstance(obj, GuestPyObject):
             return Result(obj.getattr(argval))
         else:
@@ -486,33 +509,16 @@ def interp(code: types.CodeType,
     def run_COMPARE_OP(arg, argval):
         rhs = pop()
         lhs = pop()
-        if argval in ('in', 'not in'):
-            op = ((lambda x, y: operator.contains(x, y))
-                  if argval == 'in'
-                  else lambda x, y: not operator.contains(x, y))
-            if type(rhs) in (list, dict, set):
-                return Result(op(rhs, lhs))
-            else:
-                raise NotImplementedError(lhs, rhs)
-        elif argval == 'exception match':
+        if argval == 'exception match':
             return Result(_exception_match(lhs, rhs))
         else:
-            op = _COMPARE_OPS[argval]
-            types_ = {type(lhs), type(rhs)}
-            if types_ <= _BUILTIN_VALUE_TYPES:
-                push(op(lhs, rhs))
-            elif (isinstance(lhs, GuestInstance) and
-                  isinstance(rhs, GuestInstance) and
-                  argval in ('is not', 'is')):
-                return Result(op(lhs, rhs))
-            else:
-                return _compare(argval, lhs, rhs)
+            return _compare(argval, lhs, rhs)
 
     @dispatched
     def run_CALL_FUNCTION_KW(arg, argval):
         args = arg
         kwarg_names = pop()
-        kwarg_values = pop_n(len(kwarg_names), tos_is_0=True)
+        kwarg_values = pop_n(len(kwarg_names), tos_is_0=False)
         assert len(kwarg_names) == len(kwarg_values), (
             kwarg_names, kwarg_values)
         kwargs = dict(zip(kwarg_names, kwarg_values))
@@ -706,7 +712,7 @@ def interp(code: types.CodeType,
             return Result(pop())
         elif opname == 'BUILD_TUPLE':
             count = instruction.arg
-            stack, t = stack[:-count], tuple(stack[-count:])
+            t = pop_n(count, tos_is_0=False)
             push(t)
         elif opname == 'BUILD_MAP':
             items = pop_n(2 * instruction.arg, tos_is_0=False)

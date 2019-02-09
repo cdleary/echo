@@ -90,7 +90,7 @@ def resolve_args(attrs: CodeAttributes,
     def populate_positional(index, value):
         assert len(arg_slots) == attrs.total_argcount
         assert len(default_required) == attrs.total_argcount, default_required
-        assert index < len(arg_slots), index
+        assert index < len(arg_slots), (index, attrs)
         arg_slots[index] = value
         default_required[index] = None
 
