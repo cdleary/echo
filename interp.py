@@ -51,10 +51,9 @@ _BINARY_OPS = {
     'BINARY_SUBSCR': operator.getitem,
     'BINARY_TRUE_DIVIDE': operator.truediv,
 }
-_BUILTIN_TYPES = {
+_BUILTIN_VALUE_TYPES = {
     int,
     str,
-    list,
 }
 _CODE_ATTRS = [
     'co_argcount', 'co_cellvars', 'co_code', 'co_consts', 'co_filename',
@@ -135,7 +134,8 @@ def _run_binop(opname: Text, lhs: Any, rhs: Any) -> Result[Any]:
     if (opname in ('BINARY_TRUE_DIVIDE', 'BINARY_MODULO') and type(rhs) is int
             and rhs == 0):
         raise NotImplementedError(opname, lhs, rhs)
-    if {type(lhs), type(rhs)} <= _BUILTIN_TYPES:
+    if {type(lhs), type(rhs)} <= _BUILTIN_VALUE_TYPES or (
+            type(lhs) is list and opname == 'BINARY_SUBSCR'):
         op = _BINARY_OPS[opname]
         return Result(op(lhs, rhs))
     raise NotImplementedError(opname, lhs, rhs)
@@ -154,6 +154,19 @@ def module_getattr(module: Union[types.ModuleType, GuestModule],
     if isinstance(module, GuestModule):
         return module.getattr(name)
     return getattr(module, name)
+
+
+def _compare(opname, lhs, rhs) -> Result[bool]:
+    if isinstance(lhs, int) and isinstance(rhs, int):
+        return Result(_COMPARE_OPS[opname](lhs, rhs))
+    if isinstance(lhs, tuple) and isinstance(rhs, tuple) and opname == '==':
+        if len(lhs) != len(rhs):
+            return Result(False)
+        for e, f in zip(lhs, rhs):
+            if not _compare(opname, e, f):
+                return Result(False)
+        return Result(True)
+    raise NotImplementedError(opname, lhs, rhs)
 
 
 def interp(code: types.CodeType,
@@ -482,14 +495,14 @@ def interp(code: types.CodeType,
         else:
             op = _COMPARE_OPS[argval]
             types_ = {type(lhs), type(rhs)}
-            if types_ <= _BUILTIN_TYPES:
+            if types_ <= _BUILTIN_VALUE_TYPES:
                 push(op(lhs, rhs))
             elif (isinstance(lhs, GuestInstance) and
                   isinstance(rhs, GuestInstance) and
                   argval in ('is not', 'is')):
                 return Result(op(lhs, rhs))
             else:
-                raise NotImplementedError(lhs, rhs)
+                return _compare(argval, lhs, rhs)
 
     @dispatched
     def run_CALL_FUNCTION_KW(arg, argval):
@@ -537,7 +550,7 @@ def interp(code: types.CodeType,
     def run_INPLACE_ADD(arg, argval):
         lhs = pop()
         rhs = pop()
-        if {type(lhs), type(rhs)} <= _BUILTIN_TYPES:
+        if {type(lhs), type(rhs)} <= _BUILTIN_VALUE_TYPES:
             return _run_binop('BINARY_ADD', lhs, rhs)
         else:
             raise NotImplementedError(lhs, rhs)
