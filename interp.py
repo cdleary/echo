@@ -67,9 +67,14 @@ _COMPARE_OPS = {
     '==': operator.eq,
     '!=': operator.ne,
     '<': operator.lt,
+    '>': operator.gt,
     '>=': operator.ge,
     'is not': operator.is_not,
     'is': operator.is_,
+}
+_GUEST_BUILTINS = {
+    list: {'append', 'remove', 'insert'},
+    dict: {'keys', 'values'},
 }
 
 
@@ -249,7 +254,10 @@ def interp(code: types.CodeType,
 
     arg_locals, additional_local_count = arg_result.get_value()
 
-    locals_ = arg_locals + [None] * additional_local_count
+    class UnboundLocalSentinel:
+        pass
+
+    locals_ = arg_locals + [UnboundLocalSentinel] * additional_local_count
     cellvars = tuple(GuestCell(name) for name in code.co_cellvars) + closure
 
     # Cellvars that match argument names get populated with the argument value,
@@ -490,12 +498,11 @@ def interp(code: types.CodeType,
     @dispatched
     def run_LOAD_ATTR(arg, argval):
         obj = pop()
-        logging.debug('obj: %r; argval: %r', obj, argval)
-        if isinstance(obj, dict) and argval == 'keys':
-            return Result(GuestBuiltin('dict.keys', bound_self=obj))
-        if isinstance(obj, list) and argval == 'append':
-            return Result(GuestBuiltin('list.append', bound_self=obj))
-        elif isinstance(obj, GuestPyObject):
+        for type_, methods in _GUEST_BUILTINS.items():
+            if isinstance(obj, type_) and argval in methods:
+                return Result(GuestBuiltin(
+                    '{}.{}'.format(type_.__name__, argval), bound_self=obj))
+        if isinstance(obj, GuestPyObject):
             return Result(obj.getattr(argval))
         else:
             return Result(getattr(obj, argval))
@@ -597,6 +604,13 @@ def interp(code: types.CodeType,
             locals_[arg] = pop()
         else:
             globals_[argval] = pop()
+
+    @dispatched
+    def run_DELETE_NAME(arg, argval):
+        if in_function:
+            locals_[arg] = UnboundLocalSentinel
+        else:
+            del globals_[argval]
 
     @dispatched
     def run_POP_TOP(arg, argval):
@@ -791,7 +805,7 @@ def do_call(f, args: Tuple[Any, ...],
     interp_callback = functools.partial(interp, state=state)
     do_call_callback = functools.partial(do_call, state=state)
     kwargs = kwargs or {}
-    if f in (dict, range, print, sorted, str, list, ValueError,
+    if f in (dict, range, print, sorted, str, list, hasattr, ValueError,
              AssertionError):
         return Result(f(*args, **kwargs))
     if f is globals:

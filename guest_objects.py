@@ -2,7 +2,7 @@ import abc
 import types
 from typing import Text, Any, Dict, Iterable, Tuple, Optional
 
-from interp_result import Result
+from interp_result import Result, ExceptionData
 
 
 class GuestPyObject:
@@ -136,6 +136,14 @@ class GuestBuiltin(GuestPyObject):
             return Result(self.bound_self.keys())
         if self.name == 'list.append':
             return Result(self.bound_self.append(*args))
+        if self.name == 'list.insert':
+            return Result(self.bound_self.insert(*args))
+        if self.name == 'list.remove':
+            try:
+                return Result(self.bound_self.remove(*args))
+            except ValueError as e:
+                return Result(ExceptionData(traceback=None, parameter=e.args,
+                                            exception=ValueError))
         if self.name == 'isinstance':
             return _do_isinstance(args)
         else:
