@@ -55,6 +55,7 @@ _BUILTIN_VALUE_TYPES = {
     int,
     str,
 }
+_BUILTIN_VALUE_TYPES_TUP = tuple(_BUILTIN_VALUE_TYPES)
 _CODE_ATTRS = [
     'co_argcount', 'co_cellvars', 'co_code', 'co_consts', 'co_filename',
     'co_firstlineno', 'co_flags', 'co_freevars', 'co_kwonlyargcount',
@@ -135,7 +136,8 @@ def _run_binop(opname: Text, lhs: Any, rhs: Any) -> Result[Any]:
             and rhs == 0):
         raise NotImplementedError(opname, lhs, rhs)
     if {type(lhs), type(rhs)} <= _BUILTIN_VALUE_TYPES or (
-            type(lhs) is list and opname == 'BINARY_SUBSCR'):
+            type(lhs) is list and opname == 'BINARY_SUBSCR') or (
+            type(lhs) == type(rhs) == list and opname == 'BINARY_ADD'):
         op = _BINARY_OPS[opname]
         return Result(op(lhs, rhs))
     raise NotImplementedError(opname, lhs, rhs)
@@ -157,9 +159,11 @@ def module_getattr(module: Union[types.ModuleType, GuestModule],
 
 
 def _compare(opname, lhs, rhs) -> Result[bool]:
-    if isinstance(lhs, int) and isinstance(rhs, int):
+    if (isinstance(lhs, _BUILTIN_VALUE_TYPES_TUP)
+            and isinstance(rhs, _BUILTIN_VALUE_TYPES_TUP)):
         return Result(_COMPARE_OPS[opname](lhs, rhs))
-    if isinstance(lhs, tuple) and isinstance(rhs, tuple) and opname == '==':
+    if (isinstance(lhs, (list, tuple)) and isinstance(rhs, (list, tuple))
+            and opname == '=='):
         if len(lhs) != len(rhs):
             return Result(False)
         for e, f in zip(lhs, rhs):
