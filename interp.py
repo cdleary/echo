@@ -166,6 +166,10 @@ def _compare(opname, lhs, rhs) -> Result[bool]:
     if (isinstance(lhs, _BUILTIN_VALUE_TYPES_TUP)
             and isinstance(rhs, _BUILTIN_VALUE_TYPES_TUP)):
         return Result(_COMPARE_OPS[opname](lhs, rhs))
+    if {type(lhs), type(rhs)} == {str, tuple} and opname == '==':
+        return Result(False)
+    if {type(lhs), type(rhs)} == {int, tuple} and opname == '==':
+        return Result(False)
     if (isinstance(lhs, (list, tuple)) and isinstance(rhs, (list, tuple))
             and opname == '=='):
         if len(lhs) != len(rhs):

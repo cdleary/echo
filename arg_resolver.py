@@ -4,6 +4,8 @@ from typing import Text, Dict, Optional, Tuple, Any, List
 
 from interp_result import Result
 
+from termcolor import cprint
+
 
 class CodeAttributes:
     STARARGS_FLAG = 0x04
@@ -29,13 +31,14 @@ class CodeAttributes:
         argcount=1 and kwargcount=2, but there are three local slots
         attributable to args. This attribute is `3` for that function.
         """
-        return self.argcount + self.kwonlyargcount
+        return self.argcount + self.kwonlyargcount + self.starargs
 
     def __repr__(self) -> Text:
         return ('CodeAttributes(argcount={0.argcount}, '
                 'kwonlyargcount={0.kwonlyargcount}, '
                 'nlocals={0.nlocals}, varnames={0.varnames}, '
-                'starargs={0.starargs})').format(self)
+                'starargs={0.starargs}, '
+                'total_argcount={0.total_argcount})').format(self)
 
     @classmethod
     def from_code(cls, code: types.CodeType) -> 'CodeAttributes':
@@ -66,6 +69,15 @@ def resolve_args(attrs: CodeAttributes,
     # appropriately.
     arg_slots = [Sentinel] * attrs.total_argcount
 
+    if attrs.starargs:
+        # Note: somewhat surprisingly, the arg slot for the varargs doesn't
+        # live at its corresponding position in the argument list; instead,
+        # Python appears to put it as the last argument, always.
+        stararg_index = attrs.total_argcount-1
+        arg_slots[stararg_index] = ()
+    else:
+        stararg_index = None
+
     # Note the name of each slot.
     arg_names = attrs.varnames[:len(arg_slots)]
 
@@ -87,16 +99,33 @@ def resolve_args(attrs: CodeAttributes,
     if defaults:
         default_required[-len(defaults):] = list(range(len(defaults)))
 
-    def populate_positional(index, value):
+    def in_stararg_position(argno):
+        if attrs.starargs:
+            needed_at_end = attrs.kwonlyargcount
+            needed_at_start = attrs.argcount
+            if argno < needed_at_start:
+                return (False, argno)
+            if argno >= len(args)-needed_at_end:
+                delta_from_end = len(args)-argno
+                return (False, len(arg_slots)-delta_from_end-1)
+            return (True, stararg_index)
+        return (False, argno)
+
+    def populate_positional(argno: int, value: Any):
         assert len(arg_slots) == attrs.total_argcount
         assert len(default_required) == attrs.total_argcount, default_required
-        assert index < len(arg_slots), (index, attrs)
-        arg_slots[index] = value
-        default_required[index] = None
+        stararg_info = in_stararg_position(argno)
+        argno = stararg_info[1]  # Stararg can update the slot index.
+        if stararg_info[0]:
+            arg_slots[stararg_index] = arg_slots[stararg_index] + (value,)
+        else:
+            assert argno < len(arg_slots), (argno, attrs)
+            arg_slots[argno] = value
+            default_required[argno] = None
 
     # Populate the positional arguments.
-    for i, arg in enumerate(args):
-        populate_positional(i, arg)
+    for argno, arg in enumerate(args):
+        populate_positional(argno, arg)
 
     # Populate the keyword arguments.
     all_kwargs = dict(kwarg_defaults)
@@ -119,7 +148,7 @@ def resolve_args(attrs: CodeAttributes,
         arg_slots[argno] = defaults[note]
 
     for arg in arg_slots:
-        assert arg != Sentinel
+        assert arg != Sentinel, arg_slots
 
     # For convenience we inform the caller how many slots should be appended to
     # reach the number of local slots.
