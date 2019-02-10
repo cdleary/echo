@@ -17,16 +17,19 @@ import sys
 import types
 
 import interp
+import import_routines
 
 
 def main():
     parser = optparse.OptionParser(__doc__)
     parser.add_option('--log_level', choices=['DEBUG', 'INFO', 'WARNING'],
-                      help='Log level to use')
+                      help='Log level to use.')
     parser.add_option('--pdb', action='store_true', default=False,
-                      help='Drop into PDB on error')
+                      help='Drop into PDB on error.')
     parser.add_option('--ctrace', action='store_true', default=False,
-                      help='Color call trace')
+                      help='Color trace for guest interpreter.')
+    parser.add_option('--ctrace-mod', action='store_true', default=False,
+                      help='Color trace for module imports.')
     opts, args = parser.parse_args()
 
     # Path.
@@ -40,6 +43,7 @@ def main():
 
     interp.COLOR_TRACE = opts.ctrace
     interp.COLOR_TRACE_FUNC = opts.ctrace
+    import_routines.COLOR_TRACE = opts.ctrace or opts.ctrace_mod
 
     globals_ = dict(globals())
     globals_['__file__'] = fullpath

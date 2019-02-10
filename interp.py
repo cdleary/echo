@@ -434,15 +434,17 @@ def interp(code: types.CodeType,
     def run_IMPORT_NAME(arg, argval):
         fromlist = pop()
         level = pop()
-        if COLOR_TRACE_FUNC:
-            cprint('IMPORT_NAME argval: %r; fromlist: %r; level: %r' %
-                   (argval, fromlist, level), color='green')
+        if import_routines.COLOR_TRACE:
+            cprint('IMPORT_NAME filename: %r startline: %s argval: %r; '
+                   'fromlist: %r; level: %r' %
+                   (code.co_filename, code.co_firstlineno, argval, fromlist,
+                    level), color='green')
         more_paths = import_routines.resolve_level_to_dirpaths(
             code.co_filename, level)
         result = import_routines.do_import(
             argval, globals_=globals_, interp=interp_callback, state=state,
             more_paths=more_paths)
-        if COLOR_TRACE:
+        if import_routines.COLOR_TRACE:
             cprint('IMPORT_NAME result: %r' % result, color='blue')
         if result.is_exception():
             return result
@@ -470,7 +472,7 @@ def interp(code: types.CodeType,
                         return result
                     module = result.get_value()
 
-        if COLOR_TRACE:
+        if import_routines.COLOR_TRACE:
             cprint('IMPORT_NAME result: %r' % module, color='green')
         return Result(module)
 

@@ -9,7 +9,14 @@ from interpreter_state import InterpreterState
 def test_level_resolution():
     paths = import_routines.resolve_level_to_dirpaths(
         '/package/subpackage1/__init__.py', level=2)
-    assert paths == ['/package', '/']
+    assert paths == ['/package', '/package/subpackage1']
+
+    paths = import_routines.resolve_level_to_dirpaths(
+        '/prefix/.virtualenvs/echo/lib/python3.6/site-packages/'
+        'numpy/__init__.py',
+        level=1)
+    assert paths == [
+        '/prefix/.virtualenvs/echo/lib/python3.6/site-packages/numpy']
 
 
 def test_pep328_example(fs):

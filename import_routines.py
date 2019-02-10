@@ -9,6 +9,11 @@ from interp_result import Result, ExceptionData
 from interpreter_state import InterpreterState
 from guest_objects import GuestModule
 
+from termcolor import cprint
+
+
+COLOR_TRACE = False
+
 
 ModuleT = Union[types.ModuleType, GuestModule]
 
@@ -96,8 +101,13 @@ def _do_import(name: Text,
     else:
         paths = [module_path] if module_path else state.paths
         assert isinstance(paths, list), paths
-        path = find_module_path(name, more_paths + paths)
+        all_paths = more_paths + paths
+        path = find_module_path(name, all_paths)
         if path is None:
+            if COLOR_TRACE:
+                cprint('Attempted to import %r from paths: %r '
+                       'more paths: %r' % (name, all_paths, more_paths),
+                       color='red')
             return import_error(name)
         else:
             result = import_path(path, fully_qualified, interp, state=state)
@@ -178,10 +188,21 @@ def resolve_level_to_dirpaths(importing_filename: Text,
     # calling __import__() (see PEP 328 for the details)."
     #
     # -- https://docs.python.org/3.6/library/functions.html#__import__
-    paths = []
     dirname = os.path.dirname(importing_filename)
-    for _ in range(level):
+    if level == 0:
+        return [dirname]
+
+    paths = [dirname]
+    for _ in range(level-1):
         (dirname, _) = os.path.split(dirname)
         paths.append(dirname)
+
+    # Reverse them so that we search the deepest level first.
+    paths = paths[::-1]
+
+    if COLOR_TRACE:
+        cprint('Resolved level {!r} from importing filename {!r}'
+               ' to paths: {!r}'.format(level, importing_filename, paths),
+               color='blue')
 
     return paths
