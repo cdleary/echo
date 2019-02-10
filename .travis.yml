@@ -14,3 +14,10 @@ script:
 - pytype --config=pytype.cfg --python-version=$TRAVIS_PYTHON_VERSION
 - python -m pytest
 - pycodestyle .
+
+# As demonstrated in https://github.com/travis-ci/travis-ci/issues/9815
+matrix:
+  include:
+    - python: 3.7
+      dist: xenial
+      sudo: true
