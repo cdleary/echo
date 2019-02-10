@@ -117,9 +117,19 @@ class GuestClass(GuestPyObject):
 
 def _do_isinstance(args: Tuple[Any, ...]) -> Result[bool]:
     assert len(args) == 2, args
-    if args[1] is int and isinstance(args[0], int):
-        return Result(True)
+    if args[1] is int:
+        return Result(isinstance(args[0], int))
+    if args[1] is str:
+        return Result(isinstance(args[0], str))
+    if args[1] is type:
+        return Result(isinstance(args[0], (type, GuestClass)))
     raise NotImplementedError(args)
+
+
+def _do_issubclass(args: Tuple[Any, ...]) -> Result[bool]:
+    # TODO(cdleary, 2019-02-10): Detect "guest" subclass relations.
+    assert len(args) == 2, args
+    return Result(issubclass(args[0], args[1]))
 
 
 class GuestBuiltin(GuestPyObject):
@@ -146,6 +156,8 @@ class GuestBuiltin(GuestPyObject):
                                             exception=ValueError))
         if self.name == 'isinstance':
             return _do_isinstance(args)
+        elif self.name == 'issubclass':
+            return _do_issubclass(args)
         else:
             raise NotImplementedError(self.name)
 

@@ -83,8 +83,11 @@ def is_false(v: Any) -> bool:
         return v == 0
     if isinstance(v, bool):
         return v is False
-    else:
-        raise NotImplementedError(v)
+    if isinstance(v, str):
+        return not v
+    if v is None:
+        return False
+    raise NotImplementedError(v)
 
 
 def is_true(v: Any) -> bool:
@@ -98,8 +101,8 @@ def code_to_str(c: types.CodeType) -> Text:
 
 
 def builtins_get(builtins: Union[types.ModuleType, Dict], name: Text) -> Any:
-    if name == 'isinstance':
-        return GuestBuiltin('isinstance', None)
+    if name in ('isinstance', 'issubclass'):
+        return GuestBuiltin(name, None)
     if isinstance(builtins, types.ModuleType):
         return getattr(builtins, name)
     return builtins[name]
@@ -516,6 +519,18 @@ def interp(code: types.CodeType,
             return Result(getattr(obj, argval))
 
     @dispatched
+    def run_LOAD_METHOD(arg, argval):
+        # Note: New in 3.7.
+        #
+        # https://docs.python.org/3.7/library/dis.html#opcode-LOAD_METHOD
+        obj = peek()
+        attr_result = run_LOAD_ATTR(arg, argval)
+        if attr_result.is_exception():
+            return attr_result
+        push(attr_result.get_value())
+        push(obj)
+
+    @dispatched
     def run_STORE_ATTR(arg, argval):
         obj = pop()
         value = pop()
@@ -532,6 +547,17 @@ def interp(code: types.CodeType,
             return Result(_exception_match(lhs, rhs))
         else:
             return _compare(argval, lhs, rhs)
+
+    @dispatched
+    def run_CALL_METHOD(arg, argval):
+        # Note: new in 3.7.
+        #
+        # https://docs.python.org/3.7/library/dis.html#opcode-CALL_METHOD
+        positional_argc = arg
+        args = pop_n(positional_argc, tos_is_0=False)
+        self_value = pop()
+        method = pop()
+        return do_call(method, args, globals_=globals_, state=state)
 
     @dispatched
     def run_CALL_FUNCTION_KW(arg, argval):
