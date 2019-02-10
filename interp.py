@@ -245,39 +245,6 @@ def interp(code: types.CodeType,
     logging.debug('</bytecode>')
     logging.debug(code_to_str(code))
 
-    attrs = CodeAttributes.from_code(code)
-    arg_result = resolve_args(
-        attrs, args, kwargs, defaults, kwarg_defaults)
-    if arg_result.is_exception():
-        raise NotImplementedError('Exception while resolving args.',
-                                  arg_result.get_exception())
-
-    arg_locals, additional_local_count = arg_result.get_value()
-
-    class UnboundLocalSentinel:
-        pass
-
-    locals_ = arg_locals + [UnboundLocalSentinel] * additional_local_count
-    cellvars = tuple(GuestCell(name) for name in code.co_cellvars) + closure
-
-    # Cellvars that match argument names get populated with the argument value,
-    # and it seems as though locals_ for that value is never referenced in the
-    # bytecode.
-    for i, cellvar_name in enumerate(code.co_cellvars):
-        try:
-            index = code.co_cellvars.index(cellvar_name)
-        except ValueError:
-            continue
-        else:
-            cellvars[i].set(locals_[index])
-
-    block_stack = []
-    stack = []
-    consts = code.co_consts  # LOAD_CONST indexes into this.
-    names = code.co_names  # LOAD_GLOBAL uses these names.
-
-    interp_callback = functools.partial(interp, state=state)
-
     def gprint(*args): cprint(*args, color='green')
 
     if COLOR_TRACE_FUNC:
@@ -294,6 +261,45 @@ def interp(code: types.CodeType,
         gprint('  co_names:    %r' % (code.co_names,))
         gprint('  closure:     %r' % (closure,))
         cprint_lines_after(code.co_filename, code.co_firstlineno)
+
+    # Set up arguments as a precursor to establishing the locals.
+    attrs = CodeAttributes.from_code(code)
+    arg_result = resolve_args(
+        attrs, args, kwargs, defaults, kwarg_defaults)
+    if arg_result.is_exception():
+        raise NotImplementedError('Exception while resolving args.',
+                                  arg_result.get_exception())
+
+    arg_locals, additional_local_count = arg_result.get_value()
+
+    # Use a sentinel value (this class object) to indicate when
+    # UnboundLocalErrors have occurred.
+    class UnboundLocalSentinel:
+        pass
+
+    locals_ = arg_locals + [UnboundLocalSentinel] * additional_local_count
+    cellvars = tuple(GuestCell(name) for name in code.co_cellvars) + closure
+
+    # Cellvars that match argument names get populated with the argument value,
+    # and it seems as though locals_ for that value is never referenced in the
+    # bytecode.
+    for i, cellvar_name in enumerate(code.co_cellvars):
+        if COLOR_TRACE:
+            gprint('populating cellvar name: %s' % cellvar_name)
+        try:
+            index = code.co_cellvars.index(cellvar_name)
+        except ValueError:
+            continue
+        else:
+            local_value = locals_[index]
+            cellvars[i].set(local_value)
+
+    block_stack = []
+    stack = []
+    consts = code.co_consts  # LOAD_CONST indexes into this.
+    names = code.co_names  # LOAD_GLOBAL uses these names.
+
+    interp_callback = functools.partial(interp, state=state)
 
     # TODO(cdleary, 2019-01-21): Investigate why this "builtins" ref is
     # sometimes a dict and other times a module?

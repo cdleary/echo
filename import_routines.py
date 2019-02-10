@@ -96,7 +96,7 @@ def _do_import(name: Text,
         already_imported = state.sys_modules[fully_qualified]
         return Result(already_imported)
 
-    if name in ('functools', 'os', 'sys', 'itertools', 'builtins'):
+    if name in ('functools', 'os', 'sys', 'itertools', 'builtins', '_weakref'):
         module = __import__(name, globals_)  # type: types.ModuleType
     else:
         paths = [module_path] if module_path else state.paths
