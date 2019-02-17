@@ -30,6 +30,8 @@ def main():
                       help='Color trace for guest interpreter.')
     parser.add_option('--ctrace-mod', action='store_true', default=False,
                       help='Color trace for module imports.')
+    parser.add_option('--ctrace-stack', action='store_true', default=False,
+                      help='Color trace stack push/pops.')
     opts, args = parser.parse_args()
 
     # Path.
@@ -43,6 +45,7 @@ def main():
 
     interp.COLOR_TRACE = opts.ctrace
     interp.COLOR_TRACE_FUNC = opts.ctrace
+    interp.COLOR_TRACE_STACK = opts.ctrace_stack
     import_routines.COLOR_TRACE = opts.ctrace or opts.ctrace_mod
 
     globals_ = dict(globals())

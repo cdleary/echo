@@ -25,7 +25,7 @@ import sys
 from enum import Enum
 from io import StringIO
 from typing import (Dict, Any, Text, Tuple, List, Optional, Union, Sequence,
-                    Iterable)
+                    Iterable, cast)
 
 from termcolor import cprint
 
@@ -36,7 +36,7 @@ from arg_resolver import resolve_args, CodeAttributes
 from interpreter_state import InterpreterState
 from guest_objects import (GuestModule, GuestFunction, GuestInstance,
                            GuestBuiltin, GuestPyObject, GuestPartial,
-                           GuestClass)
+                           GuestClass, GuestCell, GuestMethod)
 
 
 _GLOBAL_BYTECODE_COUNT = 0
@@ -101,28 +101,11 @@ def code_to_str(c: types.CodeType) -> Text:
 
 
 def builtins_get(builtins: Union[types.ModuleType, Dict], name: Text) -> Any:
-    if name in ('isinstance', 'issubclass'):
+    if name in ('isinstance', 'issubclass', 'super'):
         return GuestBuiltin(name, None)
     if isinstance(builtins, types.ModuleType):
         return getattr(builtins, name)
     return builtins[name]
-
-
-class GuestCell:
-    def __init__(self, name: Text):
-        self._name = name
-        self._storage = GuestCell
-
-    def initialized(self) -> bool:
-        return self._storage is not GuestCell
-
-    def get(self) -> Any:
-        assert self._storage is not GuestCell, (
-            'GuestCell %r is uninitialized' % self._name)
-        return self._storage
-
-    def set(self, value: Any):
-        self._storage = value
 
 
 def cprint_lines_after(filename: Text, lineno: int):
@@ -203,10 +186,21 @@ def _compare(opname, lhs, rhs) -> Result[bool]:
     raise NotImplementedError(opname, lhs, rhs)
 
 
+def _method_requires_self(value) -> bool:
+    if isinstance(value, GuestBuiltin) and value.bound_self is None:
+        return True
+    if isinstance(value, types.MethodType):
+        return False
+    if isinstance(value, GuestFunction):
+        return True
+    return False
+
+
 def interp(code: types.CodeType,
            *,
            globals_: Dict[Text, Any],
            state: InterpreterState,
+           locals_dict: Optional[Dict[Text, Any]] = None,
            args: Optional[Tuple[Any, ...]] = None,
            kwargs: Optional[Dict[Text, Any]] = None,
            defaults: Optional[Tuple[Any, ...]] = None,
@@ -254,6 +248,7 @@ def interp(code: types.CodeType,
         gprint('interpreting:')
         gprint('  loc:         %s:%d' % (code.co_filename,
                                          code.co_firstlineno))
+        gprint('  in_function: %s' % in_function)
     if COLOR_TRACE:
         gprint('  co_name:     %r' % code.co_name)
         gprint('  co_argcount: %d' % code.co_argcount)
@@ -290,7 +285,7 @@ def interp(code: types.CodeType,
         if COLOR_TRACE:
             gprint('populating cellvar name: %s' % cellvar_name)
         try:
-            index = code.co_cellvars.index(cellvar_name)
+            index = code.co_varnames.index(cellvar_name)
         except ValueError:
             continue
         else:
@@ -306,7 +301,7 @@ def interp(code: types.CodeType,
 
     # TODO(cdleary, 2019-01-21): Investigate why this "builtins" ref is
     # sometimes a dict and other times a module?
-    builtins = globals_['__builtins__']
+    builtins = sys.modules['builtins']  # globals_['__builtins__']
 
     def push(x):
         if COLOR_TRACE_STACK:
@@ -338,7 +333,8 @@ def interp(code: types.CodeType,
         try:
             return globals_[name]
         except KeyError:
-            return builtins_get(builtins, name)
+            pass
+        return builtins_get(builtins, name)
 
     def handle_exception():
         """Returns whether the exception was handled in this function."""
@@ -528,7 +524,10 @@ def interp(code: types.CodeType,
         if attr_result.is_exception():
             return attr_result
         push(attr_result.get_value())
-        push(obj)
+        if _method_requires_self(attr_result.get_value()):
+            push(obj)
+        else:
+            push(UnboundLocalSentinel)
 
     @dispatched
     def run_STORE_ATTR(arg, argval):
@@ -557,6 +556,8 @@ def interp(code: types.CodeType,
         args = pop_n(positional_argc, tos_is_0=False)
         self_value = pop()
         method = pop()
+        if self_value is not UnboundLocalSentinel:
+            args = (self_value,) + args
         return do_call(method, args, globals_=globals_, state=state)
 
     @dispatched
@@ -586,7 +587,9 @@ def interp(code: types.CodeType,
 
     @dispatched
     def run_CALL_FUNCTION(arg, argval):
-        # As of Python 3.6 this only supports calls for functions with
+        # https://docs.python.org/3.7/library/dis.html#opcode-CALL_FUNCTION
+        #
+        # Note: As of Python 3.6 this only supports calls for functions with
         # positional arguments.
         if sys.version_info >= (3, 6):
             argc = arg
@@ -635,9 +638,16 @@ def interp(code: types.CodeType,
     @dispatched
     def run_STORE_NAME(arg, argval):
         if in_function:
-            locals_[arg] = pop()
+            if locals_dict is not None:
+                assert isinstance(locals_dict, dict)
+                # Work around pytype error.
+                ld = cast(dict, locals_dict)
+                ld[argval] = pop()
+            else:
+                locals_[arg] = pop()
         else:
-            globals_[argval] = pop()
+            v = pop()
+            globals_[argval] = v
 
     @dispatched
     def run_DELETE_NAME(arg, argval):
@@ -693,9 +703,13 @@ def interp(code: types.CodeType,
         global _GLOBAL_BYTECODE_COUNT
         _GLOBAL_BYTECODE_COUNT += 1
         if COLOR_TRACE:
-            cprint('%4d: %s @ %s %8d' % (pc, instruction, code.co_filename,
-                   _GLOBAL_BYTECODE_COUNT),
+            cprint('--- to exec:  %4d: %s @ %s %8d' % (
+                    pc, instruction, code.co_filename, _GLOBAL_BYTECODE_COUNT),
                    color='yellow')
+            cprint('stack ({}):'.format(len(stack)), color='blue')
+            for i, value in enumerate(stack):
+                cprint(' TOS{}: {} :: {!r}'.format(i, type(value), value),
+                       color='blue')
         opname = instruction.opname
         f = DISPATCH_TABLE.get(opname)
         if f:
@@ -734,7 +748,7 @@ def interp(code: types.CodeType,
         elif opname == 'LOAD_FAST':
             push(locals_[instruction.arg])
         elif opname == 'LOAD_BUILD_CLASS':
-            push(builtins_get(builtins, '__build_class__'))
+            push(GuestBuiltin('__build_class__', None))
         elif opname == 'BREAK_LOOP':
             loop_block = block_stack[-1]
             assert loop_block[0] == 'loop'
@@ -794,10 +808,7 @@ def interp(code: types.CodeType,
             else:
                 push(result.get_value())
         elif opname == 'LOAD_NAME':
-            if in_function:
-                raise NotImplementedError
-            else:
-                push(get_global_or_builtin(instruction.argval))
+            push(get_global_or_builtin(instruction.argval))
         elif opname == 'LOAD_DEREF':
             push(cellvars[instruction.arg].get())
         elif opname == 'STORE_DEREF':
@@ -832,27 +843,29 @@ def do_call(f, args: Tuple[Any, ...],
             *,
             state: InterpreterState,
             globals_: Dict[Text, Any],
-            kwargs: Optional[Dict[Text, Any]] = None) -> Result[Any]:
+            locals_dict: Optional[Dict[Text, Any]] = None,
+            kwargs: Optional[Dict[Text, Any]] = None,
+            in_function: bool = True) -> Result[Any]:
+    assert in_function
     if COLOR_TRACE:
         cprint('Call; f: %r args: %r kwargs: %r' % (f, args, kwargs),
                color='red')
-    interp_callback = functools.partial(interp, state=state)
-    do_call_callback = functools.partial(do_call, state=state)
+
+    def interp_callback(*args, **kwargs):
+        return interp(*args, **kwargs, state=state)
+
+    def do_call_callback(*args, **kwargs):
+        return do_call(*args, **kwargs, state=state)
+
     kwargs = kwargs or {}
     if f in (dict, range, print, sorted, str, list, hasattr, ValueError,
              AssertionError):
         return Result(f(*args, **kwargs))
     if f is globals:
         return Result(globals_)
-    elif isinstance(f, GuestFunction):
-        return interp(f.code, state=state, globals_=f.globals_, args=args,
-                      kwargs=kwargs, defaults=f.defaults,
-                      kwarg_defaults=f.kwarg_defaults, closure=f.closure)
-    elif isinstance(f, types.FunctionType):
-        return interp(f.__code__, state=state, globals_=f.__globals__,
-                      defaults=f.__defaults__,
-                      kwarg_defaults=f.__kwarg_defaults__, args=args,
-                      kwargs=kwargs)
+    elif isinstance(f, (GuestFunction, GuestMethod)):
+        return f.invoke(args=args, kwargs=kwargs, locals_dict=locals_dict,
+                        interp=interp_callback)
     elif isinstance(f, types.MethodType):
         # Builtin object method.
         return Result(f(*args, **kwargs))
@@ -861,19 +874,10 @@ def do_call(f, args: Tuple[Any, ...],
     # don't need to consider it specially.
     elif f is functools.partial:
         return _do_call_functools_partial(args, kwargs)
-    elif f is getattr(builtins, '__build_class__'):
-        body_f, name, *rest = args
-        dict_ = {'__builtins__': builtins}
-        class_body_result = interp(body_f.code, globals_=dict_, state=state,
-                                   in_function=False)
-        if class_body_result.is_exception():
-            return class_body_result
-        guest_class = GuestClass(name, dict_, *rest, **kwargs)
-        return Result(guest_class)
     elif isinstance(f, GuestPartial):
         return f.invoke(args, interp=interp_callback)
     elif isinstance(f, GuestBuiltin):
-        return f.invoke(args, interp=interp_callback)
+        return f.invoke(args, interp=interp_callback, call=do_call_callback)
     elif isinstance(f, GuestClass):
         return f.instantiate(args, do_call=do_call_callback, globals_=globals_)
     else:

@@ -1,11 +1,12 @@
 import ctypes
 import dis
 import inspect
+import pprint
 import sys
 import types
 from typing import Any
 
-import termcolor
+from termcolor import cprint
 
 
 class CtypeFrame:
@@ -22,14 +23,16 @@ class CtypeFrame:
             'f_code': 4,
             'f_builtins': 5,
             'f_globals': 6,
-            'f_locals': 7,
+            'f_locals': 7,  # "Local symbol table".
             'f_valuestack': 8,
             'f_stacktop': 9,
+            'f_localsplus': 45,
         },
     }
     ULONG_SIZE_IN_BYTES = 8
 
     def __init__(self, frame: types.FrameType):
+        self.frame_id = id(frame)
         self.frame_ptr = ctypes.cast(id(frame), ctypes.POINTER(ctypes.c_ulong))
         self.offsets = self.VERSION_TO_CTYPE_ULONG_OFFSETS[
             sys.version_info[:2]]
@@ -49,38 +52,96 @@ class CtypeFrame:
             ctypes.cast(id(t), ctypes.POINTER(ctypes.c_ulong))[3] = id(None)
 
     def get_value_stack(self):
+        """Returns the contents of the f_valuestack slot in the PyFrameObject.
+
+        In C the type of the returned value is ``PyObject**``.
+        """
         return self.frame_ptr[self.offsets['f_valuestack']]
 
     def get_value_stack_as_ptr(self):
         return ctypes.cast(self.get_value_stack(),
                            ctypes.POINTER(ctypes.c_ulong))
 
+    def get_localsplus_start(self):
+        """Returns a pointer to the "localsplus" region of the PyFrameObject.
+
+        This is the start of a variable sized region.
+
+        In C the type of the returned value is ``PyObject**``.
+        """
+        return (self.frame_id +
+                self.offsets['f_localsplus'] * self.ULONG_SIZE_IN_BYTES)
+
+    def get_localsplus_start_as_ptr(self):
+        return ctypes.cast(self.get_localsplus_start(),
+                           ctypes.POINTER(ctypes.c_ulong))
+
     def get_stack_top(self):
+        """Returns a pointer to the next free slot in the value stack.
+
+        In C the type of the returned value is ``PyObject**``.
+        """
         return self.frame_ptr[self.offsets['f_stacktop']]
 
     def print_stack(self):
-        # print(' value stack (pyobj**):', self.get_value_stack())
-        # print(' stack top (pyobj**):', self.get_stack_top())
+        # Left in, just in case there's some need to look at the pointer
+        # values.
+        #
+        # print(' frame start   (frameobj*):', hex(self.frame_id))
+        # print(' localplus start (pyobj**):',
+        #       hex(self.get_localsplus_start()))
+        # print(' value stack     (pyobj**):', hex(self.get_value_stack()))
+        # print(' stack top       (pyobj**):', hex(self.get_stack_top()))
+
         count = self.get_stack_top() - self.get_value_stack()
         assert count % self.ULONG_SIZE_IN_BYTES == 0
         stack_items = count // self.ULONG_SIZE_IN_BYTES
-        print(' stack (%d):' % stack_items)
+
+        localsplus_items = (
+            (self.get_stack_top() - self.get_localsplus_start()) //
+            self.ULONG_SIZE_IN_BYTES)
+        print(' localsplus_items sans stack:', localsplus_items-stack_items)
+        for i in range(localsplus_items-stack_items):
+            localsplus_ptr = self.get_localsplus_start_as_ptr()
+            value = localsplus_ptr[i]
+            if value == 0:
+                cprint('  LP{}: <null>'.format(i), file=sys.stderr,
+                       color='red')
+            else:
+                obj = self._id2obj(value)
+                cprint('  LP{}: {!r} :: {!r}'.format(i, type(obj), obj),
+                       file=sys.stderr, color='red')
+
+        print(' stack (%d):' % stack_items, file=sys.stderr)
         for i in range(stack_items):
             stack_value = self.get_value_stack_as_ptr()[i]
-            # print(' stack value (pyobj*):', stack_value)
             if stack_value == 0:
-                print('  TOS%d: <null>' % i)
+                print('  TOS%d: <null>' % i, file=sys.stderr)
             else:
-                print('  TOS%d:' % i, self._id2obj(stack_value))
+                obj = self._id2obj(stack_value)
+                print('  TOS%d: %r ::' % (i, type(obj)), repr(obj),
+                      file=sys.stderr)
+                if isinstance(obj, types.CodeType):
+                    print('    co_varnames: {!r}'.format(obj.co_varnames))
+                    print('    co_cellvars: {!r}'.format(obj.co_cellvars))
+                if isinstance(obj, types.FunctionType):
+                    print('    closure:     {!r}'.format(obj.__closure__),
+                          file=sys.stderr)
+                    print('    co_cellvars: {!r}'.format(
+                            obj.__code__.co_cellvars), file=sys.stderr)
+                    print('    co_freevars: {!r}'.format(
+                            obj.__code__.co_freevars), file=sys.stderr)
 
 
 def note_trace(frame, event, arg):
+    print('---', file=sys.stderr)
+
     def print_frame_info():
         print(' frame.f_lasti:', frame.f_lasti, file=sys.stderr)
         print(' frame.f_lineno:', frame.f_lineno, file=sys.stderr)
         # print(' frame.f_locals:', frame.f_locals, file=sys.stderr)
+
     if event == 'call':
-        print('call!', file=sys.stderr)
         # Turn on opcode tracing for the frame we're entering.
         frame.f_trace_opcodes = True
     elif event == 'opcode':
@@ -98,10 +159,17 @@ def note_trace(frame, event, arg):
         instructions = dis.get_instructions(frame.f_code)
         instruction = next(inst for inst in instructions
                            if inst.offset == frame.f_lasti)
-        termcolor.cprint(' instruction: {}'.format(instruction),
-                         color='yellow')
+        cprint(' code: {}; lineno: {}'.format(frame.f_code, frame.f_lineno),
+               color='blue', file=sys.stderr)
+        cprint(' instruction: {}'.format(instruction),
+               color='yellow', file=sys.stderr)
+        locals_ = dict(frame.f_locals)
+        for name in ['__builtins__']:
+            if name in locals_:
+                del locals_[name]
+        print(' frame.f_locals:', locals_, file=sys.stderr)
         print(' stack effect:', dis.stack_effect(instruction.opcode,
-              instruction.arg))
+              instruction.arg), file=sys.stderr)
         ctf.print_stack()
     elif event == 'line':
         print('line!', file=sys.stderr)
@@ -111,7 +179,7 @@ def note_trace(frame, event, arg):
     elif event == 'exception':
         pass
     else:
-        print('unhandled event:', event)
+        print('unhandled event:', event, file=sys.stderr)
         sys.exit(-1)
 
     return note_trace

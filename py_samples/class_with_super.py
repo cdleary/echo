@@ -9,6 +9,11 @@ class Derived(Base):
         self.derived_stuff = derived_stuff
 
 
-d = Derived(42, 64)
-assert d.derived_stuff == 42
-assert d.base_stuff == 64
+def main():
+    d = Derived(42, 64)
+    assert d.derived_stuff == 42
+    assert d.base_stuff == 64
+
+
+if __name__ == '__main__':
+    main()
