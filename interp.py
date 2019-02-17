@@ -355,6 +355,7 @@ def interp(code: types.CodeType,
             pc = block_stack[-1][1]
             if COLOR_TRACE:
                 cprint(' ! moved PC to %d' % pc, color='magenta')
+            assert isinstance(exception_data, ExceptionData)
             push(exception_data.traceback)
             push(exception_data.parameter)
             push(exception_data.exception)
