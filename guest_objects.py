@@ -189,7 +189,7 @@ class GuestClass(GuestPyObject):
         return self.dict_[name]
 
     def setattr(self, name: Text, value: Any) -> Any:
-        raise NotImplementedError(name, value)
+        self.dict_[name] = value
 
 
 def _do_isinstance(args: Tuple[Any, ...]) -> Result[bool]:
