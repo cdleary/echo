@@ -278,7 +278,8 @@ def _do_super(args: Tuple[Any, ...]) -> Result[Any]:
 
 _ITER_BUILTIN_TYPES = (
     tuple, str, bytes, bytearray, type({}.keys()), type({}.values()),
-    type({}.items()),
+    type({}.items()), list, type(reversed([])), type(range(0, 0)),
+    set, type(zip((), ())),
 )
 
 
@@ -321,6 +322,10 @@ class GuestBuiltin(GuestPyObject):
                                             exception=ValueError))
         if self.name == 'zip':
             return Result(zip(*args))
+        if self.name == 'reversed':
+            return Result(reversed(*args))
+        if self.name == 'set':
+            return Result(set(*args))
         if self.name == 'isinstance':
             return _do_isinstance(args)
         if self.name == 'issubclass':
@@ -336,10 +341,10 @@ class GuestBuiltin(GuestPyObject):
         raise NotImplementedError(self.name)
 
     def getattr(self, name: Text) -> Any:
-        raise NotImplementedError
+        raise NotImplementedError(self, name)
 
     def setattr(self, name: Text, value: Any) -> Any:
-        raise NotImplementedError
+        raise NotImplementedError(self, name, value)
 
 
 class GuestPartial(object):

@@ -45,6 +45,7 @@ COLOR_TRACE_STACK = False
 COLOR_TRACE_MOD = False
 COLOR_TRACE = False
 _BINARY_OPS = {
+    'BINARY_LSHIFT': operator.lshift,
     'BINARY_ADD': operator.add,
     'BINARY_MODULO': operator.mod,
     'BINARY_MULTIPLY': operator.mul,
@@ -102,7 +103,8 @@ def code_to_str(c: types.CodeType) -> Text:
 
 
 def builtins_get(builtins: Union[types.ModuleType, Dict], name: Text) -> Any:
-    if name in ('isinstance', 'issubclass', 'super', 'iter', 'type', 'zip'):
+    if name in ('isinstance', 'issubclass', 'super', 'iter', 'type', 'zip',
+                'reversed', 'set'):
         return GuestBuiltin(name, None)
     if isinstance(builtins, types.ModuleType):
         return getattr(builtins, name)
@@ -746,6 +748,7 @@ def interp(code: types.CodeType,
         opname = instruction.opname
         f = DISPATCH_TABLE.get(opname)
         if f:
+            stack_depth_before = len(stack)
             result = f(arg=instruction.arg, argval=instruction.argval)
             if result is None:
                 pass
@@ -760,6 +763,16 @@ def interp(code: types.CodeType,
                         return result
                 else:
                     push(result.get_value())
+            stack_depth_after = len(stack)
+            if instruction.opname not in ('SETUP_EXCEPT', 'EXTENDED_ARG'):
+                try:
+                    stack_effect = dis.stack_effect(instruction.opcode,
+                                                    instruction.arg)
+                except ValueError:
+                    print(instruction, file=sys.stderr)
+                    raise
+                assert stack_depth_after-stack_depth_before == stack_effect, (
+                    stack_depth_after, stack_depth_before, stack_effect)
         elif opname == 'END_FINALLY':
             # From the Python docs: "The interpreter recalls whether the
             # exception has to be re-raised, or whether the function returns,
@@ -830,7 +843,8 @@ def interp(code: types.CodeType,
             push(tuple(itertools.chain(*iterables)))
         elif opname == 'BUILD_LIST':
             count = instruction.arg
-            stack, t = stack[:-count], stack[-count:]
+            limit = len(stack)-count
+            stack, t = stack[:limit], stack[limit:]
             push(t)
         elif opname.startswith('BINARY'):
             # Probably need to handle radd and such here.
@@ -890,8 +904,8 @@ def do_call(f, args: Tuple[Any, ...],
         return do_call(*args, **kwargs, state=state)
 
     kwargs = kwargs or {}
-    if f in (dict, range, print, sorted, str, list, hasattr, ValueError,
-             AssertionError, bytearray):
+    if f in (dict, range, print, sorted, str, set, tuple, list, hasattr,
+             ValueError, AssertionError, bytearray):
         return Result(f(*args, **kwargs))
     if f is globals:
         return Result(globals_)
