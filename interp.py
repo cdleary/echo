@@ -764,15 +764,17 @@ def interp(code: types.CodeType,
                 else:
                     push(result.get_value())
             stack_depth_after = len(stack)
-            if instruction.opname not in ('SETUP_EXCEPT', 'EXTENDED_ARG'):
-                try:
-                    stack_effect = dis.stack_effect(instruction.opcode,
-                                                    instruction.arg)
-                except ValueError:
-                    print(instruction, file=sys.stderr)
-                    raise
+            if instruction.opname not in (
+                    # These opcodes claim a value-stack effect, but we use a
+                    # different stack for block info.
+                    'SETUP_EXCEPT', 'POP_EXCEPT',
+                    # This op causes the stack_effect call to error.
+                    'EXTENDED_ARG'):
+                stack_effect = dis.stack_effect(instruction.opcode,
+                                                instruction.arg)
                 assert stack_depth_after-stack_depth_before == stack_effect, (
-                    stack_depth_after, stack_depth_before, stack_effect)
+                    instruction, stack_depth_after, stack_depth_before,
+                    stack_effect)
         elif opname == 'END_FINALLY':
             # From the Python docs: "The interpreter recalls whether the
             # exception has to be re-raised, or whether the function returns,
