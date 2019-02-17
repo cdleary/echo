@@ -672,7 +672,11 @@ def interp(code: types.CodeType,
                     pass
             else:
                 return Result(locals_[arg])
-        return Result(get_global_or_builtin(argval))
+        try:
+            return Result(get_global_or_builtin(argval))
+        except AttributeError:
+            return Result(ExceptionData(
+                None, 'name {!r} is not defined'.format(argval), NameError))
 
     @dispatched
     def run_DELETE_NAME(arg, argval):
