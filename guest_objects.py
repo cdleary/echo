@@ -81,6 +81,10 @@ class GuestMethod(GuestPyObject):
         self.f = f
         self.bound_self = bound_self
 
+    def __repr__(self) -> Text:
+        return 'GuestMethod(f={!r}, bound_self={!r})'.format(
+            self.f, self.bound_self)
+
     @property
     def code(self): return self.f.code
 
@@ -125,7 +129,10 @@ class GuestInstance(GuestPyObject):
         return self.cls
 
     def getattr(self, name: Text) -> Any:
-        return self.dict[name]
+        try:
+            return self.dict[name]
+        except KeyError:
+            return self.cls.getattr(name)
 
     def setattr(self, name: Text, value: Any):
         self.dict[name] = value
@@ -140,7 +147,7 @@ class GuestClass(GuestPyObject):
         self.kwargs = kwargs
 
     def __repr__(self) -> Text:
-        return 'GuestClass(name={!r}, dict={!r}, ...)'.format(
+        return 'GuestClass(name={!r}, ...)'.format(
             self.name, self.dict_)
 
     def _get_transitive_bases(self) -> Set['GuestClass']:
@@ -167,7 +174,6 @@ class GuestClass(GuestPyObject):
 
     def instantiate(self, args: Tuple[Any, ...], do_call,
                     globals_: Dict[Text, Any]) -> Result[GuestInstance]:
-        print('instantiate globals:', globals_.keys(), file=sys.stderr)
         guest_instance = GuestInstance(self)
         if '__init__' in self.dict_:
             init_f = self.dict_['__init__']
@@ -244,15 +250,14 @@ class GuestSuper(GuestPyObject):
         self.obj = obj
 
     def _getattr(self, name: Text) -> Any:
-        try:
-            return self.obj.getattr(name)
-        except KeyError:
-            return self.type_.getattr(name)
+        if name in self.obj.dict:
+            return self.obj.dict[name]
+        return self.type_.getattr(name)
 
     def getattr(self, name: Text) -> Any:
         value = self._getattr(name)
         if isinstance(value, GuestFunction):
-            return GuestMethod(value, bound_self=self.obj)
+            return GuestMethod(value, bound_self=self)
         return value
 
     def setattr(self, name: Text, value: Any) -> Any:

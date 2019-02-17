@@ -48,6 +48,7 @@ _BINARY_OPS = {
     'BINARY_ADD': operator.add,
     'BINARY_MODULO': operator.mod,
     'BINARY_MULTIPLY': operator.mul,
+    'BINARY_SUBTRACT': operator.sub,
     'BINARY_SUBSCR': operator.getitem,
     'BINARY_TRUE_DIVIDE': operator.truediv,
 }
@@ -126,7 +127,7 @@ def cprint_lines_after(filename: Text, lineno: int):
         cprint(line.rstrip(), color='blue')
 
 
-def _run_binop(opname: Text, lhs: Any, rhs: Any) -> Result[Any]:
+def _run_binop(opname: Text, lhs: Any, rhs: Any, interp) -> Result[Any]:
     if (opname in ('BINARY_TRUE_DIVIDE', 'BINARY_MODULO') and type(rhs) is int
             and rhs == 0):
         raise NotImplementedError(opname, lhs, rhs)
@@ -135,6 +136,11 @@ def _run_binop(opname: Text, lhs: Any, rhs: Any) -> Result[Any]:
             type(lhs) == type(rhs) == list and opname == 'BINARY_ADD'):
         op = _BINARY_OPS[opname]
         return Result(op(lhs, rhs))
+
+    if opname == 'BINARY_SUBTRACT' and isinstance(lhs, GuestInstance):
+        sub_f = lhs.getattr('__sub__')
+        return sub_f.invoke(args=(lhs, rhs), kwargs=None, interp=interp)
+
     raise NotImplementedError(opname, lhs, rhs)
 
 
@@ -298,6 +304,8 @@ def interp(code: types.CodeType,
     names = code.co_names  # LOAD_GLOBAL uses these names.
 
     interp_callback = functools.partial(interp, state=state)
+
+    do_call_callback = functools.partial(do_call, state=state)
 
     # TODO(cdleary, 2019-01-21): Investigate why this "builtins" ref is
     # sometimes a dict and other times a module?
@@ -609,7 +617,7 @@ def interp(code: types.CodeType,
         lhs = pop()
         rhs = pop()
         if {type(lhs), type(rhs)} <= _BUILTIN_VALUE_TYPES:
-            return _run_binop('BINARY_ADD', lhs, rhs)
+            return _run_binop('BINARY_ADD', lhs, rhs, interp_callback)
         else:
             raise NotImplementedError(lhs, rhs)
 
@@ -648,6 +656,18 @@ def interp(code: types.CodeType,
         else:
             v = pop()
             globals_[argval] = v
+
+    @dispatched
+    def run_LOAD_NAME(arg, argval):
+        if in_function:
+            if locals_dict is not None:
+                try:
+                    return Result(locals_dict[argval])
+                except KeyError:
+                    pass
+            else:
+                return Result(locals_[arg])
+        return Result(get_global_or_builtin(argval))
 
     @dispatched
     def run_DELETE_NAME(arg, argval):
@@ -717,7 +737,8 @@ def interp(code: types.CodeType,
             if result is None:
                 pass
             else:
-                assert isinstance(result, Result)
+                assert isinstance(result, Result), (
+                    'Bytecode must return Result', instruction)
                 if result.is_exception():
                     exception_data = result.get_exception()
                     if handle_exception():
@@ -802,13 +823,11 @@ def interp(code: types.CodeType,
             # Probably need to handle radd and such here.
             rhs = pop()
             lhs = pop()
-            result = _run_binop(opname, lhs, rhs)
+            result = _run_binop(opname, lhs, rhs, interp_callback)
             if result.is_exception():
                 raise NotImplementedError
             else:
                 push(result.get_value())
-        elif opname == 'LOAD_NAME':
-            push(get_global_or_builtin(instruction.argval))
         elif opname == 'LOAD_DEREF':
             push(cellvars[instruction.arg].get())
         elif opname == 'STORE_DEREF':
