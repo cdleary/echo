@@ -75,7 +75,7 @@ _COMPARE_OPS = {
 }
 _GUEST_BUILTINS = {
     list: {'append', 'remove', 'insert'},
-    dict: {'keys', 'values'},
+    dict: {'keys', 'values', 'items'},
 }
 
 
@@ -102,7 +102,7 @@ def code_to_str(c: types.CodeType) -> Text:
 
 
 def builtins_get(builtins: Union[types.ModuleType, Dict], name: Text) -> Any:
-    if name in ('isinstance', 'issubclass', 'super'):
+    if name in ('isinstance', 'issubclass', 'super', 'iter', 'type', 'zip'):
         return GuestBuiltin(name, None)
     if isinstance(builtins, types.ModuleType):
         return getattr(builtins, name)
@@ -186,9 +186,11 @@ def _compare(opname, lhs, rhs) -> Result[bool]:
             if e_result.get_value():
                 return Result(opname == 'in')
         return Result(opname == 'not in')
-    if opname == 'is not':
-        if isinstance(lhs, GuestInstance) and isinstance(rhs, GuestInstance):
-            return Result(lhs is not rhs)
+    if opname in ('is', 'is not'):
+        if (isinstance(lhs, (GuestInstance, GuestClass)) and
+                isinstance(rhs, (GuestInstance, GuestClass))):
+            op = _COMPARE_OPS[opname]
+            return Result(op(lhs, rhs))
     raise NotImplementedError(opname, lhs, rhs)
 
 
@@ -717,6 +719,17 @@ def interp(code: types.CodeType,
                           kwarg_defaults=kwarg_defaults, closure=freevar_cells)
         return Result(f)
 
+    @dispatched
+    def run_UNPACK_SEQUENCE(arg, argval):
+        # https://docs.python.org/3.7/library/dis.html#opcode-UNPACK_SEQUENCE
+        t = pop()
+        # Want to make sure we have a test that exercises this behavior
+        # properly, I expect it leaves the remainder in a tuple when arg is <
+        # len.
+        assert len(t) == arg
+        for e in t[::-1]:
+            push(e)
+
     while True:
         instruction = pc_to_instruction[pc]
         assert instruction is not None
@@ -878,7 +891,7 @@ def do_call(f, args: Tuple[Any, ...],
 
     kwargs = kwargs or {}
     if f in (dict, range, print, sorted, str, list, hasattr, ValueError,
-             AssertionError):
+             AssertionError, bytearray):
         return Result(f(*args, **kwargs))
     if f is globals:
         return Result(globals_)

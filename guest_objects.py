@@ -210,6 +210,10 @@ def _do_issubclass(args: Tuple[Any, ...]) -> Result[bool]:
 
 
 def _do_type(args: Tuple[Any, ...]) -> Result[Any]:
+    if len(args) == 1:
+        if isinstance(args[0], GuestInstance):
+            return Result(args[0].get_type())
+        return Result(type(args[0]))
     assert len(args) == 3, args
     name, bases, ns = args
 
@@ -272,6 +276,20 @@ def _do_super(args: Tuple[Any, ...]) -> Result[Any]:
     return Result(GuestSuper(type_.bases[0], obj))
 
 
+_ITER_BUILTIN_TYPES = (
+    tuple, str, bytes, bytearray, type({}.keys()), type({}.values()),
+    type({}.items()),
+)
+
+
+def _do_iter(args: Tuple[Any, ...]) -> Result[Any]:
+    assert len(args) == 1
+
+    if isinstance(args[0], _ITER_BUILTIN_TYPES):
+        return Result(iter(args[0]))
+    raise NotImplementedError(args)
+
+
 class GuestBuiltin(GuestPyObject):
     def __init__(self, name: Text, bound_self: Any):
         self.name = name
@@ -285,6 +303,12 @@ class GuestBuiltin(GuestPyObject):
         if self.name == 'dict.keys':
             assert not args, args
             return Result(self.bound_self.keys())
+        if self.name == 'dict.values':
+            assert not args, args
+            return Result(self.bound_self.values())
+        if self.name == 'dict.items':
+            assert not args, args
+            return Result(self.bound_self.items())
         if self.name == 'list.append':
             return Result(self.bound_self.append(*args))
         if self.name == 'list.insert':
@@ -295,16 +319,21 @@ class GuestBuiltin(GuestPyObject):
             except ValueError as e:
                 return Result(ExceptionData(traceback=None, parameter=e.args,
                                             exception=ValueError))
+        if self.name == 'zip':
+            return Result(zip(*args))
         if self.name == 'isinstance':
             return _do_isinstance(args)
-        elif self.name == 'issubclass':
+        if self.name == 'issubclass':
             return _do_issubclass(args)
-        elif self.name == '__build_class__':
+        if self.name == '__build_class__':
             return _do___build_class__(args, call)
-        elif self.name == 'super':
+        if self.name == 'super':
             return _do_super(args)
-        else:
-            raise NotImplementedError(self.name)
+        if self.name == 'iter':
+            return _do_iter(args)
+        if self.name == 'type':
+            return _do_type(args)
+        raise NotImplementedError(self.name)
 
     def getattr(self, name: Text) -> Any:
         raise NotImplementedError
