@@ -19,6 +19,8 @@ import types
 import interp
 import import_routines
 
+from termcolor import cprint
+
 
 def main():
     parser = optparse.OptionParser(__doc__)
@@ -62,6 +64,10 @@ def main():
             pdb.post_mortem(e.__traceback__)
         else:
             raise
+
+    if result.is_exception():
+        cprint(result, color='red', file=sys.stderr)
+        sys.exit(-1)
 
     print(result, file=sys.stderr)
 

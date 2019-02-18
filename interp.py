@@ -73,11 +73,20 @@ _COMPARE_OPS = {
     '>=': operator.ge,
     'is not': operator.is_not,
     'is': operator.is_,
+    'in': operator.contains,
 }
 _GUEST_BUILTINS = {
     list: {'append', 'remove', 'insert'},
     dict: {'keys', 'values', 'items'},
 }
+_BUILTIN_EXCEPTION_TYPES = (
+    AssertionError,
+    AttributeError,
+    ImportError,
+    NameError,
+    NotImplementedError,
+    ValueError,
+)
 
 
 def is_false(v: Any) -> bool:
@@ -147,9 +156,9 @@ def _run_binop(opname: Text, lhs: Any, rhs: Any, interp) -> Result[Any]:
 
 
 def _exception_match(lhs, rhs) -> bool:
+    if set([lhs, rhs]) <= set(_BUILTIN_EXCEPTION_TYPES):
+        return issubclass(lhs, rhs)
     if isinstance(lhs, rhs):
-        return True
-    if lhs is rhs:
         return True
     raise NotImplementedError(lhs, rhs)
 
@@ -204,6 +213,24 @@ def _method_requires_self(value) -> bool:
     if isinstance(value, GuestFunction):
         return True
     return False
+
+
+class BlockKind(Enum):
+    EXCEPT_HANDLER = 'except handler'
+    SETUP_LOOP = 'setup loop'
+    SETUP_EXCEPT = 'setup except'
+    SETUP_FINALLY = 'setup finally'
+
+
+class BlockInfo:
+    def __init__(self, kind: BlockKind, handler: int, level: int):
+        self.kind = kind
+        self.handler = handler
+        self.level = level
+
+    def __repr__(self) -> Text:
+        return 'BlockInfo(kind={!r}, handler={!r}, level={!r})'.format(
+            self.kind, self.handler, self.level)
 
 
 def interp(code: types.CodeType,
@@ -302,7 +329,7 @@ def interp(code: types.CodeType,
             local_value = locals_[index]
             cellvars[i].set(local_value)
 
-    block_stack = []
+    block_stack = []  # type: List[BlockInfo]
     stack = []
     consts = code.co_consts  # LOAD_CONST indexes into this.
     names = code.co_names  # LOAD_GLOBAL uses these names.
@@ -350,22 +377,28 @@ def interp(code: types.CodeType,
 
     def handle_exception():
         """Returns whether the exception was handled in this function."""
-        nonlocal pc
-        if block_stack and block_stack[-1][0] == 'except':
-            pc = block_stack[-1][1]
+        nonlocal pc, exception_data, handling_exception_data
+        while block_stack and block_stack[-1].kind != BlockKind.SETUP_EXCEPT:
+            block_stack.pop()
+        if block_stack and block_stack[-1].kind == BlockKind.SETUP_EXCEPT:
+            pc = block_stack[-1].handler
             if COLOR_TRACE:
                 cprint(' ! moved PC to %d' % pc, color='magenta')
+            while len(stack) > block_stack[-1].level:
+                pop()
             assert isinstance(exception_data, ExceptionData)
             push(exception_data.traceback)
             push(exception_data.parameter)
             push(exception_data.exception)
+            handling_exception_data, exception_data = exception_data, None
             return True
-        elif not any(entry[0] == 'except' for entry in block_stack):
+        elif not any(entry.kind == BlockKind.SETUP_EXCEPT
+                     for entry in block_stack):
             return False  # Definitely unhandled.
         else:
             # Need to pop block stack entries appropriately, then handle the
             # exception.
-            raise NotImplementedError
+            raise NotImplementedError(block_stack)
 
     def import_star(module):
         for name in module.keys():
@@ -380,6 +413,7 @@ def interp(code: types.CodeType,
     pc_to_bc_width = [None] * (
         instructions[-1].offset+1)  # type: List[Optional[int]]
     exception_data = None  # type: Optional[ExceptionData]
+    handling_exception_data = None  # type: Optional[ExceptionData]
     for i, instruction in enumerate(instructions):
         pc_to_instruction[instruction.offset] = instruction
         if i+1 != len(instructions):
@@ -401,13 +435,21 @@ def interp(code: types.CodeType,
 
     @dispatched
     def run_SETUP_LOOP(arg, argval):
-        block_stack.append(('loop',
-                            arg + pc + pc_to_bc_width[pc]))
+        block_stack.append(BlockInfo(
+            BlockKind.SETUP_LOOP, arg + pc + pc_to_bc_width[pc], len(stack)))
 
     @dispatched
     def run_SETUP_EXCEPT(arg, argval):
-        block_stack.append(('except',
-                            arg+pc+pc_to_bc_width[pc]))
+        block_stack.append(BlockInfo(
+            BlockKind.SETUP_EXCEPT, arg+pc+pc_to_bc_width[pc], len(stack)))
+
+    @dispatched
+    def run_SETUP_FINALLY(arg, argval):
+        # "Pushes a try block from a try-except clause onto the block stack.
+        # delta points to the finally block."
+        # -- https://docs.python.org/3.7/library/dis.html#opcode-SETUP_FINALLY
+        block_stack.append(BlockInfo(
+            BlockKind.SETUP_FINALLY, arg+pc+pc_to_bc_width[pc], len(stack)))
 
     @dispatched
     def run_EXTENDED_ARG(arg, argval):
@@ -416,7 +458,8 @@ def interp(code: types.CodeType,
     @dispatched
     def run_POP_EXCEPT(arg, argval):
         popped = block_stack.pop()
-        assert popped[0] == 'except', 'Popped non-except block.'
+        assert popped.kind == BlockKind.SETUP_EXCEPT, (
+            'Popped non-except block.', popped)
 
     @dispatched
     def run_RAISE_VARARGS(arg, argval):
@@ -525,7 +568,10 @@ def interp(code: types.CodeType,
         if isinstance(obj, GuestPyObject):
             return Result(obj.getattr(argval))
         else:
-            return Result(getattr(obj, argval))
+            try:
+                return Result(getattr(obj, argval))
+            except AttributeError as e:
+                return Result(ExceptionData(None, e.args, AttributeError))
 
     @dispatched
     def run_LOAD_METHOD(arg, argval):
@@ -660,6 +706,7 @@ def interp(code: types.CodeType,
                 locals_[arg] = pop()
         else:
             v = pop()
+            print('storing', v, 'to', argval)
             globals_[argval] = v
 
     @dispatched
@@ -772,7 +819,7 @@ def interp(code: types.CodeType,
             if instruction.opname not in (
                     # These opcodes claim a value-stack effect, but we use a
                     # different stack for block info.
-                    'SETUP_EXCEPT', 'POP_EXCEPT',
+                    'SETUP_EXCEPT', 'POP_EXCEPT', 'SETUP_FINALLY',
                     # This op causes the stack_effect call to error.
                     'EXTENDED_ARG'):
                 stack_effect = dis.stack_effect(instruction.opcode,
@@ -784,7 +831,12 @@ def interp(code: types.CodeType,
             # From the Python docs: "The interpreter recalls whether the
             # exception has to be re-raised, or whether the function returns,
             # and continues with the outer-next block."
-            raise NotImplementedError
+            assert handling_exception_data is not None
+            if exception_data is None:
+                pass
+            else:
+                raise NotImplementedError(handling_exception_data,
+                                          exception_data)
         elif opname == 'CALL_FUNCTION_VAR':
             raise NotImplementedError
         elif opname == 'GET_ITER':
@@ -805,8 +857,8 @@ def interp(code: types.CodeType,
             push(GuestBuiltin('__build_class__', None))
         elif opname == 'BREAK_LOOP':
             loop_block = block_stack[-1]
-            assert loop_block[0] == 'loop'
-            pc = loop_block[1]
+            assert loop_block.kind == BlockKind.SETUP_LOOP
+            pc = loop_block.handler
             continue
         elif opname == 'JUMP_ABSOLUTE':
             pc = instruction.arg
@@ -912,7 +964,7 @@ def do_call(f, args: Tuple[Any, ...],
 
     kwargs = kwargs or {}
     if f in (dict, range, print, sorted, str, set, tuple, list, hasattr,
-             ValueError, AssertionError, bytearray):
+             bytearray) + _BUILTIN_EXCEPTION_TYPES:
         return Result(f(*args, **kwargs))
     if f is globals:
         return Result(globals_)
