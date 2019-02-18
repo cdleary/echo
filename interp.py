@@ -847,7 +847,9 @@ def interp(code: types.CodeType,
             except StopIteration:
                 pop()
                 pc += pc_to_bc_width[pc] + instruction.arg
-                assert pc_to_instruction[pc].is_jump_target, (
+                new_instruction = pc_to_instruction[pc]
+                assert new_instruction is not None
+                assert new_instruction.is_jump_target, (
                     'Attempted to jump to invalid target.', pc,
                     pc_to_instruction[pc])
                 continue

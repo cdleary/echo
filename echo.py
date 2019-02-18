@@ -66,7 +66,7 @@ def main():
             raise
 
     if result.is_exception():
-        cprint(result, color='red', file=sys.stderr)
+        cprint(str(result), color='red', file=sys.stderr)
         sys.exit(-1)
 
     print(result, file=sys.stderr)
