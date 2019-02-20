@@ -4,3 +4,4 @@ assert () == ()
 assert (None,) == (None,)
 assert (0,) == (False,)
 assert (1, 2, 3) == (1, 2, 3)
+assert 'foo' in 'foobar'

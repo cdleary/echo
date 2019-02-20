@@ -18,6 +18,7 @@ import types
 
 import interp
 import import_routines
+import bytecode_trace
 
 from termcolor import cprint
 
@@ -34,6 +35,7 @@ def main():
                       help='Color trace for module imports.')
     parser.add_option('--ctrace-stack', action='store_true', default=False,
                       help='Color trace stack push/pops.')
+    parser.add_option('--dump_trace', help='Path to dump bytecode trace to.')
     opts, args = parser.parse_args()
 
     # Path.
@@ -44,6 +46,11 @@ def main():
     # Options.
     if opts.log_level:
         logging.basicConfig(level=getattr(logging, opts.log_level))
+
+    if opts.dump_trace:
+        print('Collecting trace to', opts.dump_trace, '...')
+        interp.TRACE_DUMPER = bytecode_trace.BytecodeTraceDumper(
+            opts.dump_trace)
 
     interp.COLOR_TRACE = opts.ctrace
     interp.COLOR_TRACE_FUNC = opts.ctrace
@@ -67,9 +74,16 @@ def main():
 
     if result.is_exception():
         cprint(str(result), color='red', file=sys.stderr)
-        sys.exit(-1)
+        error = True
+    else:
+        print(result, file=sys.stderr)
+        error = False
 
-    print(result, file=sys.stderr)
+    if opts.dump_trace:
+        print('Dumping trace to', opts.dump_trace, '...')
+        interp.TRACE_DUMPER.dump()
+
+    sys.exit(-1 if error else 0)
 
 
 if __name__ == '__main__':

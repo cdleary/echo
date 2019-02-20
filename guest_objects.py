@@ -12,7 +12,7 @@ class GuestPyObject:
     __metaclass__ = abc.ABCMeta
 
     @abc.abstractmethod
-    def getattr(self, name: Text) -> Any:
+    def getattr(self, name: Text) -> Result[Any]:
         raise NotImplementedError(self, name)
 
     @abc.abstractmethod
@@ -35,8 +35,8 @@ class GuestModule(GuestPyObject):
     def keys(self) -> Iterable[Text]:
         return self.globals_.keys()
 
-    def getattr(self, name: Text) -> Any:
-        return self.globals_[name]
+    def getattr(self, name: Text) -> Result[Any]:
+        return Result(self.globals_[name])
 
     def setattr(self, name: Text, value: Any):
         assert not isinstance(value, Result), value
@@ -53,6 +53,7 @@ class GuestFunction(GuestPyObject):
         self.defaults = defaults
         self.kwarg_defaults = kwarg_defaults
         self.closure = closure
+        self.dict_ = {}
 
     def __repr__(self):
         return ('GuestFunction(code={!r}, name={!r}, closure={!r}, '
@@ -68,8 +69,11 @@ class GuestFunction(GuestPyObject):
                       locals_dict=locals_dict,
                       kwarg_defaults=self.kwarg_defaults, closure=self.closure)
 
-    def getattr(self, name: Text) -> Any:
-        raise NotImplementedError
+    def getattr(self, name: Text) -> Result[Any]:
+        try:
+            return Result(self.dict_[name])
+        except KeyError:
+            return Result(ExceptionData(None, name, AttributeError))
 
     def setattr(self, name: Text, value: Any) -> Any:
         raise NotImplementedError
@@ -111,7 +115,7 @@ class GuestMethod(GuestPyObject):
 
     def invoke(self, *, args: Tuple[Any, ...],
                kwargs: Optional[Dict[Text, Any]],
-               locals_dict, interp) -> Result[Any]:
+               locals_dict=None, interp) -> Result[Any]:
         return self.f.invoke(args=(self.bound_self,) + args, kwargs=kwargs,
                              locals_dict=locals_dict, interp=interp)
 
@@ -128,11 +132,18 @@ class GuestInstance(GuestPyObject):
     def get_type(self) -> 'GuestClass':
         return self.cls
 
-    def getattr(self, name: Text) -> Any:
+    def getattr(self, name: Text) -> Result[Any]:
         try:
-            return self.dict[name]
+            value = self.dict[name]
         except KeyError:
-            return self.cls.getattr(name)
+            result = self.cls.getattr(name)
+            if result.is_exception():
+                return result
+            value = result.get_value()
+
+        if isinstance(value, GuestFunction):
+            return Result(GuestMethod(value, bound_self=self))
+        return Result(value)
 
     def setattr(self, name: Text, value: Any):
         self.dict[name] = value
@@ -185,8 +196,8 @@ class GuestClass(GuestPyObject):
                 return result
         return Result(guest_instance)
 
-    def getattr(self, name: Text) -> Any:
-        return self.dict_[name]
+    def getattr(self, name: Text) -> Result[Any]:
+        return Result(self.dict_[name])
 
     def setattr(self, name: Text, value: Any) -> Any:
         self.dict_[name] = value
@@ -200,6 +211,8 @@ def _do_isinstance(args: Tuple[Any, ...]) -> Result[bool]:
         return Result(isinstance(args[0], str))
     if args[1] is type:
         return Result(isinstance(args[0], (type, GuestClass)))
+    if issubclass(args[1], Exception):
+        return Result(isinstance(args[0], args[1]))
     raise NotImplementedError(args)
 
 
@@ -253,18 +266,19 @@ class GuestSuper(GuestPyObject):
         self.type_ = type_
         self.obj = obj
 
-    def _getattr(self, name: Text) -> Any:
+    def getattr(self, name: Text) -> Result[Any]:
         if name in self.obj.dict:
-            return self.obj.dict[name]
-        return self.type_.getattr(name)
-
-    def getattr(self, name: Text) -> Any:
-        value = self._getattr(name)
+            result = Result(self.obj.dict[name])
+        else:
+            result = self.type_.getattr(name)
+        if result.is_exception():
+            return result
+        value = result.get_value()
         if isinstance(value, GuestFunction):
-            return GuestMethod(value, bound_self=self)
-        return value
+            return Result(GuestMethod(value, bound_self=self))
+        return Result(value)
 
-    def setattr(self, name: Text, value: Any) -> Any:
+    def setattr(self, name: Text, value: Any) -> Result[None]:
         return self.obj.setattr(name, value)
 
 

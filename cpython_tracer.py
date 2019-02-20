@@ -1,12 +1,28 @@
 import ctypes
 import dis
 import inspect
+import optparse
 import pprint
 import sys
 import types
 from typing import Any
 
 from termcolor import cprint
+
+import bytecode_trace
+
+
+TRACE_DUMPER = bytecode_trace.FakeTraceDumper()
+
+
+# pytype: disable=base-class-error
+class _PyTryBlock(ctypes.Structure):
+    _fields_ = [
+        ('b_type', ctypes.c_uint),
+        ('b_handler', ctypes.c_uint),
+        ('b_level', ctypes.c_uint),
+    ]
+# pytype: enable=base-class-error
 
 
 class CtypeFrame:
@@ -30,6 +46,7 @@ class CtypeFrame:
         },
     }
     ULONG_SIZE_IN_BYTES = 8
+    UINT_SIZE_IN_BYTES = 4
 
     def __init__(self, frame: types.FrameType):
         self.frame_id = id(frame)
@@ -83,6 +100,34 @@ class CtypeFrame:
         """
         return self.frame_ptr[self.offsets['f_stacktop']]
 
+    def print_block_stack(self):
+        assert sys.version_info[:2] == (3, 7)
+        f_iblock = ctypes.cast(
+            self.frame_id,
+            ctypes.POINTER(ctypes.c_uint))[112//self.UINT_SIZE_IN_BYTES]
+        print('f_iblock:', f_iblock)
+
+        type_to_str = {
+            257: 'EXCEPT_HANDLER',
+            120: 'SETUP_LOOP',
+            121: 'SETUP_EXCEPT',
+            122: 'SETUP_FINALLY',
+        }
+
+        f_blockstack = ctypes.cast(self.frame_id+120,
+                                   ctypes.POINTER(_PyTryBlock))
+        block_stack = []
+        for i in range(f_iblock):
+            ptb = f_blockstack[i]
+            type_str = type_to_str[ptb.b_type]
+            handler = -1 if ptb.b_handler == 0xffffffff else ptb.b_handler
+            print(' blockstack %d: type: %s handler: %s level: %d' % (
+                    i, type_str, handler, ptb.b_level))
+            block_stack.append(bytecode_trace.BlockStackEntry(
+                type_str, handler, ptb.b_level))
+
+        TRACE_DUMPER.note_block_stack(block_stack)
+
     def print_stack(self):
         # Left in, just in case there's some need to look at the pointer
         # values.
@@ -131,6 +176,7 @@ class CtypeFrame:
                             obj.__code__.co_cellvars), file=sys.stderr)
                     print('    co_freevars: {!r}'.format(
                             obj.__code__.co_freevars), file=sys.stderr)
+        self.print_block_stack()
 
 
 def note_trace(frame, event, arg):
@@ -159,6 +205,7 @@ def note_trace(frame, event, arg):
         instructions = dis.get_instructions(frame.f_code)
         instruction = next(inst for inst in instructions
                            if inst.offset == frame.f_lasti)
+        TRACE_DUMPER.note_instruction(instruction)
         cprint(' code: {}; lineno: {}'.format(frame.f_code, frame.f_lineno),
                color='blue', file=sys.stderr)
         cprint(' instruction: {}'.format(instruction),
@@ -186,14 +233,27 @@ def note_trace(frame, event, arg):
 
 
 def main():
-    path = sys.argv[1]
+    global TRACE_DUMPER
+    parser = optparse.OptionParser()
+    parser.add_option('--dump_trace', help='Path to dump bytecode trace to.')
+    opts, args = parser.parse_args()
+
+    if opts.dump_trace:
+        TRACE_DUMPER = bytecode_trace.BytecodeTraceDumper(opts.dump_trace)
+
+    path = args[0]
     print('Reading path:', path, file=sys.stderr)
     with open(path) as f:
         contents = f.read()
 
     sys.settrace(note_trace)
-    globals_ = {}
+    globals_ = {'__name__': '__main__'}
     exec(contents, globals_)
+    sys.settrace(None)
+
+    if opts.dump_trace:
+        print('Dumping', len(TRACE_DUMPER.entries), 'trace entries...')
+        TRACE_DUMPER.dump()
 
 
 if __name__ == '__main__':

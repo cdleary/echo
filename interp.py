@@ -27,8 +27,6 @@ from io import StringIO
 from typing import (Dict, Any, Text, Tuple, List, Optional, Union, Sequence,
                     Iterable, cast)
 
-from termcolor import cprint
-
 from common import dis_to_str, get_code
 from interp_result import Result, ExceptionData
 import import_routines
@@ -37,8 +35,12 @@ from interpreter_state import InterpreterState
 from guest_objects import (GuestModule, GuestFunction, GuestInstance,
                            GuestBuiltin, GuestPyObject, GuestPartial,
                            GuestClass, GuestCell, GuestMethod)
+import bytecode_trace
+
+from termcolor import cprint
 
 
+TRACE_DUMPER = bytecode_trace.FakeTraceDumper()
 _GLOBAL_BYTECODE_COUNT = 0
 COLOR_TRACE_FUNC = False
 COLOR_TRACE_STACK = False
@@ -73,7 +75,7 @@ _COMPARE_OPS = {
     '>=': operator.ge,
     'is not': operator.is_not,
     'is': operator.is_,
-    'in': operator.contains,
+    'in': lambda a, b: operator.contains(b, a),
 }
 _GUEST_BUILTINS = {
     list: {'append', 'remove', 'insert'},
@@ -150,7 +152,10 @@ def _run_binop(opname: Text, lhs: Any, rhs: Any, interp) -> Result[Any]:
 
     if opname == 'BINARY_SUBTRACT' and isinstance(lhs, GuestInstance):
         sub_f = lhs.getattr('__sub__')
-        return sub_f.invoke(args=(lhs, rhs), kwargs=None, interp=interp)
+        if sub_f.is_exception():
+            raise NotImplementedError(sub_f)
+        return sub_f.get_value().invoke(args=(rhs,), kwargs=None,
+                                        interp=interp)
 
     raise NotImplementedError(opname, lhs, rhs)
 
@@ -216,10 +221,10 @@ def _method_requires_self(value) -> bool:
 
 
 class BlockKind(Enum):
-    EXCEPT_HANDLER = 'except handler'
-    SETUP_LOOP = 'setup loop'
-    SETUP_EXCEPT = 'setup except'
-    SETUP_FINALLY = 'setup finally'
+    EXCEPT_HANDLER = 'EXCEPT_HANDLER'
+    SETUP_LOOP = 'SETUP_LOOP'
+    SETUP_EXCEPT = 'SETUP_EXCEPT'
+    SETUP_FINALLY = 'SETUP_FINALLY'
 
 
 class BlockInfo:
@@ -231,6 +236,10 @@ class BlockInfo:
     def __repr__(self) -> Text:
         return 'BlockInfo(kind={!r}, handler={!r}, level={!r})'.format(
             self.kind, self.handler, self.level)
+
+    def to_trace(self) -> bytecode_trace.BlockStackEntry:
+        return bytecode_trace.BlockStackEntry(self.kind.value, self.handler,
+                                              self.level)
 
 
 def interp(code: types.CodeType,
@@ -378,6 +387,9 @@ def interp(code: types.CodeType,
     def handle_exception():
         """Returns whether the exception was handled in this function."""
         nonlocal pc, exception_data, handling_exception_data
+        if COLOR_TRACE:
+            cprint(' ! handling exception with block stack %r' % block_stack,
+                   color='magenta')
         while block_stack and block_stack[-1].kind != BlockKind.SETUP_EXCEPT:
             block_stack.pop()
         if block_stack and block_stack[-1].kind == BlockKind.SETUP_EXCEPT:
@@ -388,8 +400,10 @@ def interp(code: types.CodeType,
                 pop()
             assert isinstance(exception_data, ExceptionData)
             push(exception_data.traceback)
-            push(exception_data.parameter)
             push(exception_data.exception)
+            push(exception_data.exception)
+            block_stack[-1].kind = BlockKind.EXCEPT_HANDLER
+            block_stack[-1].handler = -1
             handling_exception_data, exception_data = exception_data, None
             return True
         elif not any(entry.kind == BlockKind.SETUP_EXCEPT
@@ -405,7 +419,7 @@ def interp(code: types.CodeType,
             if COLOR_TRACE_FUNC:
                 cprint('IMPORT_STAR module key: %r' % name, color='green')
             if not name.startswith('_'):
-                globals_[name] = module.getattr(name)
+                globals_[name] = module.getattr(name).get_value()
 
     instructions = tuple(dis.get_instructions(code))
     pc_to_instruction = [None] * (
@@ -442,6 +456,9 @@ def interp(code: types.CodeType,
     def run_SETUP_EXCEPT(arg, argval):
         block_stack.append(BlockInfo(
             BlockKind.SETUP_EXCEPT, arg+pc+pc_to_bc_width[pc], len(stack)))
+        if COLOR_TRACE:
+            cprint(' ! pushed except to block stack %r' % block_stack,
+                   color='magenta')
 
     @dispatched
     def run_SETUP_FINALLY(arg, argval):
@@ -457,8 +474,12 @@ def interp(code: types.CodeType,
 
     @dispatched
     def run_POP_EXCEPT(arg, argval):
+        if COLOR_TRACE:
+            cprint(' ! popping except with block stack %r' % block_stack,
+                   color='magenta')
         popped = block_stack.pop()
-        assert popped.kind == BlockKind.SETUP_EXCEPT, (
+        assert popped.kind in (BlockKind.SETUP_EXCEPT,
+                               BlockKind.EXCEPT_HANDLER), (
             'Popped non-except block.', popped)
 
     @dispatched
@@ -550,7 +571,7 @@ def interp(code: types.CodeType,
             return Result(getattr(module, argval))
         elif isinstance(module, GuestModule):
             try:
-                return Result(module.getattr(argval))
+                return module.getattr(argval)
             except KeyError:
                 return import_routines.do_subimport(
                     module, argval, interp=interp_callback, state=state,
@@ -566,12 +587,12 @@ def interp(code: types.CodeType,
                 return Result(GuestBuiltin(
                     '{}.{}'.format(type_.__name__, argval), bound_self=obj))
         if isinstance(obj, GuestPyObject):
-            return Result(obj.getattr(argval))
+            return obj.getattr(argval)
         else:
             try:
                 return Result(getattr(obj, argval))
             except AttributeError as e:
-                return Result(ExceptionData(None, e.args, AttributeError))
+                return Result(ExceptionData(None, None, e))
 
     @dispatched
     def run_LOAD_METHOD(arg, argval):
@@ -706,7 +727,6 @@ def interp(code: types.CodeType,
                 locals_[arg] = pop()
         else:
             v = pop()
-            print('storing', v, 'to', argval)
             globals_[argval] = v
 
     @dispatched
@@ -722,8 +742,17 @@ def interp(code: types.CodeType,
         try:
             return Result(get_global_or_builtin(argval))
         except AttributeError:
+            msg = 'name {!r} is not defined'.format(argval)
             return Result(ExceptionData(
-                None, 'name {!r} is not defined'.format(argval), NameError))
+                None, None, NameError(msg)))
+
+    @dispatched
+    def run_LOAD_FAST(arg, argval):
+        v = locals_[arg]
+        if v is UnboundLocalSentinel:
+            msg = 'name {!r} is not defined'.format(argval)
+            return Result(ExceptionData(None, None, NameError(msg)))
+        return Result(v)
 
     @dispatched
     def run_DELETE_NAME(arg, argval):
@@ -786,6 +815,8 @@ def interp(code: types.CodeType,
 
     while True:
         instruction = pc_to_instruction[pc]
+        TRACE_DUMPER.note_instruction(instruction)
+        TRACE_DUMPER.note_block_stack([bs.to_trace() for bs in block_stack])
         assert instruction is not None
         global _GLOBAL_BYTECODE_COUNT
         _GLOBAL_BYTECODE_COUNT += 1
@@ -812,6 +843,10 @@ def interp(code: types.CodeType,
                     if handle_exception():
                         continue
                     else:
+                        if COLOR_TRACE:
+                            cprint(' ! returning unhandled exception '
+                                   '%r from %r' % (result, code),
+                                   color='magenta')
                         return result
                 else:
                     push(result.get_value())
@@ -853,8 +888,6 @@ def interp(code: types.CodeType,
                     'Attempted to jump to invalid target.', pc,
                     pc_to_instruction[pc])
                 continue
-        elif opname == 'LOAD_FAST':
-            push(locals_[instruction.arg])
         elif opname == 'LOAD_BUILD_CLASS':
             push(GuestBuiltin('__build_class__', None))
         elif opname == 'BREAK_LOOP':
