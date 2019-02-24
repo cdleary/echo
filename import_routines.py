@@ -2,7 +2,7 @@ import builtins
 import logging
 import os
 import sys
-import types
+from types import ModuleType, CodeType
 from typing import Text, Dict, Any, Optional, Union, Sequence, List, Tuple
 
 from interp_result import Result, ExceptionData
@@ -15,7 +15,7 @@ from termcolor import cprint
 COLOR_TRACE = False
 
 
-ModuleT = Union[types.ModuleType, GuestModule]
+ModuleT = Union[ModuleType, GuestModule]
 
 
 def ctimport(msg):
@@ -73,7 +73,7 @@ def import_path(path: Text, fully_qualified: Text,
         contents = f.read()
 
     module_code = compile(contents, fullpath, 'exec')
-    assert isinstance(module_code, types.CodeType), module_code
+    assert isinstance(module_code, CodeType), module_code
 
     globals_ = {
         '__builtins__': builtins,
@@ -119,7 +119,7 @@ def _do_import(name: Text,
         return Result(already_imported)
 
     if name in ('functools', 'os', 'sys', 'itertools', 'builtins', '_weakref'):
-        module = __import__(name, globals_)  # type: types.ModuleType
+        module = __import__(name, globals_)  # type: ModuleType
     else:
         paths = [module_path] if module_path else state.paths
         assert isinstance(paths, list), paths
@@ -162,11 +162,12 @@ def do_import(name: Text,
     ctimport('do_import; name: %r; more_paths: %r' % (name, more_paths))
 
     outermost = None  # type: Optional[ModuleT]
-    outer = None
+    outer = None  # type: Optional[ModuleT]
     more_paths = more_paths or []
 
     def outer_filename() -> Text:
-        if isinstance(outer, types.ModuleType):
+        assert outer is not None
+        if isinstance(outer, ModuleType):
             return outer.__file__
         else:
             assert isinstance(outer, GuestModule)
@@ -187,9 +188,11 @@ def do_import(name: Text,
                  'new_outer: %r' % (i, piece, outer, new_outer))
         if new_outer.is_exception():
             if outer and i+1 == len(pieces):
+                assert isinstance(outer, (ModuleType, GuestModule)), outer
                 ctimport('do_import; attempting to retrieve %r '
                          'as an attribute on %r' % (piece, outer))
                 result = outer.getattr(piece)
+                assert isinstance(result, Result), result
                 if not result.is_exception():
                     return result
             return new_outer
@@ -243,7 +246,7 @@ def resolve_level_to_dirpaths(importing_filename: Text,
     return paths
 
 
-def _module_getattr(module: Union[types.ModuleType, GuestModule],
+def _module_getattr(module: Union[ModuleType, GuestModule],
                     name: Text) -> Result[Any]:
     if isinstance(module, GuestModule):
         return module.getattr(name)
