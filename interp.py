@@ -150,7 +150,8 @@ def _run_binop(opname: Text, lhs: Any, rhs: Any, interp) -> Result[Any]:
         raise NotImplementedError(opname, lhs, rhs)
     if {type(lhs), type(rhs)} <= _BUILTIN_VALUE_TYPES or (
             type(lhs) is list and opname == 'BINARY_SUBSCR') or (
-            type(lhs) == type(rhs) == list and opname == 'BINARY_ADD'):
+            type(lhs) == type(rhs) == list and opname == 'BINARY_ADD') or (
+            type(lhs) is str and opname == 'BINARY_MODULO'):
         op = _BINARY_OPS[opname]
         return Result(op(lhs, rhs))
 
@@ -191,7 +192,8 @@ def _compare(opname, lhs, rhs) -> Result[bool]:
             if not e_result.get_value():
                 return Result(False)
         return Result(True)
-    if opname in ('in', 'not in') and type(rhs) in (tuple, list, dict):
+    if opname in ('in', 'not in') and type(rhs) in (
+            tuple, list, dict, type(os.environ)):
         for e in rhs:
             e_result = _compare('==', lhs, e)
             if e_result.is_exception():
