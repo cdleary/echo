@@ -119,7 +119,9 @@ def resolve_args(attrs: CodeAttributes,
         if stararg_info[0]:
             arg_slots[stararg_index] = arg_slots[stararg_index] + (value,)
         else:
-            assert argno < len(arg_slots), (argno, attrs)
+            assert argno < len(arg_slots), (
+                'Argument number is out of range of argument slots.', argno,
+                attrs, getattr(attrs, 'code', None), value)
             arg_slots[argno] = value
             default_required[argno] = None
 

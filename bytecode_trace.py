@@ -18,7 +18,8 @@ class Instruction:
         self.is_jump_target = instruction.is_jump_target
 
     def get_opname_str(self) -> Text:
-        if self.opname in ('COMPARE_OP', 'LOAD_NAME', 'LOAD_GLOBAL'):
+        if self.opname in ('COMPARE_OP', 'LOAD_NAME', 'LOAD_GLOBAL',
+                           'IMPORT_NAME'):
             return '{}({})'.format(self.opname, self.argrepr)
         return self.opname
 

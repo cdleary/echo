@@ -37,7 +37,7 @@ from guest_objects import (GuestModule, GuestFunction, GuestInstance,
                            GuestClass, GuestCell, GuestMethod)
 import bytecode_trace
 
-from termcolor import cprint
+import termcolor
 
 
 TRACE_DUMPER = bytecode_trace.FakeTraceDumper()
@@ -122,6 +122,10 @@ def builtins_get(builtins: Union[types.ModuleType, Dict], name: Text) -> Any:
     return builtins[name]
 
 
+def cprint(msg, color, file=sys.stderr, end='\n'):
+    termcolor.cprint(msg, color=color, file=file, end=end)
+
+
 def cprint_lines_after(filename: Text, lineno: int):
     with open(filename) as f:
         lines = f.readlines()
@@ -168,13 +172,6 @@ def _exception_match(lhs, rhs) -> bool:
     raise NotImplementedError(lhs, rhs)
 
 
-def module_getattr(module: Union[types.ModuleType, GuestModule],
-                   name: Text) -> Any:
-    if isinstance(module, GuestModule):
-        return module.getattr(name)
-    return getattr(module, name)
-
-
 def _compare(opname, lhs, rhs) -> Result[bool]:
     if (isinstance(lhs, _BUILTIN_VALUE_TYPES_TUP)
             and isinstance(rhs, _BUILTIN_VALUE_TYPES_TUP)):
@@ -210,13 +207,14 @@ def _compare(opname, lhs, rhs) -> Result[bool]:
     raise NotImplementedError(opname, lhs, rhs)
 
 
-def _method_requires_self(value) -> bool:
+def _method_requires_self(obj, value) -> bool:
+    obj_is_module = isinstance(obj, GuestModule)
     if isinstance(value, GuestBuiltin) and value.bound_self is None:
-        return True
+        return not obj_is_module
     if isinstance(value, types.MethodType):
         return False
     if isinstance(value, GuestFunction):
-        return True
+        return not obj_is_module
     return False
 
 
@@ -283,18 +281,18 @@ def interp(code: types.CodeType,
         'Invocation did not satisfy closure requirements.', code,
         code.co_freevars, closure)
 
-    logging.debug('<bytecode>')
-    logging.debug(dis_to_str(code))
-    logging.debug('</bytecode>')
-    logging.debug(code_to_str(code))
-
     def gprint(*args): cprint(*args, color='green')
 
     if COLOR_TRACE_FUNC:
+        gprint('<bytecode>')
+        gprint(dis_to_str(code))
+        gprint('</bytecode>')
+        gprint(code_to_str(code))
         gprint('interpreting:')
         gprint('  loc:         %s:%d' % (code.co_filename,
                                          code.co_firstlineno))
         gprint('  in_function: %s' % in_function)
+
     if COLOR_TRACE:
         gprint('  co_name:     %r' % code.co_name)
         gprint('  co_argcount: %d' % code.co_argcount)
@@ -388,8 +386,8 @@ def interp(code: types.CodeType,
         """Returns whether the exception was handled in this function."""
         nonlocal pc, exception_data, handling_exception_data
         if COLOR_TRACE:
-            cprint(' ! handling exception with block stack %r' % block_stack,
-                   color='magenta')
+            cprint(' ! handling exception with block stack %r; %r' % (
+                    block_stack, exception_data), color='magenta')
         while block_stack and block_stack[-1].kind != BlockKind.SETUP_EXCEPT:
             block_stack.pop()
         if block_stack and block_stack[-1].kind == BlockKind.SETUP_EXCEPT:
@@ -413,13 +411,6 @@ def interp(code: types.CodeType,
             # Need to pop block stack entries appropriately, then handle the
             # exception.
             raise NotImplementedError(block_stack)
-
-    def import_star(module):
-        for name in module.keys():
-            if COLOR_TRACE_FUNC:
-                cprint('IMPORT_STAR module key: %r' % name, color='green')
-            if not name.startswith('_'):
-                globals_[name] = module.getattr(name).get_value()
 
     instructions = tuple(dis.get_instructions(code))
     pc_to_instruction = [None] * (
@@ -516,52 +507,13 @@ def interp(code: types.CodeType,
     def run_IMPORT_NAME(arg, argval):
         fromlist = pop()
         level = pop()
-        if import_routines.COLOR_TRACE:
-            cprint('IMPORT_NAME filename: %r startline: %s argval: %r; '
-                   'fromlist: %r; level: %r' %
-                   (code.co_filename, code.co_firstlineno, argval, fromlist,
-                    level), color='green')
-        more_paths = import_routines.resolve_level_to_dirpaths(
-            code.co_filename, level)
-        result = import_routines.do_import(
-            argval, globals_=globals_, interp=interp_callback, state=state,
-            more_paths=more_paths)
-        if import_routines.COLOR_TRACE:
-            cprint('IMPORT_NAME result: %r' % result, color='blue')
-        if result.is_exception():
-            return result
-        # Not an exception.
-        module = result.get_value()
-        for name in fromlist or ():
-            if name == '*':
-                import_star(module)
-            else:
-                try:
-                    globals_[name] = module_getattr(module, name)
-                except KeyError:
-                    # "Note that when using from package import item, the item
-                    # can be either a submodule (or subpackage) of the package,
-                    # or some other name defined in the package, like a
-                    # function, class or variable. The import statement first
-                    # tests whether the item is defined in the package; if not,
-                    # it assumes it is a module and attempts to load it. If it
-                    # fails to find it, an ImportError exception is raised."
-                    # -- https://docs.python.org/3/tutorial/modules.html
-                    result = import_routines.do_subimport(
-                        module, name, interp=interp_callback, state=state,
-                        globals_=globals_)
-                    if result.is_exception():
-                        return result
-                    module = result.get_value()
-
-        if import_routines.COLOR_TRACE:
-            cprint('IMPORT_NAME result: %r' % module, color='green')
-        return Result(module)
+        return import_routines.run_IMPORT_NAME(
+            code.co_filename, level, fromlist, argval, globals_, interp, state)
 
     @dispatched
     def run_IMPORT_STAR(arg, argval):
         module = peek()
-        import_star(module)
+        import_routines.import_star(module, globals_)
         pop()  # Docs say 'module is popped after loading all names'.
 
     @dispatched
@@ -570,12 +522,13 @@ def interp(code: types.CodeType,
         if isinstance(module, types.ModuleType):
             return Result(getattr(module, argval))
         elif isinstance(module, GuestModule):
-            try:
-                return module.getattr(argval)
-            except KeyError:
+            result = module.getattr(argval)
+            if result.is_exception():
                 return import_routines.do_subimport(
                     module, argval, interp=interp_callback, state=state,
                     globals_=globals_)
+            else:
+                return result
         else:
             raise NotImplementedError(module)
 
@@ -604,7 +557,7 @@ def interp(code: types.CodeType,
         if attr_result.is_exception():
             return attr_result
         push(attr_result.get_value())
-        if _method_requires_self(attr_result.get_value()):
+        if _method_requires_self(obj, attr_result.get_value()):
             push(obj)
         else:
             push(UnboundLocalSentinel)
@@ -1006,7 +959,7 @@ def do_call(f, args: Tuple[Any, ...],
     elif isinstance(f, (GuestFunction, GuestMethod)):
         return f.invoke(args=args, kwargs=kwargs, locals_dict=locals_dict,
                         interp=interp_callback)
-    elif isinstance(f, types.MethodType):
+    elif isinstance(f, (types.MethodType, types.FunctionType)):
         # Builtin object method.
         return Result(f(*args, **kwargs))
     # TODO(cdleary, 2019-01-22): Consider using an import hook to avoid

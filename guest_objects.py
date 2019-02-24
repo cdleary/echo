@@ -36,7 +36,10 @@ class GuestModule(GuestPyObject):
         return self.globals_.keys()
 
     def getattr(self, name: Text) -> Result[Any]:
-        return Result(self.globals_[name])
+        try:
+            return Result(self.globals_[name])
+        except KeyError:
+            return Result(ExceptionData(None, name, AttributeError))
 
     def setattr(self, name: Text, value: Any):
         assert not isinstance(value, Result), value
