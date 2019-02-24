@@ -25,15 +25,19 @@ def ctimport(msg):
 
 def _find_module_path(search_path: Text,
                       pieces: Sequence[Text]) -> Optional[Text]:
+    assert not os.path.isfile(search_path)
     *leaders, last = pieces
     candidate = os.path.join(search_path, *leaders)
     if os.path.exists(candidate):
+        ctimport('_find_module_path; candidate exists: %r' % candidate)
         if os.path.isdir(os.path.join(candidate, last)):
             init_path = os.path.join(candidate, last, '__init__.py')
             if os.path.exists(init_path):
                 return init_path
         target = os.path.join(candidate, last + '.py')
+        ctimport('_find_module_path; target: %r' % target)
         if os.path.exists(target):
+            ctimport('_find_module_path; target %r did not exist' % target)
             return target
     return None
 
@@ -43,8 +47,10 @@ def find_module_path(name: Text,
     pieces = name.split('.')
 
     for search_path in paths:
+        ctimport('find_module_path; search path: %r' % search_path)
         result = _find_module_path(search_path, pieces)
         if result:
+            ctimport('find_module_path; result: %r' % result)
             return result
     return None
 
@@ -218,7 +224,8 @@ def do_import(name: Text,
 def do_subimport(module: ModuleT, name: Text, *,
                  interp, state: InterpreterState, globals_: Dict[Text, Any]):
     return do_import(name, interp=interp, state=state, globals_=globals_,
-                     more_paths=[module.filename], want_outermost=False)
+                     more_paths=[os.path.dirname(module.filename)],
+                     want_outermost=False)
 
 
 def resolve_level_to_dirpaths(importing_filename: Text,
@@ -232,10 +239,16 @@ def resolve_level_to_dirpaths(importing_filename: Text,
     if level == 0:
         return [dirname]
 
-    paths = [dirname]
+    paths = []
+
+    def add_path(x):
+        assert not os.path.isfile(x)
+        paths.append(x)
+
+    add_path(dirname)
     for _ in range(level-1):
         (dirname, _) = os.path.split(dirname)
-        paths.append(dirname)
+        add_path(dirname)
 
     # Reverse them so that we search the deepest level first.
     paths = paths[::-1]
