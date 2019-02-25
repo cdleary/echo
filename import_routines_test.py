@@ -7,16 +7,23 @@ from interpreter_state import InterpreterState
 
 
 def test_level_resolution():
-    paths = import_routines.resolve_level_to_dirpaths(
-        '/package/subpackage1/__init__.py', level=2)
-    assert paths == ['/package', '/package/subpackage1']
+    path, fqn = import_routines.resolve_level_to_dirpath(
+        importing_filename='/package/subpackage1/__init__.py',
+        importing_fully_qualified_name='package.subpackage1',
+        level=2)
+    assert (path, fqn) == ('/package', 'package')
 
-    paths = import_routines.resolve_level_to_dirpaths(
+    path, fqn = import_routines.resolve_level_to_dirpath(
         '/prefix/.virtualenvs/echo/lib/python3.6/site-packages/'
-        'numpy/__init__.py',
-        level=1)
-    assert paths == [
-        '/prefix/.virtualenvs/echo/lib/python3.6/site-packages/numpy']
+        'numpy/__init__.py', 'numpy', level=1)
+    assert path, fqn == (
+        '/prefix/.virtualenvs/echo/lib/python3.6/site-packages/numpy', 'numpy')
+
+    path, fqn = import_routines.resolve_level_to_dirpath(
+        importing_filename='/prefix/foo.py',
+        importing_fully_qualified_name='__main__',
+        level=0)
+    assert (path, fqn) == (None, '__main__')
 
 
 def test_pep328_example(fs):

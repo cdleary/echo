@@ -41,7 +41,7 @@ def main():
     # Path.
     if len(args) != 1:
         parser.error('A single file argument is required')
-    fullpath = args[0]
+    fullpath = os.path.realpath(args[0])
 
     # Options.
     if opts.log_level:
@@ -55,13 +55,13 @@ def main():
     interp.COLOR_TRACE = opts.ctrace
     interp.COLOR_TRACE_FUNC = opts.ctrace
     interp.COLOR_TRACE_STACK = opts.ctrace_stack
-    import_routines.COLOR_TRACE = opts.ctrace or opts.ctrace_mod
+    import_routines.COLOR_TRACE_LEVEL = opts.ctrace or opts.ctrace_mod
 
     globals_ = dict(globals())
     globals_['__file__'] = fullpath
 
     state = interp.InterpreterState(os.path.dirname(fullpath))
-    state.paths += sys.path[1:]
+    state.paths = sys.path[1:] + state.paths
     fully_qualified = '__main__'
 
     try:

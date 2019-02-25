@@ -543,6 +543,10 @@ def interp(code: types.CodeType,
                     '{}.{}'.format(type_.__name__, argval), bound_self=obj))
         if isinstance(obj, GuestPyObject):
             return obj.getattr(argval)
+        elif obj is sys and argval == 'path':
+            return Result(state.paths)
+        elif obj is sys and argval == 'modules':
+            return Result(state.sys_modules)
         else:
             try:
                 return Result(getattr(obj, argval))
@@ -570,8 +574,10 @@ def interp(code: types.CodeType,
         value = pop()
         if isinstance(obj, GuestPyObject):
             obj.setattr(argval, value)
+        elif obj is sys and argval == 'path':
+            sys.path = state.paths = value
         else:
-            raise NotImplementedError
+            raise NotImplementedError(obj, value)
 
     @dispatched
     def run_COMPARE_OP(arg, argval):
@@ -643,7 +649,7 @@ def interp(code: types.CodeType,
     def run_INPLACE_ADD(arg, argval):
         lhs = pop()
         rhs = pop()
-        if {type(lhs), type(rhs)} <= _BUILTIN_VALUE_TYPES:
+        if {type(lhs), type(rhs)} <= _BUILTIN_VALUE_TYPES | {list}:
             return _run_binop('BINARY_ADD', lhs, rhs, interp_callback)
         else:
             raise NotImplementedError(lhs, rhs)
@@ -719,6 +725,12 @@ def interp(code: types.CodeType,
     @dispatched
     def run_POP_TOP(arg, argval):
         pop()
+
+    @dispatched
+    def run_LIST_APPEND(arg, argval):
+        tos = pop()
+        tos_mi = stack[-arg]
+        list.append(tos_mi, tos)
 
     @dispatched
     def run_POP_BLOCK(arg, argval):
@@ -916,6 +928,8 @@ def interp(code: types.CodeType,
         elif opname == 'DUP_TOP':
             assert stack, 'Cannot DUP_TOP of empty stack.'
             stack = stack + stack[-1:]
+        elif opname == 'ROT_TWO':
+            stack[-1], stack[-2] = stack[-2], stack[-1]
         elif opname == 'ROT_THREE':
             #                                  old first  old second  old third
             stack[-3], stack[-1], stack[-2] = stack[-1], stack[-2], stack[-3]

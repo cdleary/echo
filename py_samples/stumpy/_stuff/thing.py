@@ -1,2 +1,3 @@
-def f():
-    return 64
+from . import other_module
+
+f = other_module.f
