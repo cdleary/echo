@@ -55,7 +55,8 @@ def main():
     interp.COLOR_TRACE = opts.ctrace
     interp.COLOR_TRACE_FUNC = opts.ctrace
     interp.COLOR_TRACE_STACK = opts.ctrace_stack
-    import_routines.COLOR_TRACE_LEVEL = opts.ctrace or opts.ctrace_mod
+    import_routines.COLOR_TRACE_LEVEL = (
+        1 if (opts.ctrace or opts.ctrace_mod) else -1)
 
     globals_ = dict(globals())
     globals_['__file__'] = fullpath

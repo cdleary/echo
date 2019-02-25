@@ -44,9 +44,10 @@ def test_echo_on_sample(path: Text):
             if _is_prefix_of(version, sys.version_info):
                 pytest.xfail('Version marked as known-failing.')
     globals_ = dict(globals())
-    globals_['__file__'] = path
+    fullpath = os.path.realpath(path)
+    globals_['__file__'] = fullpath
     fully_qualified = '__main__'
-    state = interp.InterpreterState(os.path.dirname(path))
+    state = interp.InterpreterState(os.path.dirname(fullpath))
     state.paths += sys.path[1:]
     result = interp.import_path(path, fully_qualified, state)
     assert not result.is_exception(), result.get_exception()

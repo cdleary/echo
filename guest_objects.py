@@ -19,6 +19,10 @@ class GuestPyObject:
     def setattr(self, name: Text, value: Any) -> Any:
         raise NotImplementedError(self, name, value)
 
+    # @abc.abstractmethod
+    def delattr(self, name: Text, value: Any) -> Any:
+        raise NotImplementedError(self, name, value)
+
 
 class GuestModule(GuestPyObject):
     def __init__(self, name: Text, *, filename: Text, code: types.CodeType,
@@ -327,6 +331,8 @@ class GuestBuiltin(GuestPyObject):
         if self.name == 'dict.items':
             assert not args, args
             return Result(self.bound_self.items())
+        if self.name == 'str.format':
+            return Result(self.bound_self.format(*args))
         if self.name == 'list.append':
             return Result(self.bound_self.append(*args))
         if self.name == 'list.insert':

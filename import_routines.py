@@ -109,6 +109,8 @@ def import_path(path: Text, fully_qualified: Text,
         '__name__': fully_qualified,
         '__file__': fullpath,
     }
+    if basename == '__init__.py':
+        globals_['__path__'] = [path]
     module = GuestModule(module_name, code=module_code, globals_=globals_,
                          filename=fullpath)
     ctimport('import_path; fully_qualified: %r module: %r' % (
@@ -161,6 +163,8 @@ def _do_import(name: Text,
 def fqn_join(prefix, suffix):
     if prefix == '__main__' or prefix is None:
         return suffix
+    assert not prefix.endswith('.'), prefix
+    assert not suffix.startswith('.'), suffix
     return prefix + '.' + suffix
 
 
@@ -266,7 +270,7 @@ def resolve_level_to_dirpath(importing_filename: Text,
         dirname, _ = os.path.split(dirname)
         fqn_pieces = fqn_pieces[:-1]
 
-    return dirname, '.'.join(fqn_pieces)
+    return dirname, '.'.join(p for p in fqn_pieces if p)
 
 
 def _module_getattr(module: Union[ModuleType, GuestModule],

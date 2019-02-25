@@ -80,6 +80,7 @@ _COMPARE_OPS = {
 _GUEST_BUILTINS = {
     list: {'append', 'remove', 'insert'},
     dict: {'keys', 'values', 'items'},
+    str: {'format'},
 }
 _BUILTIN_EXCEPTION_TYPES = (
     AssertionError,
@@ -149,7 +150,7 @@ def _run_binop(opname: Text, lhs: Any, rhs: Any, interp) -> Result[Any]:
             and rhs == 0):
         raise NotImplementedError(opname, lhs, rhs)
     if {type(lhs), type(rhs)} <= _BUILTIN_VALUE_TYPES or (
-            type(lhs) is list and opname == 'BINARY_SUBSCR') or (
+            type(lhs) in (list, dict) and opname == 'BINARY_SUBSCR') or (
             type(lhs) == type(rhs) == list and opname == 'BINARY_ADD') or (
             type(lhs) is str and opname == 'BINARY_MODULO'):
         op = _BINARY_OPS[opname]
@@ -723,6 +724,17 @@ def interp(code: types.CodeType,
             del globals_[argval]
 
     @dispatched
+    def run_DELETE_SUBSCR(arg, argval):
+        tos = pop()
+        tos1 = pop()
+        if isinstance(tos1, dict):
+            del tos1[tos]
+        elif isinstance(tos1, GuestPyObject):
+            tos1.delattr(tos)
+        else:
+            raise NotImplementedError(tos, tos1)
+
+    @dispatched
     def run_POP_TOP(arg, argval):
         pop()
 
@@ -833,7 +845,6 @@ def interp(code: types.CodeType,
             # From the Python docs: "The interpreter recalls whether the
             # exception has to be re-raised, or whether the function returns,
             # and continues with the outer-next block."
-            assert handling_exception_data is not None
             if exception_data is None:
                 pass
             else:
