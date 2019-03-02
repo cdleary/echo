@@ -122,10 +122,13 @@ def _find_absolute_import_path(module_name: Text,
         ImportError))
 
 
-def getattr_or_subimport(current_mod: GuestModule,
+def getattr_or_subimport(current_mod: ModuleT,
                          fromlist_name: Text,
                          state: InterpreterState, interp) -> Result[Any]:
     ctimport('Attempting to getattr %r from %r' % (fromlist_name, current_mod))
+    if isinstance(current_mod, ModuleType):
+        return Result(getattr(current_mod, fromlist_name))
+
     result = current_mod.getattr(fromlist_name)
     if not result.is_exception():
         return result
