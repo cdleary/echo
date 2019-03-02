@@ -5,63 +5,90 @@ import interp
 import import_routines
 from interpreter_state import InterpreterState
 
-
-def test_level_resolution():
-    path, fqn = import_routines.resolve_level_to_dirpath(
-        importing_filename='/package/subpackage1/__init__.py',
-        importing_fully_qualified_name='package.subpackage1',
-        level=2)
-    assert (path, fqn) == ('/package', 'package')
-
-    path, fqn = import_routines.resolve_level_to_dirpath(
-        '/prefix/.virtualenvs/echo/lib/python3.6/site-packages/'
-        'numpy/__init__.py', 'numpy', level=1)
-    assert path, fqn == (
-        '/prefix/.virtualenvs/echo/lib/python3.6/site-packages/numpy', 'numpy')
-
-    path, fqn = import_routines.resolve_level_to_dirpath(
-        importing_filename='/prefix/foo.py',
-        importing_fully_qualified_name='__main__',
-        level=0)
-    assert (path, fqn) == (None, '__main__')
+from import_routines import (
+    _find_absolute_import_path, _resolve_module_or_package,
+    _import_module_at_path, _subimport_module_at_path, _import_name,
+    _resolve_level
+)
 
 
-def test_pep328_example(fs):
-    text = textwrap.dedent("""
-    from .moduleY import spam
-    from .moduleY import spam as ham
-    from . import moduleY
-    from ..subpackage1 import moduleY
-    from ..subpackage2.moduleZ import eggs
-    from ..moduleA import foo
-    from ...package import bar
-    from ...sys import path
-    """)
+def test_resolve_level():
+    # Importing from a package.
+    start_path, fqn_prefix = _resolve_level(
+        importing_path='/root/foo/_stuff/__init__.py',
+        importing_fully_qualified_name='foo.stuff',
+        level=1)
+    assert start_path == '/root/foo/_stuff/__init__.py'
+    assert fqn_prefix == 'foo.stuff'
 
-    fs.create_dir('/package')
-    fs.create_file('/package/__init__.py', contents='bar=0')
-    fs.create_dir('/package/subpackage1')
-    fs.create_file('/package/subpackage1/__init__.py')
-    fs.create_file('/package/subpackage1/moduleX.py', contents=text)
-    fs.create_file('/package/subpackage1/moduleY.py', contents='spam=1')
-    fs.create_dir('/package/subpackage2')
-    fs.create_file('/package/subpackage2/__init__.py')
-    fs.create_file('/package/subpackage2/moduleZ.py',
-                   contents="print('moduleZ'); eggs=2")
-    fs.create_file('/package/moduleA.py', contents='foo=3')
+    # Importing from within a package.
+    start_path, fqn_prefix = _resolve_level(
+        importing_path='/root/foo/_stuff/ohai.py',
+        importing_fully_qualified_name='foo.stuff.ohai',
+        level=1)
+    assert start_path == '/root/foo/_stuff/__init__.py'
+    assert fqn_prefix == 'foo.stuff'
 
-    path = import_routines._find_module_path('/package/subpackage1',
-                                             ['moduleX'])
-    assert path == '/package/subpackage1/moduleX.py'
-    path = import_routines._find_module_path('/package', ['moduleA'])
-    assert path == '/package/moduleA.py'
-    path = import_routines._find_module_path('/package', ['subpackage1'])
-    assert path == '/package/subpackage1/__init__.py'
+    # Importing level>1 within a package.
+    start_path, fqn_prefix = _resolve_level(
+        importing_path='/root/foo/_stuff/more/__init__.py',
+        importing_fully_qualified_name='foo.stuff.more',
+        level=3)
+    assert start_path == '/root/foo/__init__.py'
+    assert fqn_prefix == 'foo'
 
-    module_x_path = '/package/subpackage1/moduleX.py'
-    state = InterpreterState(script_directory=os.path.dirname(module_x_path))
-    assert not interp.import_path(
-        module_x_path, 'package.subpackage1.moduleX', state).is_exception()
+
+def test_sample_import_manual_procedure(fs):
+    fs.create_dir('/root/foo')
+    fs.create_file('/root/foo/__init__.py')
+
+    fs.create_dir('/root/foo/bar')
+    fs.create_file('/root/foo/bar/__init__.py')
+    fs.create_file('/root/foo/bar/baz.py', contents='data=42')
+
+    search_paths = ['/root']
+
+    def interp_callback(*args, **kwargs):
+        return interp.interp(*args, **kwargs)
+
+    state = InterpreterState(script_directory='/')
+
+    assert _find_absolute_import_path(
+        'foo', search_paths).get_value() == '/root/foo/__init__.py'
+    foo = _import_module_at_path(
+        '/root/foo/__init__.py', 'foo', state, interp_callback).get_value()
+    bar = _subimport_module_at_path(
+        '/root/foo/bar/__init__.py', 'foo.bar', foo, state,
+        interp_callback).get_value()
+    baz = _subimport_module_at_path(
+        '/root/foo/bar/baz.py', 'foo.bar.baz', bar, state,
+        interp_callback).get_value()
+
+    assert foo.getattr('bar').get_value() is bar
+    assert bar.getattr('baz').get_value() is baz
+
+
+def test_sample_import_name(fs):
+    fs.create_dir('/root/foo')
+    fs.create_file('/root/foo/__init__.py')
+
+    fs.create_dir('/root/foo/bar')
+    fs.create_file('/root/foo/bar/__init__.py')
+    fs.create_file('/root/foo/bar/baz.py', contents='data=42')
+
+    def interp_callback(*args, **kwargs):
+        return interp.interp(*args, **kwargs)
+
+    state = InterpreterState(script_directory='/')
+    result = _import_name(
+        'foo.bar.baz', level=0, fromlist=('data',),
+        importing_path='/script.py', importing_fully_qualified_name='__main__',
+        search_paths=['/root'], state=state, interp=interp_callback)
+    assert not result.is_exception()
+    root, leaf, fromlist_values = result.get_value()
+    assert fromlist_values == (42,)
+    assert leaf.getattr('__name__').get_value() == 'foo.bar.baz'
+    assert root.getattr('__name__').get_value() == 'foo'
 
 
 def test_from_import_attribute(fs):
@@ -79,49 +106,4 @@ def func():
 
     state = InterpreterState(script_directory='/')
     assert not interp.import_path(
-        'my_script.py', 'my_script', state).is_exception()
-
-
-def test_from_package_import_attribute(fs):
-    my_script_text = """
-from some_package import func as some_func
-
-assert some_func() == 42
-"""
-    init_text = """
-def func():
-    return 42
-"""
-    fs.create_file('/my_script.py', contents=my_script_text)
-    fs.create_dir('/some_package')
-    fs.create_file('/some_package/__init__.py', contents=init_text)
-
-    state = InterpreterState(script_directory='/')
-    assert not interp.import_path(
-        'my_script.py', 'my_script', state).is_exception()
-
-
-def test_from_package_import_imported_attribute(fs):
-    my_script_text = """
-from some_package import some_func
-
-assert some_func() == 42
-"""
-    init_text = """
-from some_package.some_mod import func as some_func
-
-assert some_func() == 42
-"""
-    some_mod_text = """
-def func():
-    return 42
-"""
-
-    fs.create_file('/my_script.py', contents=my_script_text)
-    fs.create_dir('/some_package')
-    fs.create_file('/some_package/__init__.py', contents=init_text)
-    fs.create_file('/some_package/some_mod.py', contents=some_mod_text)
-
-    state = InterpreterState(script_directory='/')
-    assert not interp.import_path(
-        'my_script.py', 'my_script', state).is_exception()
+        'my_script.py', '__main__', '__main__', state).is_exception()

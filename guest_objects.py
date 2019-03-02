@@ -25,21 +25,24 @@ class GuestPyObject:
 
 
 class GuestModule(GuestPyObject):
-    def __init__(self, name: Text, *, filename: Text, code: types.CodeType,
-                 globals_: Dict[Text, Any]):
-        self.name = name
+    def __init__(self, fully_qualified_name: Text, *, filename: Text,
+                 code: types.CodeType, globals_: Dict[Text, Any]):
+        self.fully_qualified_name = fully_qualified_name
         self.filename = filename
         self.code = code
         self.globals_ = globals_
 
     def __repr__(self):
-        return 'GuestModule(name={!r}, filename={!r}, ...)'.format(
-            self.name, self.filename)
+        return ('GuestModule(fully_qualified_name={!r}, '
+                'filename={!r}, ...)'.format(
+                    self.fully_qualified_name, self.filename))
 
     def keys(self) -> Iterable[Text]:
         return self.globals_.keys()
 
     def getattr(self, name: Text) -> Result[Any]:
+        if name == '__dict__':
+            return Result(self.globals_)
         try:
             return Result(self.globals_[name])
         except KeyError:

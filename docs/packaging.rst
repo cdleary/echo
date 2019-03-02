@@ -60,6 +60,8 @@ Various concepts involved:
   the specification X.Y.Z" from its subsequent evaluation, only when all of
   "X.Y.Z" were found to be available vs greedily importing the first "X" that
   was found.
+* What happens when both a ``.py`` module and a package directory are present,
+  which one "wins" for the import request?
 
 
 ``__name__``, relative vs absolute, etc.

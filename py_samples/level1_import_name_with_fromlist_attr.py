@@ -1,0 +1,3 @@
+import level1_import_name_with_fromlist_attr_package
+
+assert level1_import_name_with_fromlist_attr_package.foo == 42

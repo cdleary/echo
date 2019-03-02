@@ -152,6 +152,7 @@ def _run_binop(opname: Text, lhs: Any, rhs: Any, interp) -> Result[Any]:
     if {type(lhs), type(rhs)} <= _BUILTIN_VALUE_TYPES or (
             type(lhs) in (list, dict) and opname == 'BINARY_SUBSCR') or (
             type(lhs) == type(rhs) == list and opname == 'BINARY_ADD') or (
+            type(lhs) == type(rhs) == set and opname == 'BINARY_SUBTRACT') or (
             type(lhs) is str and opname == 'BINARY_MODULO'):
         op = _BINARY_OPS[opname]
         return Result(op(lhs, rhs))
@@ -207,6 +208,13 @@ def _compare(opname, lhs, rhs) -> Result[bool]:
                 isinstance(rhs, (GuestInstance, GuestClass))):
             op = _COMPARE_OPS[opname]
             return Result(op(lhs, rhs))
+
+    def is_set_of_strings(x):
+        return isinstance(x, set) and all(isinstance(e, str) for e in x)
+
+    if is_set_of_strings(lhs) and is_set_of_strings(rhs):
+        return Result(lhs == rhs)
+
     raise NotImplementedError(opname, lhs, rhs)
 
 
@@ -525,13 +533,8 @@ def interp(code: types.CodeType,
         if isinstance(module, types.ModuleType):
             return Result(getattr(module, argval))
         elif isinstance(module, GuestModule):
-            result = module.getattr(argval)
-            if result.is_exception():
-                return import_routines.do_subimport(
-                    module, argval, interp=interp_callback, state=state,
-                    globals_=globals_)
-            else:
-                return result
+            return import_routines.getattr_or_subimport(module, argval, state,
+                                                        interp)
         else:
             raise NotImplementedError(module)
 
@@ -792,8 +795,11 @@ def interp(code: types.CodeType,
         for e in t[::-1]:
             push(e)
 
+    line = None
     while True:
         instruction = pc_to_instruction[pc]
+        if instruction.starts_line is not None:
+            line = instruction.starts_line
         TRACE_DUMPER.note_instruction(instruction)
         TRACE_DUMPER.note_block_stack([bs.to_trace() for bs in block_stack])
         assert instruction is not None
@@ -819,6 +825,7 @@ def interp(code: types.CodeType,
                     'Bytecode must return Result', instruction)
                 if result.is_exception():
                     exception_data = result.get_exception()
+                    exception_data.traceback.append((code.co_filename, line))
                     if handle_exception():
                         continue
                     else:
@@ -918,6 +925,11 @@ def interp(code: types.CodeType,
             limit = len(stack)-count
             stack, t = stack[:limit], stack[limit:]
             push(t)
+        elif opname == 'BUILD_SET':
+            count = instruction.arg
+            limit = len(stack)-count
+            stack, t = stack[:limit], stack[limit:]
+            push(set(t))
         elif opname.startswith('BINARY'):
             # Probably need to handle radd and such here.
             rhs = pop()
@@ -1014,12 +1026,13 @@ def run_function(f: types.FunctionType, *args: Tuple[Any, ...],
     return result.get_value()
 
 
-def import_path(path: Text, fully_qualified: Text,
-                state: InterpreterState) -> Result[GuestModule]:
+def import_path(path: Text, module_name: Text, fully_qualified_name: Text,
+                state: InterpreterState) -> Result[import_routines.ModuleT]:
     if COLOR_TRACE_MOD:
-        cprint('Importing; path: %r; fq: %r' % (path, fully_qualified),
+        cprint('Importing; path: %r; fq: %r' % (path, fully_qualified_name),
                color='blue')
-    result = import_routines.import_path(path, fully_qualified, interp, state)
+    result = import_routines.import_path(
+        path, module_name, fully_qualified_name, state, interp)
     if COLOR_TRACE_MOD:
         cprint('Imported; result: %r' % (result), color='blue')
     return result

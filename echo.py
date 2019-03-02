@@ -55,8 +55,8 @@ def main():
     interp.COLOR_TRACE = opts.ctrace
     interp.COLOR_TRACE_FUNC = opts.ctrace
     interp.COLOR_TRACE_STACK = opts.ctrace_stack
-    import_routines.COLOR_TRACE_LEVEL = (
-        1 if (opts.ctrace or opts.ctrace_mod) else -1)
+    if opts.ctrace or opts.ctrace_mod:
+        import_routines.COLOR_TRACE_LEVEL = 1
 
     globals_ = dict(globals())
     globals_['__file__'] = fullpath
@@ -66,7 +66,8 @@ def main():
     fully_qualified = '__main__'
 
     try:
-        result = interp.import_path(fullpath, fully_qualified, state)
+        result = interp.import_path(fullpath, fully_qualified, fully_qualified,
+                                    state)
     except Exception as e:
         if opts.pdb:
             pdb.post_mortem(e.__traceback__)

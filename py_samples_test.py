@@ -46,8 +46,9 @@ def test_echo_on_sample(path: Text):
     globals_ = dict(globals())
     fullpath = os.path.realpath(path)
     globals_['__file__'] = fullpath
-    fully_qualified = '__main__'
+    fully_qualified_name = '__main__'
     state = interp.InterpreterState(os.path.dirname(fullpath))
     state.paths += sys.path[1:]
-    result = interp.import_path(path, fully_qualified, state)
+    result = interp.import_path(path, fully_qualified_name,
+                                fully_qualified_name, state)
     assert not result.is_exception(), result.get_exception()
