@@ -545,7 +545,8 @@ def interp(code: types.CodeType,
             if isinstance(obj, type_) and argval in methods:
                 return Result(GuestBuiltin(
                     '{}.{}'.format(type_.__name__, argval), bound_self=obj))
-        if isinstance(obj, GuestBuiltin) and obj.name == 'type' and argval == '__dict__':
+        if (isinstance(obj, GuestBuiltin) and obj.name == 'type'
+                and argval == '__dict__'):
             return Result(type.__dict__)
         elif isinstance(obj, GuestPyObject):
             return obj.getattr(argval)
