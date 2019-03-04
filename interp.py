@@ -32,14 +32,17 @@ from interp_result import Result, ExceptionData
 import import_routines
 from arg_resolver import resolve_args, CodeAttributes
 from interpreter_state import InterpreterState
-from guest_objects import (GuestModule, GuestFunction, GuestInstance,
-                           GuestBuiltin, GuestPyObject, GuestPartial,
-                           GuestClass, GuestCell, GuestMethod)
+from guest_objects import (
+    GuestModule, GuestFunction, GuestInstance, GuestBuiltin, GuestPyObject,
+    GuestPartial, GuestClass, GuestCell, GuestMethod, GuestGenerator,
+    ReturnKind,
+)
 import bytecode_trace
 
 import termcolor
 
 
+CO_GENERATOR = 0x20
 TRACE_DUMPER = bytecode_trace.FakeTraceDumper()
 _GLOBAL_BYTECODE_COUNT = 0
 COLOR_TRACE_FUNC = False
@@ -91,6 +94,7 @@ _BUILTIN_EXCEPTION_TYPES = (
     ImportError,
     NameError,
     NotImplementedError,
+    StopIteration,
     ValueError,
 )
 
@@ -125,7 +129,7 @@ def code_to_str(c: types.CodeType) -> Text:
 
 def builtins_get(builtins: Union[types.ModuleType, Dict], name: Text) -> Any:
     if name in ('isinstance', 'issubclass', 'super', 'iter', 'type', 'zip',
-                'reversed', 'set'):
+                'reversed', 'set', 'next'):
         return GuestBuiltin(name, None)
     if isinstance(builtins, types.ModuleType):
         return getattr(builtins, name)
@@ -858,7 +862,7 @@ class StatefulFrame:
     def _run_EXTENDED_ARG(self, arg, argval):
         pass  # The to-instruction decoding step already extended the args?
 
-    def _run_one_bytecode(self):
+    def _run_one_bytecode(self) -> Optional[Result[Tuple[Any, ReturnKind]]]:
         global _GLOBAL_BYTECODE_COUNT
         _GLOBAL_BYTECODE_COUNT += 1
 
@@ -882,8 +886,12 @@ class StatefulFrame:
         if instruction.starts_line is not None:
             self.line = instruction.starts_line
 
-        if instruction.opname in ('RETURN_VALUE', 'YIELD_VALUE'):
-            return Result(self._pop())
+        if instruction.opname == 'RETURN_VALUE':
+            return Result((self._pop(), ReturnKind.RETURN))
+
+        if instruction.opname == 'YIELD_VALUE':
+            self.pc += self.pc_to_bc_width[self.pc]
+            return Result((self._peek(), ReturnKind.YIELD))
 
         f = getattr(self, '_run_{}'.format(instruction.opname))
 
@@ -931,11 +939,14 @@ class StatefulFrame:
 
         return None
 
-    def _run_to_return_or_yield(self) -> Result[Any]:
+    def run_to_return_or_yield(self) -> Result[Tuple[Any, ReturnKind]]:
         while True:
             bc_result = self._run_one_bytecode()
             if bc_result is None:
                 continue
+            if COLOR_TRACE:
+                cprint('return-or-yield result: {!r}'.format(bc_result),
+                       color='magenta')
             return bc_result
 
 
@@ -1046,7 +1057,17 @@ def interp(code: types.CodeType,
 
     f = StatefulFrame(code, pc_to_instruction, pc_to_bc_width, locals_,
                       locals_dict, globals_, cellvars, state, in_function)
-    return f._run_to_return_or_yield()
+
+    if code.co_flags & CO_GENERATOR:
+        return Result(GuestGenerator(f))
+
+    result = f.run_to_return_or_yield()
+    if result.is_exception():
+        return Result(result.get_exception())
+
+    v, kind = result.get_value()
+    assert kind == ReturnKind.RETURN
+    return Result(v)
 
 
 def _do_call_functools_partial(

@@ -1,9 +1,13 @@
 def g():
-    yield
+    i = 42
+    yield i
+    i += 22
+    yield i
 
 
 i = g()
-assert next(i) is None
+assert next(i) == 42
+assert next(i) == 64
 
 try:
     next(i)

@@ -81,9 +81,11 @@ class BytecodeTraceDumper(AbstractTraceDumper):
 
     def note_instruction(self, instruction: dis.Instruction):
         self.entries.append(BytecodeTraceEntry(instruction))
+        self.dump()
 
     def note_block_stack(self, block_stack: List[BlockStackEntry]):
         self.entries[-1].block_stack = block_stack
+        self.dump()
 
     def dump(self):
         with open(self.path, 'wb') as f:

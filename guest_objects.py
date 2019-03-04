@@ -3,8 +3,14 @@ import itertools
 import sys
 import types
 from typing import Text, Any, Dict, Iterable, Tuple, Optional, Set
+from enum import Enum
 
 from interp_result import Result, ExceptionData
+
+
+class ReturnKind(Enum):
+    RETURN = 'return'
+    YIELD = 'yield'
 
 
 class GuestPyObject:
@@ -87,6 +93,29 @@ class GuestFunction(GuestPyObject):
 
     def setattr(self, name: Text, value: Any) -> Any:
         raise NotImplementedError
+
+
+class GuestGenerator(GuestPyObject):
+    def __init__(self, f):
+        self.f = f
+
+    def getattr(self, name: Text) -> Result[Any]:
+        raise NotImplementedError
+
+    def setattr(self, name: Text, value: Any) -> Any:
+        raise NotImplementedError
+
+    def next(self) -> Result[Any]:
+        result = self.f.run_to_return_or_yield()
+        if result.is_exception():
+            return Result(result.get_exception())
+
+        v, return_kind = result.get_value()
+        if return_kind == ReturnKind.YIELD:
+            return Result(v)
+
+        assert v is None
+        return Result(ExceptionData(None, None, StopIteration))
 
 
 class GuestMethod(GuestPyObject):
@@ -232,6 +261,13 @@ def _do_issubclass(args: Tuple[Any, ...]) -> Result[bool]:
     return Result(issubclass(args[0], args[1]))
 
 
+def _do_next(args: Tuple[Any, ...]) -> Result[Any]:
+    assert len(args) == 1, args
+    g = args[0]
+    assert isinstance(g, GuestGenerator), g
+    return g.next()
+
+
 def _do_type(args: Tuple[Any, ...]) -> Result[Any]:
     if len(args) == 1:
         if isinstance(args[0], GuestInstance):
@@ -364,6 +400,8 @@ class GuestBuiltin(GuestPyObject):
             return _do_iter(args)
         if self.name == 'type':
             return _do_type(args)
+        if self.name == 'next':
+            return _do_next(args)
         raise NotImplementedError(self.name)
 
     def getattr(self, name: Text) -> Any:
