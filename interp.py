@@ -48,15 +48,18 @@ COLOR_TRACE_MOD = False
 COLOR_TRACE = False
 _BINARY_OPS = {
     'BINARY_LSHIFT': operator.lshift,
+    'BINARY_RSHIFT': operator.rshift,
     'BINARY_ADD': operator.add,
     'BINARY_MODULO': operator.mod,
     'BINARY_MULTIPLY': operator.mul,
     'BINARY_SUBTRACT': operator.sub,
     'BINARY_SUBSCR': operator.getitem,
     'BINARY_TRUE_DIVIDE': operator.truediv,
+    'BINARY_FLOOR_DIVIDE': operator.floordiv,
 }
 _BUILTIN_VALUE_TYPES = {
     int,
+    float,
     str,
     type(None),
 }
@@ -721,6 +724,12 @@ class StatefulFrame:
     def _run_BINARY_ADD(self, arg, argval):
         return self._run_binary('BINARY_ADD', arg, argval)
 
+    def _run_BINARY_LSHIFT(self, arg, argval):
+        return self._run_binary('BINARY_LSHIFT', arg, argval)
+
+    def _run_BINARY_RSHIFT(self, arg, argval):
+        return self._run_binary('BINARY_RSHIFT', arg, argval)
+
     def _run_BINARY_SUBTRACT(self, arg, argval):
         return self._run_binary('BINARY_SUBTRACT', arg, argval)
 
@@ -732,6 +741,12 @@ class StatefulFrame:
 
     def _run_BINARY_MODULO(self, arg, argval):
         return self._run_binary('BINARY_MODULO', arg, argval)
+
+    def _run_BINARY_TRUE_DIVIDE(self, arg, argval):
+        return self._run_binary('BINARY_TRUE_DIVIDE', arg, argval)
+
+    def _run_BINARY_FLOOR_DIVIDE(self, arg, argval):
+        return self._run_binary('BINARY_FLOOR_DIVIDE', arg, argval)
 
     def _run_INPLACE_ADD(self, arg, argval):
         lhs = self._pop()
