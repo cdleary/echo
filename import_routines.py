@@ -396,7 +396,7 @@ def run_IMPORT_NAME(importing_path: Text,
     return Result(leaf)
 
 
-def import_star(module, globals_):
+def import_star(module: GuestModule, globals_: Dict[Text, Any]) -> None:
     for name in module.keys():
         ctimport('import_star; module key: %r' % name)
         if not name.startswith('_'):
