@@ -1,5 +1,6 @@
 saw_invocation = False
 
+
 def decorate(f):
     def wrapper(*args, **kwargs):
         global saw_invocation
@@ -7,9 +8,10 @@ def decorate(f):
         return f(*args, **kwargs)
     return wrapper
 
+
 @decorate
 def foo(bar, baz=True):
-  return (bar, baz)
+    return (bar, baz)
 
 
 assert foo(baz=False, bar=42) == (42, False)

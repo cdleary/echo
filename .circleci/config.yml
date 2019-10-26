@@ -44,3 +44,8 @@ jobs:
             . venv/bin/activate
             pytype --config=pytype.cfg --python-version=3.6
 
+      - run:
+          name: pycodestyle
+          command: |
+            . venv/bin/activate
+            pycodestyle .

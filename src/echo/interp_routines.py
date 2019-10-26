@@ -154,7 +154,7 @@ def compare(opname: Text, lhs, rhs) -> Result[bool]:
             if not e_result.get_value():
                 return Result(False)
         return Result(True)
-            
+
     if opname in ('in', 'not in') and type(rhs) in (
             tuple, list, dict, type(os.environ)):
         for e in rhs:

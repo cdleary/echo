@@ -8,7 +8,8 @@ class CodeAttributes:
     GENERATOR_FLAG = 0x20
 
     def __init__(self, argcount: int, kwonlyargcount: int, nlocals: int,
-                 starargs: bool, starkwargs: bool, varnames: Tuple[Text], generator: bool,
+                 starargs: bool, starkwargs: bool, varnames: Tuple[Text],
+                 generator: bool,
                  code: Optional[types.CodeType] = None):
         self.argcount = argcount
         self.kwonlyargcount = kwonlyargcount

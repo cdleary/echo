@@ -105,7 +105,9 @@ def resolve_args(attrs: CodeAttributes,
             index = arg_names.index(kw)
         except ValueError:
             if starkwarg_index is not None:
-                arg_slots[starkwarg_index][kw] = arg
+                star_kwargs = arg_slots[starkwarg_index]
+                assert isinstance(star_kwargs, dict)
+                star_kwargs[kw] = arg
                 continue
             print('attempted to resolve keyword:  ', kw, file=sys.stderr)
             print('against arg_names:', arg_names, file=sys.stderr)
