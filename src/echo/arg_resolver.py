@@ -3,51 +3,9 @@ import types
 from typing import Text, Dict, Optional, Tuple, Any, List
 
 from echo.interp_result import Result
+from echo.code_attributes import CodeAttributes
 
 from termcolor import cprint
-
-
-class CodeAttributes:
-    STARARGS_FLAG = 0x04
-
-    def __init__(self, argcount: int, kwonlyargcount: int, nlocals: int,
-                 starargs: bool, varnames: Tuple[Text],
-                 code: Optional[types.CodeType] = None):
-        self.argcount = argcount
-        self.kwonlyargcount = kwonlyargcount
-        self.nlocals = nlocals
-        self.varnames = varnames
-        self.starargs = starargs
-        self.code = code
-
-    @property
-    def total_argcount(self):
-        """Returns the total number of argument slots.
-
-        In functions like:
-
-            def f(x, *, y=3, z=4): ...
-
-        argcount=1 and kwargcount=2, but there are three local slots
-        attributable to args. This attribute is `3` for that function.
-        """
-        return self.argcount + self.kwonlyargcount + self.starargs
-
-    def __repr__(self) -> Text:
-        return ('CodeAttributes(argcount={0.argcount}, '
-                'kwonlyargcount={0.kwonlyargcount}, '
-                'nlocals={0.nlocals}, varnames={0.varnames}, '
-                'starargs={0.starargs}, '
-                'total_argcount={0.total_argcount})').format(self)
-
-    @classmethod
-    def from_code(cls, code: types.CodeType) -> 'CodeAttributes':
-        return cls(argcount=code.co_argcount,
-                   kwonlyargcount=code.co_kwonlyargcount,
-                   nlocals=code.co_nlocals,
-                   varnames=code.co_varnames,
-                   starargs=bool(code.co_flags & cls.STARARGS_FLAG),
-                   code=code)
 
 
 def resolve_args(attrs: CodeAttributes,
@@ -56,7 +14,7 @@ def resolve_args(attrs: CodeAttributes,
                  defaults: Optional[Tuple[Any, ...]] = None,
                  kwarg_defaults: Optional[Dict[Text, Any]] = None) -> Result[
         Tuple[List[Any], int]]:
-    """Returns the argument prefix that is pre-pended to local slots."""
+    """Returns argument prefix that is pre-pended to local slots of a frame."""
     args = args or ()
     kwargs = kwargs or {}
     defaults = defaults or ()
@@ -99,7 +57,7 @@ def resolve_args(attrs: CodeAttributes,
     if defaults:
         default_required[-len(defaults):] = list(range(len(defaults)))
 
-    def in_stararg_position(argno):
+    def in_stararg_position(argno: int) -> Tuple[bool, int]:
         if attrs.starargs:
             needed_at_end = attrs.kwonlyargcount
             needed_at_start = attrs.argcount
@@ -108,10 +66,11 @@ def resolve_args(attrs: CodeAttributes,
             if argno >= len(args)-needed_at_end:
                 delta_from_end = len(args)-argno
                 return (False, len(arg_slots)-delta_from_end-1)
+            assert stararg_index is not None
             return (True, stararg_index)
         return (False, argno)
 
-    def populate_positional(argno: int, value: Any):
+    def populate_positional(argno: int, value: Any) -> None:
         assert len(arg_slots) == attrs.total_argcount
         assert len(default_required) == attrs.total_argcount, default_required
         stararg_info = in_stararg_position(argno)

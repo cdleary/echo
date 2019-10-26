@@ -12,6 +12,10 @@ from echo.guest_objects import (
 import termcolor
 
 
+GUEST_BUILTIN_NAMES = (
+    'isinstance', 'issubclass', 'super', 'iter', 'type', 'zip', 'reversed',
+    'next',
+)
 BUILTIN_EXCEPTION_TYPES = (
     AssertionError,
     AttributeError,
@@ -102,8 +106,7 @@ def code_to_str(c: types.CodeType) -> Text:
 
 
 def builtins_get(builtins: Union[types.ModuleType, Dict], name: Text) -> Any:
-    if name in ('isinstance', 'issubclass', 'super', 'iter', 'type', 'zip',
-                'reversed', 'set', 'next'):
+    if name in GUEST_BUILTIN_NAMES:
         return GuestBuiltin(name, None)
     if isinstance(builtins, types.ModuleType):
         return getattr(builtins, name)
@@ -172,11 +175,11 @@ def method_requires_self(obj, value) -> bool:
     return False
 
 
-def cprint(msg, color, file=sys.stderr, end='\n'):
+def cprint(msg, color, file=sys.stderr, end='\n') -> None:
     termcolor.cprint(msg, color=color, file=file, end=end)
 
 
-def cprint_lines_after(filename: Text, lineno: int):
+def cprint_lines_after(filename: Text, lineno: int) -> None:
     with open(filename) as f:
         lines = f.readlines()
     lines = lines[lineno-1:]

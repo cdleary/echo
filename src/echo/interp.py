@@ -1,14 +1,4 @@
-"""(Metacircular) interpreter loop implementation.
-
-Notes
------
-
-co_flags:
-
-* 0x04: function uses *args
-* 0x08: function uses **kwargs
-* 0x20: generator function
-"""
+"""(Metacircular) interpreter loop implementation."""
 
 import abc
 import builtins
@@ -37,9 +27,6 @@ from echo.guest_objects import (
 )
 from echo import interp_routines
 from echo.frame_objects import StatefulFrame, UnboundLocalSentinel
-
-
-CO_GENERATOR = 0x20
 
 
 def interp(code: types.CodeType,
@@ -72,9 +59,7 @@ def interp(code: types.CodeType,
     whether performance will be important, but this makes it easy for early
     prototyping.
 
-    TODO(cdleary, 2019-01-20): factor.
-
-    TODO(cdleary, 2019-01-21): Use dis.stack_effect to cross-check stack depth
+    TODO(cdleary): 2019-01-21 Use dis.stack_effect to cross-check stack depth
         change.
     """
     closure = closure or ()
@@ -126,7 +111,7 @@ def interp(code: types.CodeType,
                       locals_dict, globals_, cellvars, state, in_function,
                       interp_callback, do_call_callback)
 
-    if code.co_flags & CO_GENERATOR:
+    if attrs.generator:
         return Result(GuestGenerator(f))
 
     result = f.run_to_return_or_yield()

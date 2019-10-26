@@ -1,1 +1,7 @@
 assert isinstance(0, int)
+assert isinstance('', str)
+assert isinstance(0.0, float)
+assert isinstance([], list)
+assert isinstance((), tuple)
+assert isinstance({}, dict)
+assert isinstance(set(), set)

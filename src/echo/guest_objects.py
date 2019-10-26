@@ -242,13 +242,12 @@ class GuestClass(GuestPyObject):
 
 def _do_isinstance(args: Tuple[Any, ...]) -> Result[bool]:
     assert len(args) == 2, args
-    if args[1] is int:
-        return Result(isinstance(args[0], int))
-    if args[1] is str:
-        return Result(isinstance(args[0], str))
+    for t in (int, str, float, dict, list, tuple, set):
+        if args[1] is t:
+            return Result(isinstance(args[0], t))
     if args[1] is type:
         return Result(isinstance(args[0], (type, GuestClass)))
-    if issubclass(args[1], Exception):
+    if isinstance(args[1], type) and issubclass(args[1], Exception):
         return Result(isinstance(args[0], args[1]))
     raise NotImplementedError(args)
 
@@ -350,6 +349,8 @@ def _do_iter(args: Tuple[Any, ...]) -> Result[Any]:
 
 
 class GuestBuiltin(GuestPyObject):
+    """A builtin function in the echo VM."""
+
     def __init__(self, name: Text, bound_self: Any):
         self.name = name
         self.bound_self = bound_self
@@ -384,8 +385,6 @@ class GuestBuiltin(GuestPyObject):
             return Result(zip(*args))
         if self.name == 'reversed':
             return Result(reversed(*args))
-        if self.name == 'set':
-            return Result(set(*args))
         if self.name == 'isinstance':
             return _do_isinstance(args)
         if self.name == 'issubclass':

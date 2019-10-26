@@ -21,6 +21,7 @@ class ExceptionData:
 
 
 class Result(Generic[T]):
+    """Represents either a value returned from execution or an exception."""
 
     def __init__(self, value: Union[T, ExceptionData]):
         self.value = value
