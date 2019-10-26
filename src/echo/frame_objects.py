@@ -9,15 +9,15 @@ from typing import (
 )
 from enum import Enum
 
-import import_routines
-from guest_objects import (
+from echo import import_routines
+from echo.guest_objects import (
     GuestCell, ReturnKind, GuestBuiltin, GuestFunction, GuestPyObject,
     GuestModule,
 )
-from interpreter_state import InterpreterState
-from interp_result import Result, ExceptionData
-import interp_routines
-import bytecode_trace
+from echo.interpreter_state import InterpreterState
+from echo.interp_result import Result, ExceptionData
+from echo import interp_routines
+from echo import bytecode_trace
 
 
 GUEST_BUILTINS = {

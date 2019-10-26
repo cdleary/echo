@@ -5,7 +5,7 @@ from typing import Tuple, Any, Text
 
 import pytest
 
-import interp
+from echo import interp
 
 
 SAMPLE_DIR = 'py_samples'

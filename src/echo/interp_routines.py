@@ -4,8 +4,8 @@ import sys
 import types
 from typing import Text, Any, Union, Dict
 
-from interp_result import Result
-from guest_objects import (
+from echo.interp_result import Result
+from echo.guest_objects import (
     GuestInstance, GuestBuiltin, GuestModule, GuestFunction, GuestClass,
 )
 

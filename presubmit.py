@@ -10,7 +10,7 @@ import termcolor
 VERSION_MAJOR_MINOR = '.'.join(str(e) for e in sys.version_info[:2])
 
 
-subprocess.check_call(['python', '-m', 'pytest'])
+subprocess.check_call(['pytest'])
 subprocess.check_call([
     'pytype', '--config=pytype.cfg',
     '--python-version=%s' % VERSION_MAJOR_MINOR,

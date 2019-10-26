@@ -1,11 +1,11 @@
 import os
 import textwrap
 
-import interp
-import import_routines
-from interpreter_state import InterpreterState
+from echo import interp
+from echo import import_routines
+from echo.interpreter_state import InterpreterState
 
-from import_routines import (
+from echo.import_routines import (
     _find_absolute_import_path, _resolve_module_or_package,
     _import_module_at_path, _subimport_module_at_path, _import_name,
     _resolve_level

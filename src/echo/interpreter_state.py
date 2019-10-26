@@ -1,7 +1,7 @@
 import types
 from typing import Dict, Text, Union, Optional
 
-from guest_objects import GuestModule
+from echo.guest_objects import GuestModule
 
 
 class InterpreterState:

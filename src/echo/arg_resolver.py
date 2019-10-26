@@ -2,7 +2,7 @@ import sys
 import types
 from typing import Text, Dict, Optional, Tuple, Any, List
 
-from interp_result import Result
+from echo.interp_result import Result
 
 from termcolor import cprint
 

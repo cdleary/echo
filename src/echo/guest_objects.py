@@ -5,7 +5,7 @@ import types
 from typing import Text, Any, Dict, Iterable, Tuple, Optional, Set
 from enum import Enum
 
-from interp_result import Result, ExceptionData
+from echo.interp_result import Result, ExceptionData
 
 
 class ReturnKind(Enum):

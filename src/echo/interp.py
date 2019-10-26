@@ -25,18 +25,18 @@ from io import StringIO
 from typing import (Dict, Any, Text, Tuple, List, Optional, Union, Sequence,
                     Iterable, cast)
 
-from common import dis_to_str, get_code
-from interp_result import Result, ExceptionData
-import import_routines
-from arg_resolver import resolve_args, CodeAttributes
-from interpreter_state import InterpreterState
-from guest_objects import (
+from echo.common import dis_to_str, get_code
+from echo.interp_result import Result, ExceptionData
+from echo import import_routines
+from echo.arg_resolver import resolve_args, CodeAttributes
+from echo.interpreter_state import InterpreterState
+from echo.guest_objects import (
     GuestModule, GuestFunction, GuestInstance, GuestBuiltin, GuestPyObject,
     GuestPartial, GuestClass, GuestCell, GuestMethod, GuestGenerator,
     ReturnKind,
 )
-import interp_routines
-from frame_objects import StatefulFrame, UnboundLocalSentinel
+from echo import interp_routines
+from echo.frame_objects import StatefulFrame, UnboundLocalSentinel
 
 
 CO_GENERATOR = 0x20

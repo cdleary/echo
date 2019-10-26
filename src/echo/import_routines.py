@@ -7,9 +7,9 @@ from typing import (
     Text, Dict, Any, Optional, Union, Sequence, List, Tuple, Callable,
 )
 
-from interp_result import Result, ExceptionData
-from interpreter_state import InterpreterState
-from guest_objects import GuestModule
+from echo.interp_result import Result, ExceptionData
+from echo.interpreter_state import InterpreterState
+from echo.guest_objects import GuestModule
 
 from termcolor import cprint
 

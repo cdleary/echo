@@ -16,9 +16,9 @@ import pdb
 import sys
 import types
 
-import interp
-import import_routines
-import bytecode_trace
+from echo import interp
+from echo import import_routines
+from echo import bytecode_trace
 
 from termcolor import cprint
 

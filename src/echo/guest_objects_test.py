@@ -1,4 +1,4 @@
-from guest_objects import GuestClass
+from echo.guest_objects import GuestClass
 
 
 def test_subtype():
