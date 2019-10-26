@@ -242,7 +242,7 @@ class GuestClass(GuestPyObject):
 
 def _do_isinstance(args: Tuple[Any, ...]) -> Result[bool]:
     assert len(args) == 2, args
-    for t in (int, str, float, dict, list, tuple, set):
+    for t in (bool, int, str, float, dict, list, tuple, set):
         if args[1] is t:
             return Result(isinstance(args[0], t))
     if args[1] is type:

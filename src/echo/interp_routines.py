@@ -155,7 +155,7 @@ def compare(opname: Text, lhs, rhs) -> Result[bool]:
             op = COMPARE_OPS[opname]
             return Result(op(lhs, rhs))
 
-    def is_set_of_strings(x):
+    def is_set_of_strings(x: Any) -> bool:
         return isinstance(x, set) and all(isinstance(e, str) for e in x)
 
     if is_set_of_strings(lhs) and is_set_of_strings(rhs):
