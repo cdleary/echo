@@ -48,4 +48,4 @@ jobs:
           name: pycodestyle
           command: |
             . venv/bin/activate
-            pycodestyle .
+            pycodestyle src/ tests/
