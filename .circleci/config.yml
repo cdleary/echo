@@ -42,5 +42,5 @@ jobs:
           name: pytype
           command: |
             . venv/bin/activate
-            pytype --config=pytype.cfg --python-version=3.6.1
+            pytype --config=pytype.cfg --python-version=3.6
 
