@@ -13,9 +13,7 @@ class ReturnKind(Enum):
     YIELD = 'yield'
 
 
-class GuestPyObject:
-
-    __metaclass__ = abc.ABCMeta
+class GuestPyObject(metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def getattr(self, name: Text) -> Result[Any]:
