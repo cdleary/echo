@@ -39,6 +39,7 @@ BUILTIN_VALUE_TYPES = {
     int,
     float,
     str,
+    tuple,
     type(None),
 }
 CODE_ATTRS = [
