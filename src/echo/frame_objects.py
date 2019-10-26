@@ -336,7 +336,9 @@ class StatefulFrame:
             kwarg_defaults = self._pop() if arg & 0x02 else None
             positional_defaults = self._pop() if arg & 0x01 else None
             if annotation_dict:
-                raise NotImplementedError(annotation_dict)
+                # TODO(cdleary): 2019-10-26 We just ignore this for now.
+                # raise NotImplementedError(annotation_dict)
+                pass
         else:
             # 3.5 documentation:
             # https://docs.python.org/3.5/library/dis.html#opcode-MAKE_FUNCTION
@@ -485,7 +487,8 @@ class StatefulFrame:
         if argval == 'exception match':
             return Result(interp_routines.exception_match(lhs, rhs))
         else:
-            return interp_routines.compare(argval, lhs, rhs)
+            return interp_routines.compare(
+                argval, lhs, rhs, self.interp_callback, self.interpreter_state)
 
     def _run_END_FINALLY(self, arg, argval):
         # From the Python docs: "The interpreter recalls whether the

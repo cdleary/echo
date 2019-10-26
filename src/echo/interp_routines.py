@@ -2,9 +2,10 @@ import operator
 import os
 import sys
 import types
-from typing import Text, Any, Union, Dict
+from typing import Text, Any, Union, Dict, Callable
 
 from echo.interp_result import Result
+from echo.interpreter_state import InterpreterState
 from echo.guest_objects import (
     GuestInstance, GuestBuiltin, GuestModule, GuestFunction, GuestClass,
 )
@@ -12,6 +13,13 @@ from echo.guest_objects import (
 import termcolor
 
 
+OPNAME_TO_SPECIAL = {
+    'BINARY_SUBTRACT': '__sub__',
+    'BINARY_ADD': '__add__',
+}
+COMPARE_TO_SPECIAL = {
+    '==': '__eq__',
+}
 GUEST_BUILTIN_NAMES = (
     'isinstance', 'issubclass', 'super', 'iter', 'type', 'zip', 'reversed',
     'next',
@@ -74,12 +82,12 @@ def run_binop(opname: Text, lhs: Any, rhs: Any, interp) -> Result[Any]:
         op = _BINARY_OPS[opname]
         return Result(op(lhs, rhs))
 
-    if opname == 'BINARY_SUBTRACT' and isinstance(lhs, GuestInstance):
-        sub_f = lhs.getattr('__sub__')
-        if sub_f.is_exception():
-            raise NotImplementedError(sub_f)
-        return sub_f.get_value().invoke(args=(rhs,), kwargs=None,
-                                        interp=interp)
+    if opname in OPNAME_TO_SPECIAL and isinstance(lhs, GuestInstance):
+        special_f = lhs.getattr(OPNAME_TO_SPECIAL[opname])
+        if special_f.is_exception():
+            raise NotImplementedError(special_f)
+        return special_f.get_value().invoke(args=(rhs,), kwargs=None,
+                                            interp=interp)
 
     raise NotImplementedError(opname, lhs, rhs)
 
@@ -122,7 +130,8 @@ def exception_match(lhs, rhs) -> bool:
     raise NotImplementedError(lhs, rhs)
 
 
-def compare(opname: Text, lhs, rhs) -> Result[bool]:
+def compare(opname: Text, lhs, rhs, interp_callback: Callable,
+            state: InterpreterState) -> Result[bool]:
     if (isinstance(lhs, BUILTIN_VALUE_TYPES_TUP)
             and isinstance(rhs, BUILTIN_VALUE_TYPES_TUP)):
         return Result(COMPARE_OPS[opname](lhs, rhs))
@@ -135,7 +144,7 @@ def compare(opname: Text, lhs, rhs) -> Result[bool]:
         if len(lhs) != len(rhs):
             return Result(False)
         for e, f in zip(lhs, rhs):
-            e_result = compare(opname, e, f)
+            e_result = compare(opname, e, f, interp_callback, state)
             if e_result.is_exception():
                 return e_result
             if not e_result.get_value():
@@ -148,7 +157,7 @@ def compare(opname: Text, lhs, rhs) -> Result[bool]:
         for k in set(lhs.keys()) | set(rhs.keys()):
             if k not in lhs or k not in rhs:
                 return Result(False)
-            e_result = compare(opname, lhs[k], rhs[k])
+            e_result = compare(opname, lhs[k], rhs[k], interp_callback, state)
             if e_result.is_exception():
                 return e_result
             if not e_result.get_value():
@@ -158,17 +167,25 @@ def compare(opname: Text, lhs, rhs) -> Result[bool]:
     if opname in ('in', 'not in') and type(rhs) in (
             tuple, list, dict, type(os.environ)):
         for e in rhs:
-            e_result = compare('==', lhs, e)
+            e_result = compare('==', lhs, e, interp_callback, state)
             if e_result.is_exception():
                 return e_result
             if e_result.get_value():
                 return Result(opname == 'in')
         return Result(opname == 'not in')
+
     if opname in ('is', 'is not'):
         if (isinstance(lhs, (GuestInstance, GuestClass)) and
                 isinstance(rhs, (GuestInstance, GuestClass))):
             op = COMPARE_OPS[opname]
             return Result(op(lhs, rhs))
+
+    if opname in COMPARE_TO_SPECIAL and isinstance(lhs, GuestInstance):
+        special_f = lhs.getattr(COMPARE_TO_SPECIAL[opname])
+        if special_f.is_exception():
+            raise NotImplementedError(special_f)
+        return special_f.get_value().invoke(args=(rhs,), kwargs=None,
+                                            interp=interp_callback)
 
     def is_set_of_strings(x: Any) -> bool:
         return isinstance(x, set) and all(isinstance(e, str) for e in x)
