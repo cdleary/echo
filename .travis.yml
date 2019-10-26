@@ -10,7 +10,6 @@ matrix:
       sudo: true
 
 script:
-- echo "Travis Python version: $TRAVIS_PYTHON_VERSION"
 - pytype --config=pytype.cfg --python-version=$TRAVIS_PYTHON_VERSION
 - python -m pytest
 - pycodestyle .
