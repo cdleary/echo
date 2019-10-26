@@ -95,9 +95,7 @@ def interp(code: types.CodeType,
 
     arg_locals, additional_local_count = arg_result.get_value()
 
-    locals_ = (
-        arg_locals +
-        [UnboundLocalSentinel] * additional_local_count)  # type: List[Any]
+    locals_ = (arg_locals + [UnboundLocalSentinel] * additional_local_count)
     cellvars = tuple(GuestCell(name) for name in code.co_cellvars) + closure
 
     # Cellvars that match argument names get populated with the argument value,
@@ -113,10 +111,8 @@ def interp(code: types.CodeType,
             cellvars[i].set(local_value)
 
     instructions = tuple(dis.get_instructions(code))
-    pc_to_instruction = [None] * (
-        instructions[-1].offset+1)  # type: List[Optional[dis.Instruction]]
-    pc_to_bc_width = [None] * (
-        instructions[-1].offset+1)  # type: List[Optional[int]]
+    pc_to_instruction = [None] * (instructions[-1].offset+1)
+    pc_to_bc_width = [None] * (instructions[-1].offset+1)
     for i, instruction in enumerate(instructions):
         pc_to_instruction[instruction.offset] = instruction
         if i+1 != len(instructions):

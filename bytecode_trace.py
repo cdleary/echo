@@ -44,8 +44,7 @@ class BytecodeTraceEntry:
         return '[{}]'.format(', '.join(str(e) for e in self.block_stack))
 
 
-class AbstractTraceDumper:
-    __metaclass__ = abc.ABCMeta
+class AbstractTraceDumper(metaclass=abc.ABCMeta):
 
     def __init__(self):
         self.entries = []  # type: List[BytecodeTraceEntry]
