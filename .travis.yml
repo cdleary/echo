@@ -9,12 +9,6 @@ matrix:
       dist: xenial
       sudo: true
 
-install:
-- pip install pytype
-- pip install pycodestyle
-- pip install termcolor
-- pip install pyfakefs
-
 script:
 - pytype --config=pytype.cfg --python-version=$TRAVIS_PYTHON_VERSION
 - python -m pytest
