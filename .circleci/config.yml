@@ -33,7 +33,14 @@ jobs:
           key: v1-dependencies-{{ checksum "requirements.txt" }}
 
       - run:
-          name: run tests
+          name: pytest
           command: |
             . venv/bin/activate
             python -m pytest
+
+      - run:
+          name: pytype
+          command: |
+            . venv/bin/activate
+            pytype --config=pytype.cfg --python-version=3.6.1
+
