@@ -30,8 +30,8 @@ def ctimport(msg, level=0):
 
 def _import_module_at_path(path: Text,
                            fully_qualified_name: Text,
-                           state: InterpreterState,
-                           interp) -> Result[GuestModule]:
+                           interp_callback: Callable,
+                           state: InterpreterState) -> Result[GuestModule]:
     """Imports a module at the given path and runs its code.
 
     * Reads in the file,
@@ -66,8 +66,7 @@ def _import_module_at_path(path: Text,
         fully_qualified_name, code=module_code, globals_=globals_,
         filename=path)
     state.sys_modules[fully_qualified_name] = module
-    result = interp(module_code, globals_=globals_, in_function=False,
-                    state=state)
+    result = interp_callback(module_code, globals_=globals_, in_function=False)
     if result.is_exception():
         return result
     return Result(module)
@@ -76,11 +75,11 @@ def _import_module_at_path(path: Text,
 def _subimport_module_at_path(path: Text,
                               fully_qualified_name: Text,
                               containing_package: GuestModule,
-                              state: InterpreterState,
-                              interp) -> Result[GuestModule]:
+                              interp_callback: Callable,
+                              state: InterpreterState) -> Result[GuestModule]:
     assert isinstance(fully_qualified_name, str), fully_qualified_name
     mod_result = _import_module_at_path(
-        path, fully_qualified_name, state, interp)
+        path, fully_qualified_name, interp_callback, state)
     if mod_result.is_exception():
         return mod_result
 
@@ -124,7 +123,8 @@ def _find_absolute_import_path(module_name: Text,
 
 def getattr_or_subimport(current_mod: ModuleT,
                          fromlist_name: Text,
-                         state: InterpreterState, interp) -> Result[Any]:
+                         interp_callback: Callable,
+                         state: InterpreterState) -> Result[Any]:
     ctimport('Attempting to getattr %r from %r' % (fromlist_name, current_mod))
     if isinstance(current_mod, ModuleType):
         return Result(getattr(current_mod, fromlist_name))
@@ -141,21 +141,21 @@ def getattr_or_subimport(current_mod: ModuleT,
 
     return _subimport_module_at_path(
         path, fqn_join(current_mod.fully_qualified_name, fromlist_name),
-        current_mod, state, interp)
+        current_mod, interp_callback, state)
 
 
 def _extract_fromlist(start_module: ModuleT,
                       module: ModuleT,
                       fromlist: Optional[Sequence[Text]],
-                      state: InterpreterState,
-                      interp) -> Result[Tuple[Any, ...]]:
+                      interp_callback: Callable,
+                      state: InterpreterState) -> Result[Tuple[Any, ...]]:
     if fromlist is None or fromlist == ('*',):
         return Result((start_module, module, ()))
 
     results = []  # List[Any]
     for name in fromlist:
         ctimport('resolving fromlist name %r against %r' % (name, module))
-        result = getattr_or_subimport(module, name, state, interp)
+        result = getattr_or_subimport(module, name, interp_callback, state)
         if result.is_exception():
             return Result(result.get_exception())
         results.append(result.get_value())
@@ -188,8 +188,8 @@ def fqn_join(x: Text, y: Text) -> Text:
 
 def _traverse_module_pieces(
         current_mod: ModuleT, current_dirpath: Text,
-        multi_module_pieces: Tuple[Text], state: InterpreterState,
-        interp) -> Result[ModuleT]:
+        multi_module_pieces: Tuple[Text], interp_callback: Callable,
+        state: InterpreterState) -> Result[ModuleT]:
     # Iterate through the "pieces" to import, advancing current_mod as we go.
     for i, piece in enumerate(multi_module_pieces):
         path_result = _resolve_module_or_package(current_dirpath, piece)
@@ -202,7 +202,7 @@ def _traverse_module_pieces(
                     fqn, path))
         assert isinstance(fqn, str), fqn
         new_mod = _subimport_module_at_path(
-            path, fqn, current_mod, state, interp)
+            path, fqn, current_mod, interp_callback, state)
         if new_mod.is_exception():
             return Result(new_mod.get_exception())
         current_dirpath = os.path.dirname(path)
@@ -231,9 +231,10 @@ def _resolve_level(
     return (path, fqn_prefix)
 
 
-def _ascend_to_target_package(level: int, importing_path: Text,
-                              importing_fqn: Text, state: InterpreterState,
-                              interp) -> Result[Tuple[ModuleT, Text]]:
+def _ascend_to_target_package(
+    level: int, importing_path: Text, importing_fqn: Text,
+    interp_callback: Callable, state: InterpreterState
+        ) -> Result[Tuple[ModuleT, Text]]:
     def to_package(path, fqn):
         if os.path.basename(path) == '__init__.py':
             return path, fqn
@@ -250,7 +251,7 @@ def _ascend_to_target_package(level: int, importing_path: Text,
     for _ in range(level-1):
         path, fqn = parent(path, fqn)
 
-    import_result = _import_module_at_path(path, fqn, state, interp)
+    import_result = _import_module_at_path(path, fqn, interp_callback, state)
     if import_result.is_exception():
         return Result(import_result.get_exception())
     return Result((import_result.get_value(), os.path.dirname(path)))
@@ -262,22 +263,24 @@ def _import_name_with_level(
         fromlist: Optional[Tuple[Text]],
         importing_path: Text,
         importing_fully_qualified_name: Text,
-        state: InterpreterState,
-        interp) -> Result[Tuple[ModuleT, ModuleT, Tuple[Any, ...]]]:
+        interp_callback: Callable,
+        state: InterpreterState
+            ) -> Result[Tuple[ModuleT, ModuleT, Tuple[Any, ...]]]:
     start_mod_result = _ascend_to_target_package(
-        level, importing_path, importing_fully_qualified_name, state, interp)
+        level, importing_path, importing_fully_qualified_name, interp_callback,
+        state)
     if start_mod_result.is_exception():
         return Result(start_mod_result.get_exception())
     start_mod, start_dirpath = start_mod_result.get_value()
 
     multi_module_pieces = tuple(multi_module_name.split('.'))
     current_mod = _traverse_module_pieces(
-        start_mod, start_dirpath, multi_module_pieces, state, interp)
+        start_mod, start_dirpath, multi_module_pieces, interp_callback, state)
     if current_mod.is_exception():
         return Result(current_mod.get_exception())
 
     return _extract_fromlist(start_mod, current_mod.get_value(), fromlist,
-                             state, interp)
+                             interp_callback, state)
 
 
 def _import_name_without_level(
@@ -286,8 +289,9 @@ def _import_name_without_level(
         importing_path: Text,
         importing_fully_qualified_name: Text,
         search_paths: Sequence[Text],
-        state: InterpreterState,
-        interp) -> Result[Tuple[ModuleT, ModuleT, Tuple[Any, ...]]]:
+        interp_callback: Callable,
+        state: InterpreterState
+            ) -> Result[Tuple[ModuleT, ModuleT, Tuple[Any, ...]]]:
     multi_module_pieces = tuple(multi_module_name.split('.'))
     start_path_result = _find_absolute_import_path(multi_module_pieces[0],
                                                    search_paths)
@@ -300,7 +304,7 @@ def _import_name_without_level(
 
     # First import the "start path" as the first module-or-package.
     start_mod_result = _import_module_at_path(
-        start_path, start_fqn, state, interp)
+        start_path, start_fqn, interp_callback, state)
     if start_mod_result.is_exception():
         return Result(start_mod_result.get_exception())
     start_mod = start_mod_result.get_value()
@@ -312,13 +316,14 @@ def _import_name_without_level(
 
     # Then traverse from that "start module" via the multi_module_pieces.
     current_mod = _traverse_module_pieces(
-        start_mod, start_dirpath, multi_module_pieces[1:], state, interp)
+        start_mod, start_dirpath, multi_module_pieces[1:], interp_callback,
+        state)
     if current_mod.is_exception():
         return Result(current_mod.get_exception())
 
     ctimport(' _import_name: resolved mod: %r' % (current_mod,))
     return _extract_fromlist(start_mod, current_mod.get_value(), fromlist,
-                             state, interp)
+                             interp_callback, state)
 
 
 def _import_name(multi_module_name: Text,
@@ -327,8 +332,9 @@ def _import_name(multi_module_name: Text,
                  importing_path: Text,
                  importing_fully_qualified_name: Text,
                  search_paths: Sequence[Text],
-                 state: InterpreterState,
-                 interp) -> Result[Tuple[ModuleT, ModuleT, Tuple[Any, ...]]]:
+                 interp_callback: Callable,
+                 state: InterpreterState
+                 ) -> Result[Tuple[ModuleT, ModuleT, Tuple[Any, ...]]]:
     """Acts similarly to the IMPORT_NAME bytecode.
 
     Args:
@@ -344,18 +350,21 @@ def _import_name(multi_module_name: Text,
     if level:
         return _import_name_with_level(
             multi_module_name, level, fromlist, importing_path,
-            importing_fully_qualified_name, state, interp)
+            importing_fully_qualified_name, interp_callback, state)
     else:
         return _import_name_without_level(
             multi_module_name, fromlist, importing_path,
-            importing_fully_qualified_name, search_paths, state, interp)
+            importing_fully_qualified_name, search_paths, interp_callback,
+            state)
 
 
 def import_path(path: Text, module_name: Text, fully_qualified_name: Text,
-                state: InterpreterState, interp) -> Result[ModuleT]:
+                interp_callback: Callable,
+                state: InterpreterState) -> Result[ModuleT]:
     if fully_qualified_name in state.sys_modules:
         return Result(state.sys_modules[fully_qualified_name])
-    return _import_module_at_path(path, fully_qualified_name, state, interp)
+    return _import_module_at_path(path, fully_qualified_name, interp_callback,
+                                  state)
 
 
 def run_IMPORT_NAME(importing_path: Text,
@@ -363,7 +372,8 @@ def run_IMPORT_NAME(importing_path: Text,
                     fromlist: Optional[Tuple[Text, ...]],
                     multi_module_name: Text,
                     globals_: Dict[Text, Any],
-                    interp, state: InterpreterState) -> Result[Any]:
+                    interp_callback: Callable,
+                    state: InterpreterState) -> Result[Any]:
     ctimport('IMPORT_NAME; multi_module_name: %r; importing_path: %r; '
              'level: %r; fromlist: %r' % (
                 multi_module_name, importing_path, level, fromlist))
@@ -373,11 +383,12 @@ def run_IMPORT_NAME(importing_path: Text,
 
     if multi_module_name in SPECIAL_MODULES:
         module = __import__(multi_module_name, globals_)  # type: ModuleType
-        result = _extract_fromlist(module, module, fromlist, state, interp)
+        result = _extract_fromlist(module, module, fromlist, interp_callback,
+                                   state)
     else:
         result = _import_name(multi_module_name, level, fromlist,
                               importing_path, globals_['__name__'],
-                              state.paths, state, interp)
+                              state.paths, interp_callback, state)
 
     if result.is_exception():
         return result

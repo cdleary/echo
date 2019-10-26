@@ -47,11 +47,6 @@ def main():
     if opts.log_level:
         logging.basicConfig(level=getattr(logging, opts.log_level))
 
-    if opts.dump_trace:
-        print('Collecting trace to', opts.dump_trace, '...')
-        interp.TRACE_DUMPER = bytecode_trace.BytecodeTraceDumper(
-            opts.dump_trace)
-
     interp.COLOR_TRACE = opts.ctrace
     interp.COLOR_TRACE_FUNC = opts.ctrace
     interp.COLOR_TRACE_STACK = opts.ctrace_stack
@@ -80,10 +75,6 @@ def main():
     else:
         print(result, file=sys.stderr)
         error = False
-
-    if opts.dump_trace:
-        print('Dumping trace to', opts.dump_trace, '...')
-        interp.TRACE_DUMPER.dump()
 
     sys.exit(-1 if error else 0)
 

@@ -1,7 +1,7 @@
 from io import StringIO
 from contextlib import redirect_stdout
 
-from interp import interp, run_function, _exception_match as exception_match
+from interp import interp, run_function
 from common import get_code
 
 
@@ -23,10 +23,6 @@ def test_call_other():
         def sub(addend): return 42+addend
         return sub(0) + sub(1)
     assert run_function(main) == 85
-
-
-def test_exception_match():
-    assert exception_match(AssertionError, AssertionError)
 
 
 def test_fizzbuzz():
