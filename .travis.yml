@@ -6,8 +6,6 @@ matrix:
     - python: 3.5
     - python: 3.6
     - python: 3.7
-      dist: xenial
-      sudo: true
 
 script:
 - pytype --config=pytype.cfg --python-version=$TRAVIS_PYTHON_VERSION
