@@ -141,6 +141,20 @@ def compare(opname: Text, lhs, rhs) -> Result[bool]:
             if not e_result.get_value():
                 return Result(False)
         return Result(True)
+
+    if isinstance(lhs, dict) and isinstance(rhs, dict):
+        if len(lhs) != len(rhs):
+            return Result(False)
+        for k in set(lhs.keys()) | set(rhs.keys()):
+            if k not in lhs or k not in rhs:
+                return Result(False)
+            e_result = compare(opname, lhs[k], rhs[k])
+            if e_result.is_exception():
+                return e_result
+            if not e_result.get_value():
+                return Result(False)
+        return Result(True)
+            
     if opname in ('in', 'not in') and type(rhs) in (
             tuple, list, dict, type(os.environ)):
         for e in rhs:

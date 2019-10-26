@@ -29,6 +29,9 @@ from echo import interp_routines
 from echo.frame_objects import StatefulFrame, UnboundLocalSentinel
 
 
+DEBUG_PRINT_BYTECODE = bool(os.getenv('DEBUG_PRINT_BYTECODE', False))
+
+
 def interp(code: types.CodeType,
            *,
            globals_: Dict[Text, Any],
@@ -94,6 +97,9 @@ def interp(code: types.CodeType,
         else:
             local_value = locals_[index]
             cellvars[i].set(local_value)
+
+    if DEBUG_PRINT_BYTECODE:
+        dis.dis(code)
 
     instructions = tuple(dis.get_instructions(code))
     pc_to_instruction = [None] * (instructions[-1].offset+1)

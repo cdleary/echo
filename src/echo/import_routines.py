@@ -14,18 +14,12 @@ from echo.guest_objects import GuestModule
 from termcolor import cprint
 
 
-COLOR_TRACE_LEVEL = -1
 SPECIAL_MODULES = (
     'functools', 'os', 'sys', 'itertools', 'builtins', '_weakref',
 )
 
 
 ModuleT = Union[ModuleType, GuestModule]
-
-
-def ctimport(msg, level=0):
-    if level <= COLOR_TRACE_LEVEL:
-        cprint('import: %s' % msg, color='yellow', file=sys.stderr)
 
 
 def _import_module_at_path(path: Text,
@@ -42,15 +36,13 @@ def _import_module_at_path(path: Text,
     Returns:
         The imported module in a Result wrapper.
     """
-    assert isinstance(fully_qualified_name, str), fully_qualified_name
-    ctimport(' _import_module_at_path; path: %r; fully_qualified_name: %r' % (
-                path, fully_qualified_name))
-
     if fully_qualified_name in state.sys_modules:
         return Result(state.sys_modules[fully_qualified_name])
 
     with open(path) as f:
         contents = f.read()
+
+    # Compile the module contents and wrap it up as a GuestModule.
     module_code = compile(contents, path, 'exec')
     assert isinstance(module_code, CodeType), module_code
 
@@ -65,7 +57,11 @@ def _import_module_at_path(path: Text,
     module = GuestModule(
         fully_qualified_name, code=module_code, globals_=globals_,
         filename=path)
+
+    # Place the imported module into the module dictionary.
     state.sys_modules[fully_qualified_name] = module
+
+    # Run the code within the module.
     result = interp_callback(module_code, globals_=globals_, in_function=False)
     if result.is_exception():
         return result
@@ -77,24 +73,18 @@ def _subimport_module_at_path(path: Text,
                               containing_package: GuestModule,
                               interp_callback: Callable,
                               state: InterpreterState) -> Result[GuestModule]:
-    assert isinstance(fully_qualified_name, str), fully_qualified_name
     mod_result = _import_module_at_path(
         path, fully_qualified_name, interp_callback, state)
     if mod_result.is_exception():
         return mod_result
 
     module_name = fqn_suffix(fully_qualified_name)
-    ctimport(' _subimport_module_at_path; setting attr %r to %r' % (
-                module_name, mod_result.get_value()))
     containing_package.setattr(module_name, mod_result.get_value())
     return mod_result
 
 
 def _resolve_module_or_package(dirpath: Text,
                                fqn_piece: Text) -> Result[Text]:
-    ctimport('  _resolve_module_or_package; dirpath: {!r}; '
-             'fqn_piece: {!r}'.format(
-                 dirpath, fqn_piece))
     module_path = os.path.join(dirpath, fqn_piece + '.py')
     package_path = os.path.join(dirpath, fqn_piece, '__init__.py')
     if os.path.exists(module_path):
@@ -112,7 +102,6 @@ def _find_absolute_import_path(module_name: Text,
     for path in search_paths:
         module_path = _resolve_module_or_package(path, module_name)
         if not module_path.is_exception():
-            ctimport('  _find_absolute_import_path: {!r}'.format(module_path))
             return module_path
     return Result(ExceptionData(
         None,
@@ -125,7 +114,6 @@ def getattr_or_subimport(current_mod: ModuleT,
                          fromlist_name: Text,
                          interp_callback: Callable,
                          state: InterpreterState) -> Result[Any]:
-    ctimport('Attempting to getattr %r from %r' % (fromlist_name, current_mod))
     if isinstance(current_mod, ModuleType):
         return Result(getattr(current_mod, fromlist_name))
 
@@ -154,7 +142,6 @@ def _extract_fromlist(start_module: ModuleT,
 
     results = []  # List[Any]
     for name in fromlist:
-        ctimport('resolving fromlist name %r against %r' % (name, module))
         result = getattr_or_subimport(module, name, interp_callback, state)
         if result.is_exception():
             return Result(result.get_exception())
@@ -182,7 +169,6 @@ def fqn_suffix(x: Text) -> Text:
 def fqn_join(x: Text, y: Text) -> Text:
     if not y:
         return x
-    ctimport('   fqn_join; x: %r; y: %r' % (x, y))
     return check_fqn(x + '.' + y)
 
 
@@ -198,8 +184,6 @@ def _traverse_module_pieces(
         path = path_result.get_value()
 
         fqn = fqn_join(current_mod.fully_qualified_name, piece)
-        ctimport(' traversed to module: %r; subimporting path: %r' % (
-                    fqn, path))
         assert isinstance(fqn, str), fqn
         new_mod = _subimport_module_at_path(
             path, fqn, current_mod, interp_callback, state)
@@ -299,8 +283,6 @@ def _import_name_without_level(
         return Result(start_path_result.get_exception())
     start_path = start_path_result.get_value()
     start_fqn = multi_module_pieces[0]
-    ctimport(' _import_name_without_level; '
-             'start_path: {!r}; start_fqn: {!r}'.format(start_path, start_fqn))
 
     # First import the "start path" as the first module-or-package.
     start_mod_result = _import_module_at_path(
@@ -310,10 +292,6 @@ def _import_name_without_level(
     start_mod = start_mod_result.get_value()
     start_dirpath = os.path.dirname(start_path)
 
-    ctimport(' _import_name; traversing from start_dirpath: %r '
-             'via multi_module_pieces: %r' % (
-                 start_dirpath, multi_module_pieces))
-
     # Then traverse from that "start module" via the multi_module_pieces.
     current_mod = _traverse_module_pieces(
         start_mod, start_dirpath, multi_module_pieces[1:], interp_callback,
@@ -321,7 +299,6 @@ def _import_name_without_level(
     if current_mod.is_exception():
         return Result(current_mod.get_exception())
 
-    ctimport(' _import_name: resolved mod: %r' % (current_mod,))
     return _extract_fromlist(start_mod, current_mod.get_value(), fromlist,
                              interp_callback, state)
 
@@ -374,10 +351,6 @@ def run_IMPORT_NAME(importing_path: Text,
                     globals_: Dict[Text, Any],
                     interp_callback: Callable,
                     state: InterpreterState) -> Result[Any]:
-    ctimport('IMPORT_NAME; multi_module_name: %r; importing_path: %r; '
-             'level: %r; fromlist: %r' % (
-                multi_module_name, importing_path, level, fromlist))
-
     if multi_module_name in state.sys_modules:
         return Result(state.sys_modules[multi_module_name])
 
@@ -409,6 +382,5 @@ def run_IMPORT_NAME(importing_path: Text,
 
 def import_star(module: GuestModule, globals_: Dict[Text, Any]) -> None:
     for name in module.keys():
-        ctimport('import_star; module key: %r' % name)
         if not name.startswith('_'):
             globals_[name] = module.getattr(name).get_value()

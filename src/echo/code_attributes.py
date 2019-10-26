@@ -4,16 +4,18 @@ import types
 
 class CodeAttributes:
     STARARGS_FLAG = 0x04
+    STARKWARGS_FLAG = 0x08
     GENERATOR_FLAG = 0x20
 
     def __init__(self, argcount: int, kwonlyargcount: int, nlocals: int,
-                 starargs: bool, varnames: Tuple[Text], generator: bool,
+                 starargs: bool, starkwargs: bool, varnames: Tuple[Text], generator: bool,
                  code: Optional[types.CodeType] = None):
         self.argcount = argcount
         self.kwonlyargcount = kwonlyargcount
         self.nlocals = nlocals
         self.varnames = varnames
         self.starargs = starargs
+        self.starkwargs = starkwargs
         self.generator = generator
         self.code = code
 
@@ -45,5 +47,6 @@ class CodeAttributes:
                    nlocals=code.co_nlocals,
                    varnames=code.co_varnames,
                    starargs=bool(code.co_flags & cls.STARARGS_FLAG),
+                   starkwargs=bool(code.co_flags & cls.STARKWARGS_FLAG),
                    generator=bool(code.co_flags & cls.GENERATOR_FLAG),
                    code=code)

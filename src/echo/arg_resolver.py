@@ -1,3 +1,5 @@
+"""Helpers for resolving given args/kwargs to frame slots."""
+
 import sys
 import types
 from typing import Text, Dict, Optional, Tuple, Any, List
@@ -25,7 +27,7 @@ def resolve_args(attrs: CodeAttributes,
 
     # The functionality of this method is to populate these arg slots
     # appropriately.
-    arg_slots = [Sentinel] * attrs.total_argcount
+    arg_slots = [Sentinel] * (attrs.total_argcount + attrs.starkwargs)
 
     if attrs.starargs:
         # Note: somewhat surprisingly, the arg slot for the varargs doesn't
@@ -35,6 +37,12 @@ def resolve_args(attrs: CodeAttributes,
         arg_slots[stararg_index] = ()
     else:
         stararg_index = None
+
+    if attrs.starkwargs:
+        starkwarg_index = attrs.total_argcount
+        arg_slots[starkwarg_index] = {}
+    else:
+        starkwarg_index = None
 
     # Note the name of each slot.
     arg_names = attrs.varnames[:len(arg_slots)]
@@ -96,8 +104,13 @@ def resolve_args(attrs: CodeAttributes,
         try:
             index = arg_names.index(kw)
         except ValueError:
-            print('keyword:  ', kw, file=sys.stderr)
-            print('arg_names:', arg_names, file=sys.stderr)
+            if starkwarg_index is not None:
+                arg_slots[starkwarg_index][kw] = arg
+                continue
+            print('attempted to resolve keyword:  ', kw, file=sys.stderr)
+            print('against arg_names:', arg_names, file=sys.stderr)
+            print('all_kwargs:', all_kwargs, file=sys.stderr)
+            print('varnames:', attrs.varnames, file=sys.stderr)
             raise
         populate_positional(index, arg)
 
