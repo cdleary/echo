@@ -390,7 +390,8 @@ def _do_next(args: Tuple[Any, ...]) -> Result[Any]:
 def _do_hasattr(args: Tuple[Any, ...]) -> Result[Any]:
     assert len(args) == 2, args
     o, attr = args
-    assert isinstance(o, GuestPyObject), o
+    if not isinstance(o, GuestPyObject):
+        return Result(hasattr(o, attr))
     assert isinstance(attr, str), attr
     b = o.hasattr(attr)
     assert isinstance(b, bool), b
