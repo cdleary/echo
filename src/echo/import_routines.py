@@ -14,6 +14,7 @@ from echo.guest_objects import GuestModule
 from termcolor import cprint
 
 
+DEBUG_PRINT_IMPORTS = bool(os.getenv('DEBUG_PRINT_IMPORTS', False))
 SPECIAL_MODULES = (
     'functools', 'os', 'sys', 'itertools', 'builtins', '_weakref',
 )
@@ -38,6 +39,10 @@ def _import_module_at_path(path: Text,
     """
     if fully_qualified_name in state.sys_modules:
         return Result(state.sys_modules[fully_qualified_name])
+
+    if DEBUG_PRINT_IMPORTS:
+        print(f'importing module {fully_qualified_name} at path {path}',
+              file=sys.stderr)
 
     with open(path) as f:
         contents = f.read()
@@ -65,6 +70,10 @@ def _import_module_at_path(path: Text,
     result = interp_callback(module_code, globals_=globals_, in_function=False)
     if result.is_exception():
         return result
+
+    if DEBUG_PRINT_IMPORTS:
+        print(f'done importing module {fully_qualified_name} at path {path}',
+              file=sys.stderr)
     return Result(module)
 
 

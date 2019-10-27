@@ -26,7 +26,8 @@ from echo.interpreter_state import InterpreterState
 from echo.guest_objects import (
     GuestModule, GuestFunction, GuestInstance, GuestBuiltin, GuestPyObject,
     GuestPartial, GuestClass, GuestCell, GuestMethod, GuestGenerator,
-    GuestAsyncGenerator, ReturnKind, GuestTraceback, GuestProperty
+    GuestAsyncGenerator, ReturnKind, GuestTraceback, GuestProperty,
+    GuestClassMethod
 )
 from echo import interp_routines
 from echo.frame_objects import StatefulFrame, UnboundLocalSentinel
@@ -159,6 +160,14 @@ def _do_call_property(
     return Result(guest_property)
 
 
+def _do_call_classmethod(
+        args: Tuple[Any, ...],
+        kwargs: Optional[Dict[Text, Any]]) -> Result[Any]:
+    if len(args) != 1 or kwargs:
+        raise NotImplementedError(args, kwargs)
+    return Result(GuestClassMethod(args[0]))
+
+
 def do_call(f, args: Tuple[Any, ...],
             *,
             get_exception_data: Callable[[], Optional[ExceptionData]],
@@ -203,6 +212,8 @@ def do_call(f, args: Tuple[Any, ...],
         return _do_call_functools_partial(args, kwargs)
     elif f is property:
         return _do_call_property(args, kwargs)
+    elif f is classmethod:
+        return _do_call_classmethod(args, kwargs)
     elif isinstance(f, GuestPartial):
         return f.invoke(args, interp=interp_callback)
     elif isinstance(f, GuestBuiltin):

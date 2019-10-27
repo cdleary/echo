@@ -102,8 +102,9 @@ class GuestFunction(GuestPyObject):
         except KeyError:
             return Result(ExceptionData(None, name, AttributeError))
 
-    def setattr(self, name: Text, value: Any) -> Any:
-        raise NotImplementedError
+    def setattr(self, name: Text, value: Any) -> Result[None]:
+        self.dict_[name] = value
+        return Result(None)
 
 
 class GuestCoroutine(GuestPyObject):
@@ -216,6 +217,7 @@ class GuestMethod(GuestPyObject):
 class GuestInstance(GuestPyObject):
 
     def __init__(self, cls: 'GuestClass'):
+        assert isinstance(cls, GuestClass), cls
         self.cls = cls
         self.dict = {}
 
@@ -226,7 +228,11 @@ class GuestInstance(GuestPyObject):
         return self.cls
 
     def hasattr(self, name: Text) -> bool:
-        return name in self.dict or self.cls.hasattr(name)
+        if name in self.dict:
+            return True
+        cls_hasattr = self.cls.hasattr(name)
+        assert isinstance(cls_hasattr, bool), (self.cls, cls_hasattr)
+        return cls_hasattr
 
     def getattr(self, name: Text, interp_callback: Optional[Callable] = None,
                 interp_state: Optional[InterpreterState] = None
@@ -263,7 +269,8 @@ class GuestInstance(GuestPyObject):
 
 
 class GuestClass(GuestPyObject):
-    def __init__(self, name, dict_, bases=None, metaclass=None, kwargs=None):
+    def __init__(self, name: Text, dict_: Dict[Text, Any], *, bases=None,
+                 metaclass=None, kwargs=None):
         self.name = name
         self.dict_ = dict_
         self.bases = bases or ()
@@ -310,11 +317,21 @@ class GuestClass(GuestPyObject):
         return Result(guest_instance)
 
     def hasattr(self, name: Text) -> bool:
-        return name in self.dict_ or any(
-            base.hasattr(name) for base in self.bases)
+        if name in self.dict_:
+            return True
+        if any(base.hasattr(name) for base in self.bases):
+            return True
+        if self.metaclass and self.metaclass.hasattr(name):
+            return True
+        return False
 
     def getattr(self, name: Text) -> Result[Any]:
         if name not in self.dict_:
+            for base in self.bases:
+                if base.hasattr(name):
+                    return base.getattr(name)
+            if self.metaclass and self.metaclass.hasattr(name):
+                return self.metaclass.getattr(name)
             return Result(ExceptionData(
                 None,
                 f'Class {self.name} does not have attribute {name!r}',
@@ -370,6 +387,16 @@ def _do_next(args: Tuple[Any, ...]) -> Result[Any]:
     return g.next()
 
 
+def _do_hasattr(args: Tuple[Any, ...]) -> Result[Any]:
+    assert len(args) == 2, args
+    o, attr = args
+    assert isinstance(o, GuestPyObject), o
+    assert isinstance(attr, str), attr
+    b = o.hasattr(attr)
+    assert isinstance(b, bool), b
+    return Result(b)
+
+
 def _do_type(args: Tuple[Any, ...]) -> Result[Any]:
     if len(args) == 1:
         if isinstance(args[0], GuestInstance):
@@ -398,7 +425,7 @@ def _do___build_class__(args: Tuple[Any, ...], call) -> Result[GuestClass]:
         return class_eval_result.get_exception()
     cell = class_eval_result.get_value()
     if cell is None:
-        return Result(GuestClass(name, ns))
+        return Result(GuestClass(name, ns, bases=bases))
 
     # Now we call the metaclass with the evaluated namespace.
     cls_result = _do_type(args=(name, bases, ns))
@@ -506,6 +533,8 @@ class GuestBuiltin(GuestPyObject):
             return _do_type(args)
         if self.name == 'next':
             return _do_next(args)
+        if self.name == 'hasattr':
+            return _do_hasattr(args)
         raise NotImplementedError(self.name)
 
     def getattr(self, name: Text) -> Any:
@@ -563,6 +592,17 @@ class GuestProperty(GuestPyObject):
 
     def setattr(self, name: Text, value: Any) -> Result[None]:
         raise NotImplementedError
+
+
+class GuestClassMethod(GuestPyObject):
+    def __init__(self, f: GuestFunction):
+        self.f = f
+
+    def getattr(self, name: Text) -> Result[Any]:
+        raise NotImplementedError(name)
+
+    def setattr(self, name: Text, value: Any) -> Result[None]:
+        raise NotImplementedError(name, value)
 
 
 class GuestCell:

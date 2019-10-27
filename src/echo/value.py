@@ -15,9 +15,9 @@ class Value:
 
     def is_falsy(self) -> bool:
         w = self.wrapped
-        if isinstance(w, (bool, int, str)):
+        if isinstance(w, (bool, int, str, type(None))):
             return not bool(w)
-        raise NotImplementedError
+        raise NotImplementedError(w)
 
     def is_truthy(self) -> bool:
         return not self.is_falsy()
