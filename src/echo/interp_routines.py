@@ -9,6 +9,7 @@ from echo.interpreter_state import InterpreterState
 from echo.guest_objects import (
     GuestInstance, GuestBuiltin, GuestModule, GuestFunction, GuestClass,
 )
+from echo.value import Value
 
 import termcolor
 
@@ -90,22 +91,6 @@ def run_binop(opname: Text, lhs: Any, rhs: Any, interp) -> Result[Any]:
                                             interp=interp)
 
     raise NotImplementedError(opname, lhs, rhs)
-
-
-def is_false(v: Any) -> bool:
-    if isinstance(v, int):
-        return v == 0
-    if isinstance(v, bool):
-        return v is False
-    if isinstance(v, str):
-        return not v
-    if v is None:
-        return False
-    raise NotImplementedError(v)
-
-
-def is_true(v: Any) -> bool:
-    return not is_false(v)
 
 
 def code_to_str(c: types.CodeType) -> Text:

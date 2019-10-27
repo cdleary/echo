@@ -18,6 +18,7 @@ from echo.interpreter_state import InterpreterState
 from echo.interp_result import Result, ExceptionData
 from echo import interp_routines
 from echo import bytecode_trace
+from echo.value import Value
 
 
 GUEST_BUILTINS = {
@@ -138,6 +139,9 @@ class StatefulFrame:
         x = self.stack.pop()
         return x
 
+    def _pop_value(self) -> Value:
+        return Value(self._pop())
+
     def _pop_n(self, n: int, tos_is_0: bool = True) -> Tuple[Any, ...]:
         self.stack, result = (
             self.stack[:len(self.stack)-n], self.stack[len(self.stack)-n:])
@@ -147,6 +151,9 @@ class StatefulFrame:
 
     def _peek(self):
         return self.stack[-1]
+
+    def _peek_value(self) -> Value:
+        return Value(self._peek())
 
     def _get_global_or_builtin(self, name: Text) -> Any:
         try:
@@ -289,21 +296,21 @@ class StatefulFrame:
 
     @sets_pc
     def _run_POP_JUMP_IF_FALSE(self, arg, argval):
-        if interp_routines.is_false(self._pop()):
+        if self._pop_value().is_falsy():
             self.pc = arg
             return True
         return False
 
     @sets_pc
     def _run_POP_JUMP_IF_TRUE(self, arg, argval):
-        if interp_routines.is_true(self._pop()):
+        if self._pop_value().is_truthy():
             self.pc = arg
             return True
         return False
 
     @sets_pc
     def _run_JUMP_IF_FALSE_OR_POP(self, arg, argval):
-        if interp_routines.is_false(self._peek()):
+        if self._peek_value().is_falsy():
             pc = arg
             return True
         else:
