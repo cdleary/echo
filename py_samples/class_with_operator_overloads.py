@@ -1,5 +1,6 @@
 class Overloader:
     def __init__(self, wrapped: int):
+        assert isinstance(wrapped, int), wrapped
         self.wrapped = wrapped
 
     def __add__(self, other: 'Overloader') -> 'Overloader':
