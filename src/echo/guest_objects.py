@@ -5,6 +5,7 @@ import types
 from typing import Text, Any, Dict, Iterable, Tuple, Optional, Set
 from enum import Enum
 
+from echo.code_attributes import CodeAttributes
 from echo.interp_result import Result, ExceptionData
 from echo.value import Value
 
@@ -59,16 +60,19 @@ class GuestModule(GuestPyObject):
 
 
 class GuestFunction(GuestPyObject):
-    def __init__(self, code, globals_, name, *, defaults=None,
+    def __init__(self, code: types.CodeType, globals_, name, *, defaults=None,
                  kwarg_defaults: Optional[Dict[Text, Any]] = None,
                  closure=None):
         self.code = code
+        self._code_attrs = CodeAttributes.from_code(code)
         self.globals_ = globals_
         self.name = name
         self.defaults = defaults
         self.kwarg_defaults = kwarg_defaults
         self.closure = closure
-        self.dict_ = {}
+        self.dict_ = {
+            '__code__': code,
+        }
 
     def __repr__(self):
         return ('GuestFunction(code={!r}, name={!r}, closure={!r}, '
@@ -79,6 +83,9 @@ class GuestFunction(GuestPyObject):
     def invoke(self, *, args: Tuple[Any, ...],
                kwargs: Optional[Dict[Text, Any]], interp,
                locals_dict=None) -> Result[Any]:
+        if self._code_attrs.coroutine:
+            return Result(GuestCoroutine(self))
+
         return interp(self.code, globals_=self.globals_, args=args,
                       kwargs=kwargs, defaults=self.defaults,
                       locals_dict=locals_dict,
@@ -89,6 +96,47 @@ class GuestFunction(GuestPyObject):
             return Result(self.dict_[name])
         except KeyError:
             return Result(ExceptionData(None, name, AttributeError))
+
+    def setattr(self, name: Text, value: Any) -> Any:
+        raise NotImplementedError
+
+
+class GuestCoroutine(GuestPyObject):
+    def __init__(self, f: GuestFunction):
+        self.f = f
+
+    def getattr(self, name: Text) -> Result[Any]:
+        if name == 'close':
+            def fake(x): pass
+            guest_f = GuestFunction(
+                getattr(fake, '__code__'), {}, 'coroutine.close')
+            guest_m = GuestMethod(guest_f, self)
+            return Result(guest_m)
+        raise NotImplementedError
+
+    def setattr(self, name: Text, value: Any) -> Any:
+        raise NotImplementedError
+
+
+class GuestAsyncGenerator(GuestPyObject):
+    def __init__(self, f):
+        self.f = f
+
+    def getattr(self, name: Text) -> Result[Any]:
+        raise NotImplementedError
+
+    def setattr(self, name: Text, value: Any) -> Any:
+        raise NotImplementedError
+
+
+class GuestTraceback(GuestPyObject):
+    def __init__(self, data: Tuple[Text, ...]):
+        self.data = data
+
+    def getattr(self, name: Text) -> Result[Any]:
+        if name == 'tb_frame':
+            return Result(None)
+        raise NotImplementedError
 
     def setattr(self, name: Text, value: Any) -> Any:
         raise NotImplementedError
@@ -242,6 +290,21 @@ class GuestClass(GuestPyObject):
         self.dict_[name] = value
 
 
+class GuestFunctionType(GuestPyObject):
+
+    def getattr(self, name: Text) -> Result[Any]:
+        if name in ('__code__', '__globals__'):
+            return Result(None)
+        raise NotImplementedError
+
+    def setattr(self, name: Text, value: Any) -> Any:
+        raise NotImplementedError
+
+
+def _is_type_builtin(x) -> bool:
+    return isinstance(x, GuestBuiltin) and x.name == 'type'
+
+
 def _do_isinstance(args: Tuple[Any, ...]) -> Result[bool]:
     assert len(args) == 2, args
     for t in (bool, int, str, float, dict, list, tuple, set):
@@ -250,7 +313,12 @@ def _do_isinstance(args: Tuple[Any, ...]) -> Result[bool]:
     if args[1] is type:
         return Result(isinstance(args[0], (type, GuestClass)))
     if isinstance(args[1], type) and issubclass(args[1], Exception):
+        # TODO(leary) How does the real type builtin make it here?
         return Result(isinstance(args[0], args[1]))
+
+    if _is_type_builtin(args[1]):
+        return Result(isinstance(args[0], type))
+
     raise NotImplementedError(args)
 
 
@@ -271,6 +339,8 @@ def _do_type(args: Tuple[Any, ...]) -> Result[Any]:
     if len(args) == 1:
         if isinstance(args[0], GuestInstance):
             return Result(args[0].get_type())
+        if isinstance(args[0], GuestFunction):
+            return Result(GuestFunctionType())
         return Result(type(args[0]))
     assert len(args) == 3, args
     name, bases, ns = args

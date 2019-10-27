@@ -6,10 +6,13 @@ class CodeAttributes:
     STARARGS_FLAG = 0x04
     STARKWARGS_FLAG = 0x08
     GENERATOR_FLAG = 0x20
+    COROUTINE_FLAG = 0x80
+    ASYNC_GENERATOR_FLAG = 0x200
 
     def __init__(self, argcount: int, kwonlyargcount: int, nlocals: int,
-                 starargs: bool, starkwargs: bool, varnames: Tuple[Text],
-                 generator: bool,
+                 starargs: bool, starkwargs: bool, coroutine: bool,
+                 varnames: Tuple[Text],
+                 generator: bool, async_generator: bool,
                  code: Optional[types.CodeType] = None):
         self.argcount = argcount
         self.kwonlyargcount = kwonlyargcount
@@ -17,7 +20,9 @@ class CodeAttributes:
         self.varnames = varnames
         self.starargs = starargs
         self.starkwargs = starkwargs
+        self.coroutine = coroutine
         self.generator = generator
+        self.async_generator = async_generator
         self.code = code
 
     @property
@@ -43,11 +48,14 @@ class CodeAttributes:
     @classmethod
     def from_code(cls, code: types.CodeType) -> 'CodeAttributes':
         """Creates CodeAttributes with values extracted from VM code object."""
-        return cls(argcount=code.co_argcount,
-                   kwonlyargcount=code.co_kwonlyargcount,
-                   nlocals=code.co_nlocals,
-                   varnames=code.co_varnames,
-                   starargs=bool(code.co_flags & cls.STARARGS_FLAG),
-                   starkwargs=bool(code.co_flags & cls.STARKWARGS_FLAG),
-                   generator=bool(code.co_flags & cls.GENERATOR_FLAG),
-                   code=code)
+        return cls(
+            argcount=code.co_argcount,
+            kwonlyargcount=code.co_kwonlyargcount,
+            nlocals=code.co_nlocals,
+            varnames=code.co_varnames,
+            starargs=bool(code.co_flags & cls.STARARGS_FLAG),
+            starkwargs=bool(code.co_flags & cls.STARKWARGS_FLAG),
+            generator=bool(code.co_flags & cls.GENERATOR_FLAG),
+            async_generator=bool(code.co_flags & cls.ASYNC_GENERATOR_FLAG),
+            coroutine=bool(code.co_flags & cls.COROUTINE_FLAG),
+            code=code)

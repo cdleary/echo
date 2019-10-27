@@ -5,12 +5,12 @@ import types
 from typing import Text, Dict, Optional, Tuple, Any, List
 
 from echo.interp_result import Result
-from echo.code_attributes import CodeAttributes
+from echo import code_attributes
 
 from termcolor import cprint
 
 
-def resolve_args(attrs: CodeAttributes,
+def resolve_args(attrs: code_attributes.CodeAttributes,
                  args: Optional[Tuple[Any, ...]] = None,
                  kwargs: Optional[Dict[Text, Any]] = None,
                  defaults: Optional[Tuple[Any, ...]] = None,

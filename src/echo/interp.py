@@ -12,18 +12,21 @@ import types
 import sys
 
 from io import StringIO
-from typing import (Dict, Any, Text, Tuple, List, Optional, Union, Sequence,
-                    Iterable, cast)
+from typing import (
+    Dict, Any, Text, Tuple, List, Optional, Union, Sequence, Iterable, cast,
+    Callable,
+)
 
 from echo.common import dis_to_str, get_code
 from echo.interp_result import Result, ExceptionData
 from echo import import_routines
-from echo.arg_resolver import resolve_args, CodeAttributes
+from echo.arg_resolver import resolve_args
+from echo import code_attributes
 from echo.interpreter_state import InterpreterState
 from echo.guest_objects import (
     GuestModule, GuestFunction, GuestInstance, GuestBuiltin, GuestPyObject,
     GuestPartial, GuestClass, GuestCell, GuestMethod, GuestGenerator,
-    ReturnKind,
+    GuestAsyncGenerator, ReturnKind, GuestTraceback,
 )
 from echo import interp_routines
 from echo.frame_objects import StatefulFrame, UnboundLocalSentinel
@@ -75,7 +78,7 @@ def interp(code: types.CodeType,
     def gprint(*args): interp_routines.cprint(*args, color='green')
 
     # Set up arguments as a precursor to establishing the locals.
-    attrs = CodeAttributes.from_code(code)
+    attrs = code_attributes.CodeAttributes.from_code(code)
     arg_result = resolve_args(
         attrs, args, kwargs, defaults, kwarg_defaults)
     if arg_result.is_exception():
@@ -100,7 +103,8 @@ def interp(code: types.CodeType,
             cellvars[i].set(local_value)
 
     if DEBUG_PRINT_BYTECODE:
-        dis.dis(code)
+        print(dis.code_info(code), file=sys.stderr)
+        dis.dis(code, file=sys.stderr)
 
     instructions = tuple(dis.get_instructions(code))
     pc_to_instruction = [None] * (instructions[-1].offset+1)
@@ -121,12 +125,15 @@ def interp(code: types.CodeType,
     if attrs.generator:
         return Result(GuestGenerator(f))
 
+    if attrs.async_generator:
+        return Result(GuestAsyncGenerator(f))
+
     result = f.run_to_return_or_yield()
     if result.is_exception():
         return Result(result.get_exception())
 
     v, kind = result.get_value()
-    assert kind == ReturnKind.RETURN
+    assert kind == ReturnKind.RETURN, kind
     assert isinstance(v, Value), v
     return Result(v.wrapped)
 
@@ -143,6 +150,7 @@ def _do_call_functools_partial(
 
 def do_call(f, args: Tuple[Any, ...],
             *,
+            get_exception_data: Callable[[], Optional[ExceptionData]],
             state: InterpreterState,
             globals_: Dict[Text, Any],
             locals_dict: Optional[Dict[Text, Any]] = None,
@@ -154,12 +162,21 @@ def do_call(f, args: Tuple[Any, ...],
         return interp(*args, **kwargs, state=state)
 
     def do_call_callback(*args, **kwargs):
-        return do_call(*args, **kwargs, state=state)
+        return do_call(*args, **kwargs, state=state,
+                       get_exception_data=get_exception_data)
 
     kwargs = kwargs or {}
     if f in (dict, range, print, sorted, str, set, tuple, list, hasattr,
-             bytearray) + interp_routines.BUILTIN_EXCEPTION_TYPES:
+             bytearray, object) + interp_routines.BUILTIN_EXCEPTION_TYPES:
         return Result(f(*args, **kwargs))
+    if f is sys.exc_info:
+        exception_data = get_exception_data()
+        if exception_data is None:
+            return Result(None)
+        tb, p, exc = (exception_data.traceback, exception_data.parameter,
+                      exception_data.exception)
+        t = GuestTraceback(tuple(tb))
+        return Result((exc, p, t))
     if f is globals:
         return Result(globals_)
     elif isinstance(f, (GuestFunction, GuestMethod)):

@@ -2,6 +2,7 @@ import dis
 import itertools
 import functools
 import operator
+import os
 import sys
 import types
 from typing import (
@@ -12,8 +13,9 @@ from enum import Enum
 from echo import import_routines
 from echo.guest_objects import (
     GuestCell, ReturnKind, GuestBuiltin, GuestFunction, GuestPyObject,
-    GuestModule,
+    GuestModule, GuestCoroutine,
 )
+from echo.code_attributes import CodeAttributes
 from echo.interpreter_state import InterpreterState
 from echo.interp_result import Result, ExceptionData
 from echo import interp_routines
@@ -21,6 +23,7 @@ from echo import bytecode_trace
 from echo.value import Value
 
 
+DEBUG_PRINT_BYTECODE = bool(os.getenv('DEBUG_PRINT_BYTECODE', False))
 GUEST_BUILTINS = {
     list: {'append', 'remove', 'insert'},
     dict: {'keys', 'values', 'items'},
@@ -103,11 +106,15 @@ class StatefulFrame:
 
     def _handle_exception(self):
         """Returns whether the exception was handled in this function."""
+        # Pop until we see an except block, or there's no block stack left.
         while (self.block_stack and
                self.block_stack[-1].kind != BlockKind.SETUP_EXCEPT):
             self.block_stack.pop()
+
         if (self.block_stack and
                 self.block_stack[-1].kind == BlockKind.SETUP_EXCEPT):
+            # We wound up at an except block, pop back to the right value-stack
+            # depth and start running the handler.
             self.pc = self.block_stack[-1].handler
             while len(self.stack) > self.block_stack[-1].level:
                 self._pop()
@@ -115,6 +122,7 @@ class StatefulFrame:
             self._push(self.exception_data.traceback)
             self._push(self.exception_data.exception)
             self._push(self.exception_data.exception)
+            # The block stack entry transmorgifies into an EXCEPT_HANDLER.
             self.block_stack[-1].kind = BlockKind.EXCEPT_HANDLER
             self.block_stack[-1].handler = -1
             self.handling_exception_data, self.exception_data = (
@@ -387,8 +395,9 @@ class StatefulFrame:
         kwargs = dict(zip(kwarg_stack[::2], kwarg_stack[1::2]))
         args = self._pop_n(argc, tos_is_0=False)
         f = self._pop()
-        return self.do_call_callback(f, args, state=self.interpreter_state,
-                                     kwargs=kwargs, globals_=self.globals_)
+        return self.do_call_callback(
+            f, args, state=self.interpreter_state, kwargs=kwargs,
+            globals_=self.globals_, get_exception_data=self.get_exception_data)
 
     def _run_STORE_NAME(self, arg, argval):
         if self.in_function:
@@ -473,6 +482,8 @@ class StatefulFrame:
 
     def _run_LOAD_ATTR(self, arg, argval):
         obj = self._pop()
+        if DEBUG_PRINT_BYTECODE:
+            print('[bc:la] obj', repr(obj), file=sys.stderr)
         for type_, methods in GUEST_BUILTINS.items():
             if isinstance(obj, type_) and argval in methods:
                 return Result(GuestBuiltin(
@@ -511,38 +522,38 @@ class StatefulFrame:
             raise NotImplementedError(self.handling_exception_data,
                                       self.exception_data)
 
-    def _run_binary(self, opname, arg, argval):
+    def _run_binary(self, opname):
         rhs = self._pop()
         lhs = self._pop()
         return interp_routines.run_binop(opname, lhs, rhs,
                                          self.interp_callback)
 
     def _run_BINARY_ADD(self, arg, argval):
-        return self._run_binary('BINARY_ADD', arg, argval)
+        return self._run_binary('BINARY_ADD')
 
     def _run_BINARY_LSHIFT(self, arg, argval):
-        return self._run_binary('BINARY_LSHIFT', arg, argval)
+        return self._run_binary('BINARY_LSHIFT')
 
     def _run_BINARY_RSHIFT(self, arg, argval):
-        return self._run_binary('BINARY_RSHIFT', arg, argval)
+        return self._run_binary('BINARY_RSHIFT')
 
     def _run_BINARY_SUBTRACT(self, arg, argval):
-        return self._run_binary('BINARY_SUBTRACT', arg, argval)
+        return self._run_binary('BINARY_SUBTRACT')
 
     def _run_BINARY_SUBSCR(self, arg, argval):
-        return self._run_binary('BINARY_SUBSCR', arg, argval)
+        return self._run_binary('BINARY_SUBSCR')
 
     def _run_BINARY_MULTIPLY(self, arg, argval):
-        return self._run_binary('BINARY_MULTIPLY', arg, argval)
+        return self._run_binary('BINARY_MULTIPLY')
 
     def _run_BINARY_MODULO(self, arg, argval):
-        return self._run_binary('BINARY_MODULO', arg, argval)
+        return self._run_binary('BINARY_MODULO')
 
     def _run_BINARY_TRUE_DIVIDE(self, arg, argval):
-        return self._run_binary('BINARY_TRUE_DIVIDE', arg, argval)
+        return self._run_binary('BINARY_TRUE_DIVIDE')
 
     def _run_BINARY_FLOOR_DIVIDE(self, arg, argval):
-        return self._run_binary('BINARY_FLOOR_DIVIDE', arg, argval)
+        return self._run_binary('BINARY_FLOOR_DIVIDE')
 
     def _run_INPLACE_ADD(self, arg, argval):
         lhs = self._pop()
@@ -591,7 +602,7 @@ class StatefulFrame:
         to_call = self._pop()
         return self.do_call_callback(
             to_call, args, state=self.interpreter_state, kwargs=kwargs,
-            globals_=self.globals_)
+            globals_=self.globals_, get_exception_data=self.get_exception_data)
 
     def _run_SETUP_LOOP(self, arg, argval):
         self.block_stack.append(BlockInfo(
@@ -609,6 +620,9 @@ class StatefulFrame:
             exception = self._pop()
         return Result(ExceptionData(traceback, parameter, exception))
 
+    def get_exception_data(self) -> Optional[ExceptionData]:
+        return self.handling_exception_data
+
     def _run_CALL_METHOD(self, arg, argval):
         # Note: new in 3.7.
         #
@@ -619,8 +633,9 @@ class StatefulFrame:
         method = self._pop()
         if self_value is not UnboundLocalSentinel:
             args = (self_value,) + args
-        return self.do_call_callback(method, args, globals_=self.globals_,
-                                     state=self.interpreter_state)
+        return self.do_call_callback(
+            method, args, globals_=self.globals_, state=self.interpreter_state,
+            get_exception_data=self.get_exception_data)
 
     def _run_CALL_FUNCTION_EX(self, arg, argval):
         if arg & 0x1:
@@ -631,7 +646,8 @@ class StatefulFrame:
         func = self._pop()
         return self.do_call_callback(
             func, callargs, kwargs=kwargs, globals_=self.globals_,
-            state=self.interpreter_state)
+            state=self.interpreter_state,
+            get_exception_data=self.get_exception_data)
 
     def _run_IMPORT_STAR(self, arg, argval):
         module = self._peek()
@@ -654,6 +670,9 @@ class StatefulFrame:
     def _run_one_bytecode(self) -> Optional[Result[Tuple[Value, ReturnKind]]]:
         instruction = self.pc_to_instruction[self.pc]
         assert instruction is not None
+
+        if DEBUG_PRINT_BYTECODE:
+            print('[bc]', instruction, file=sys.stderr)
 
         if instruction.starts_line is not None:
             self.line = instruction.starts_line

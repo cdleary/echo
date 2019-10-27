@@ -33,6 +33,11 @@ BUILTIN_EXCEPTION_TYPES = (
     NotImplementedError,
     StopIteration,
     ValueError,
+    TypeError,
+)
+BUILTIN_WARNING_TYPES = (
+    Warning,
+    DeprecationWarning,
 )
 COMPARE_OPS = {
     '==': operator.eq,
@@ -76,7 +81,8 @@ def run_binop(opname: Text, lhs: Any, rhs: Any, interp) -> Result[Any]:
             and rhs == 0):
         raise NotImplementedError(opname, lhs, rhs)
     if {type(lhs), type(rhs)} <= BUILTIN_VALUE_TYPES or (
-            type(lhs) in (list, dict) and opname == 'BINARY_SUBSCR') or (
+            type(lhs) in (list, dict, types.MappingProxyType)
+            and opname == 'BINARY_SUBSCR') or (
             type(lhs) == type(rhs) == list and opname == 'BINARY_ADD') or (
             type(lhs) == type(rhs) == set and opname == 'BINARY_SUBTRACT') or (
             type(lhs) is str and opname == 'BINARY_MODULO'):
@@ -160,10 +166,8 @@ def compare(opname: Text, lhs, rhs, interp_callback: Callable,
         return Result(opname == 'not in')
 
     if opname in ('is', 'is not'):
-        if (isinstance(lhs, (GuestInstance, GuestClass)) and
-                isinstance(rhs, (GuestInstance, GuestClass))):
-            op = COMPARE_OPS[opname]
-            return Result(op(lhs, rhs))
+        op = COMPARE_OPS[opname]
+        return Result(op(lhs, rhs))
 
     if opname in COMPARE_TO_SPECIAL and isinstance(lhs, GuestInstance):
         special_f = lhs.getattr(COMPARE_TO_SPECIAL[opname])
