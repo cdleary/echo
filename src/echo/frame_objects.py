@@ -128,14 +128,18 @@ class StatefulFrame:
             # exception.
             raise NotImplementedError(self.block_stack)
 
-    def _push(self, x):
+    def _push(self, x: Any) -> None:
         assert not isinstance(x, Result), x
         # If the user can observe the real isinstance they can break the
         # virtualization abstraction, which is undesirable.
         assert x is not isinstance
+        assert not isinstance(x, Value), x
         self.stack.append(x)
 
-    def _pop(self):
+    def _push_value(self, x: Value) -> None:
+        self._push(x.wrapped)
+
+    def _pop(self) -> Any:
         x = self.stack.pop()
         return x
 
@@ -647,7 +651,7 @@ class StatefulFrame:
     def _run_EXTENDED_ARG(self, arg, argval):
         pass  # The to-instruction decoding step already extended the args?
 
-    def _run_one_bytecode(self) -> Optional[Result[Tuple[Any, ReturnKind]]]:
+    def _run_one_bytecode(self) -> Optional[Result[Tuple[Value, ReturnKind]]]:
         instruction = self.pc_to_instruction[self.pc]
         assert instruction is not None
 
@@ -655,21 +659,21 @@ class StatefulFrame:
             self.line = instruction.starts_line
 
         if instruction.opname == 'RETURN_VALUE':
-            return Result((self._pop(), ReturnKind.RETURN))
+            return Result((self._pop_value(), ReturnKind.RETURN))
 
         if instruction.opname == 'YIELD_VALUE':
             self.pc += self.pc_to_bc_width[self.pc]
-            return Result((self._peek(), ReturnKind.YIELD))
+            return Result((self._peek_value(), ReturnKind.YIELD))
 
         f = getattr(self, '_run_{}'.format(instruction.opname))
 
         stack_depth_before = len(self.stack)
         result = f(arg=instruction.arg, argval=instruction.argval)
-        if result is None or type(result) is bool:
+        if result is None or type(result) == bool:
             pass
         else:
             assert isinstance(result, Result), (
-                'Bytecode must return Result', instruction)
+                'Bytecode must return Result', instruction, 'got', result)
             if result.is_exception():
                 self.exception_data = result.get_exception()
                 self.exception_data.traceback.append(
@@ -678,6 +682,8 @@ class StatefulFrame:
                     return None
                 else:
                     return result
+            elif isinstance(result.get_value(), Value):
+                self._push_value(result.get_value())
             else:
                 self._push(result.get_value())
 
@@ -703,7 +709,7 @@ class StatefulFrame:
 
         return None
 
-    def run_to_return_or_yield(self) -> Result[Tuple[Any, ReturnKind]]:
+    def run_to_return_or_yield(self) -> Result[Tuple[Value, ReturnKind]]:
         while True:
             bc_result = self._run_one_bytecode()
             if bc_result is None:

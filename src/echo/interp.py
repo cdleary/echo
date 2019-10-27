@@ -27,6 +27,7 @@ from echo.guest_objects import (
 )
 from echo import interp_routines
 from echo.frame_objects import StatefulFrame, UnboundLocalSentinel
+from echo.value import Value
 
 
 DEBUG_PRINT_BYTECODE = bool(os.getenv('DEBUG_PRINT_BYTECODE', False))
@@ -126,7 +127,8 @@ def interp(code: types.CodeType,
 
     v, kind = result.get_value()
     assert kind == ReturnKind.RETURN
-    return Result(v)
+    assert isinstance(v, Value), v
+    return Result(v.wrapped)
 
 
 def _do_call_functools_partial(

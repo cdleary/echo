@@ -6,6 +6,7 @@ from typing import Text, Any, Dict, Iterable, Tuple, Optional, Set
 from enum import Enum
 
 from echo.interp_result import Result, ExceptionData
+from echo.value import Value
 
 
 class ReturnKind(Enum):
@@ -103,16 +104,17 @@ class GuestGenerator(GuestPyObject):
     def setattr(self, name: Text, value: Any) -> Any:
         raise NotImplementedError
 
-    def next(self) -> Result[Any]:
+    def next(self) -> Result[Value]:
         result = self.f.run_to_return_or_yield()
         if result.is_exception():
             return Result(result.get_exception())
 
         v, return_kind = result.get_value()
+        assert isinstance(v, Value), v
         if return_kind == ReturnKind.YIELD:
-            return Result(v)
+            return Result(v.wrapped)
 
-        assert v is None
+        assert v.wrapped is None, v
         return Result(ExceptionData(None, None, StopIteration))
 
 
