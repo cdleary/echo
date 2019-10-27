@@ -231,6 +231,12 @@ class StatefulFrame:
         self.stack, t = self.stack[:limit], self.stack[limit:]
         return Result(set(t))
 
+    def _run_BUILD_SLICE(self, arg, argval):
+        step = self._pop() if arg == 3 else None
+        stop = self._pop()
+        start = self._pop()
+        return Result(slice(start, stop, step))
+
     def _run_BUILD_CONST_KEY_MAP(self, arg, argval):
         count = arg
         ks = self._pop()

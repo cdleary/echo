@@ -54,6 +54,7 @@ BUILTIN_VALUE_TYPES = {
     float,
     str,
     tuple,
+    slice,
     type(None),
 }
 CODE_ATTRS = [
