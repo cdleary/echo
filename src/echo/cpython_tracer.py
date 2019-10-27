@@ -51,7 +51,7 @@ class CtypeFrame:
 
     def __init__(self, frame: types.FrameType):
         self.frame_id = id(frame)
-        self.frame_ptr = ctypes.cast(ctypes.c_size_t(id(frame)),
+        self.frame_ptr = ctypes.cast(id(frame),
                                      self.PTR_TO_LONG)
         self.offsets = self.VERSION_TO_CTYPE_ULONG_OFFSETS[
             sys.version_info[:2]]
@@ -59,16 +59,16 @@ class CtypeFrame:
             if id(frame.f_back) == self.frame_ptr[offset]:
                 self.f_back_offset = offset
 
-    @staticmethod
-    def _id2obj(id_: int) -> Any:
+    @classmethod
+    def _id2obj(cls, id_: int) -> Any:
         """Mutates a tuple cell to point at a new location."""
         t = (None,)
         try:
-            ctypes.cast(ctypes.c_size_t(id(t)), self.PTR_TO_LONG)[3] = id_
+            ctypes.cast(id(t), cls.PTR_TO_LONG)[3] = id_
             return t[0]
         finally:
             # Do we need to do this to keep the refcounts sane?
-            ctypes.cast(ctypes.c_size_t(id(t)), self.PTR_TO_LONG)[3] = id(None)
+            ctypes.cast(id(t), cls.PTR_TO_LONG)[3] = id(None)
 
     def get_value_stack(self):
         """Returns the contents of the f_valuestack slot in the PyFrameObject.
@@ -78,7 +78,7 @@ class CtypeFrame:
         return self.frame_ptr[self.offsets['f_valuestack']]
 
     def get_value_stack_as_ptr(self):
-        return ctypes.cast(ctypes.c_size_t(self.get_value_stack()),
+        return ctypes.cast(self.get_value_stack(),
                            self.PTR_TO_LONG)
 
     def get_localsplus_start(self):
@@ -92,7 +92,7 @@ class CtypeFrame:
                 self.offsets['f_localsplus'] * self.ULONG_SIZE_IN_BYTES)
 
     def get_localsplus_start_as_ptr(self):
-        return ctypes.cast(ctypes.c_size_t(self.get_localsplus_start()),
+        return ctypes.cast(self.get_localsplus_start(),
                            self.PTR_TO_LONG)
 
     def get_stack_top(self):
@@ -105,7 +105,7 @@ class CtypeFrame:
     def print_block_stack(self):
         assert sys.version_info[:2] == (3, 7)
         f_iblock = ctypes.cast(
-            ctypes.c_size_t(self.frame_id),
+            self.frame_id,
             ctypes.POINTER(ctypes.c_uint))[112//self.UINT_SIZE_IN_BYTES]
         print('f_iblock:', f_iblock)
 
@@ -116,7 +116,7 @@ class CtypeFrame:
             122: 'SETUP_FINALLY',
         }
 
-        f_blockstack = ctypes.cast(ctypes.c_size_t(self.frame_id+120),
+        f_blockstack = ctypes.cast(self.frame_id+120,
                                    ctypes.POINTER(_PyTryBlock))
         block_stack = []
         for i in range(f_iblock):

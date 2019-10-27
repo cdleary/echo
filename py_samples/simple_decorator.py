@@ -1,4 +1,5 @@
-def decorate(f): return f
+def decorate(f):
+    return f
 
 
 @decorate

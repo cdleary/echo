@@ -13,7 +13,7 @@ from enum import Enum
 from echo import import_routines
 from echo.guest_objects import (
     GuestCell, ReturnKind, GuestBuiltin, GuestFunction, GuestPyObject,
-    GuestModule, GuestCoroutine,
+    GuestModule, GuestCoroutine, GuestInstance
 )
 from echo.code_attributes import CodeAttributes
 from echo.interpreter_state import InterpreterState
@@ -491,6 +491,9 @@ class StatefulFrame:
         if (isinstance(obj, GuestBuiltin) and obj.name == 'type'
                 and argval == '__dict__'):
             return Result(type.__dict__)
+        elif isinstance(obj, GuestInstance):
+            return obj.getattr(argval, self.interp_callback,
+                               self.interpreter_state)
         elif isinstance(obj, GuestPyObject):
             return obj.getattr(argval)
         elif obj is sys and argval == 'path':
@@ -573,6 +576,8 @@ class StatefulFrame:
         attr_result = self._run_LOAD_ATTR(arg, argval)
         if attr_result.is_exception():
             return attr_result
+        if DEBUG_PRINT_BYTECODE:
+            print('[bc:lm] LOAD_ATTR ', attr_result, file=sys.stderr)
         self._push(attr_result.get_value())
         if interp_routines.method_requires_self(obj, attr_result.get_value()):
             self._push(obj)
@@ -633,6 +638,9 @@ class StatefulFrame:
         method = self._pop()
         if self_value is not UnboundLocalSentinel:
             args = (self_value,) + args
+        if DEBUG_PRINT_BYTECODE:
+            print('[bc:cm]', method, args, 'self_value:', self_value,
+                  file=sys.stderr)
         return self.do_call_callback(
             method, args, globals_=self.globals_, state=self.interpreter_state,
             get_exception_data=self.get_exception_data)

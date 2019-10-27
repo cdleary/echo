@@ -2,9 +2,10 @@ import abc
 import itertools
 import sys
 import types
-from typing import Text, Any, Dict, Iterable, Tuple, Optional, Set
+from typing import Text, Any, Dict, Iterable, Tuple, Optional, Set, Callable
 from enum import Enum
 
+from echo.interpreter_state import InterpreterState
 from echo.code_attributes import CodeAttributes
 from echo.interp_result import Result, ExceptionData
 from echo.value import Value
@@ -24,6 +25,9 @@ class GuestPyObject(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def setattr(self, name: Text, value: Any) -> Any:
         raise NotImplementedError(self, name, value)
+
+    def hasattr(self, name: Text) -> bool:
+        raise NotImplementedError(self, name)
 
     # @abc.abstractmethod
     def delattr(self, name: Text, value: Any) -> Any:
@@ -81,8 +85,9 @@ class GuestFunction(GuestPyObject):
                     self.kwarg_defaults)
 
     def invoke(self, *, args: Tuple[Any, ...],
-               kwargs: Optional[Dict[Text, Any]], interp,
-               locals_dict=None) -> Result[Any]:
+               interp: Callable,
+               kwargs: Optional[Dict[Text, Any]] = None,
+               locals_dict: Optional[Dict[Text, Any]] = None) -> Result[Any]:
         if self._code_attrs.coroutine:
             return Result(GuestCoroutine(self))
 
@@ -201,8 +206,9 @@ class GuestMethod(GuestPyObject):
         return self.f.setattr(*args, **kwargs)
 
     def invoke(self, *, args: Tuple[Any, ...],
-               kwargs: Optional[Dict[Text, Any]],
-               locals_dict=None, interp) -> Result[Any]:
+               interp: Callable,
+               kwargs: Optional[Dict[Text, Any]] = None,
+               locals_dict=None) -> Result[Any]:
         return self.f.invoke(args=(self.bound_self,) + args, kwargs=kwargs,
                              locals_dict=locals_dict, interp=interp)
 
@@ -219,7 +225,12 @@ class GuestInstance(GuestPyObject):
     def get_type(self) -> 'GuestClass':
         return self.cls
 
-    def getattr(self, name: Text) -> Result[Any]:
+    def hasattr(self, name: Text) -> bool:
+        return name in self.dict or self.cls.hasattr(name)
+
+    def getattr(self, name: Text, interp_callback: Optional[Callable] = None,
+                interp_state: Optional[InterpreterState] = None
+                ) -> Result[Any]:
         try:
             value = self.dict[name]
         except KeyError:
@@ -227,9 +238,24 @@ class GuestInstance(GuestPyObject):
             if result.is_exception():
                 return result
             value = result.get_value()
+            if isinstance(value, GuestFunction):
+                return Result(GuestMethod(value, bound_self=self))
 
-        if isinstance(value, GuestFunction):
-            return Result(GuestMethod(value, bound_self=self))
+        if (isinstance(value, (GuestInstance, GuestProperty)) and
+                value.hasattr('__get__')):
+            f_result = value.getattr('__get__')
+            if f_result.is_exception():
+                return Result(f_result.get_exception())
+            objtype_result = _do_type(args=(value,))
+            if objtype_result.is_exception():
+                return Result(objtype_result.get_exception())
+            objtype = objtype_result.get_value()
+            result = f_result.get_value().invoke(args=(value, objtype),
+                                                 interp=interp_callback)
+            if result.is_exception():
+                return Result(result.get_exception())
+            value = result.get_value()
+
         return Result(value)
 
     def setattr(self, name: Text, value: Any):
@@ -283,7 +309,16 @@ class GuestClass(GuestPyObject):
                 return result
         return Result(guest_instance)
 
+    def hasattr(self, name: Text) -> bool:
+        return name in self.dict_ or any(
+            base.hasattr(name) for base in self.bases)
+
     def getattr(self, name: Text) -> Result[Any]:
+        if name not in self.dict_:
+            return Result(ExceptionData(
+                None,
+                f'Class {self.name} does not have attribute {name!r}',
+                AttributeError))
         return Result(self.dict_[name])
 
     def setattr(self, name: Text, value: Any) -> Any:
@@ -480,7 +515,7 @@ class GuestBuiltin(GuestPyObject):
         raise NotImplementedError(self, name, value)
 
 
-class GuestPartial(object):
+class GuestPartial:
     def __init__(self, f: GuestFunction, args: Tuple[Any, ...]):
         assert isinstance(f, GuestFunction), f
         self.f = f
@@ -488,6 +523,46 @@ class GuestPartial(object):
 
     def invoke(self, args: Tuple[Any, ...], interp) -> Any:
         return self.f.invoke(args=self.args + args, kwargs=None, interp=interp)
+
+
+class NativeFunction(GuestPyObject):
+
+    def __init__(self, f: Callable[[Tuple[Any, ...], Callable], Result[Any]]):
+        self.f = f
+
+    def getattr(self, name: Text) -> Result[Any]:
+        raise NotImplementedError
+
+    def setattr(self, name: Text, value: Any) -> Result[None]:
+        raise NotImplementedError
+
+    def invoke(self, *, args: Tuple[Any, ...],
+               interp: Callable,
+               kwargs: Optional[Dict[Text, Any]] = None,
+               locals_dict: Optional[Dict[Text, Any]] = None) -> Result[Any]:
+        return self.f(args, interp)
+
+
+class GuestProperty(GuestPyObject):
+    def __init__(self, fget: GuestFunction):
+        self.fget = fget
+
+    def hasattr(self, name: Text):
+        return name in ('__get__', '__set__')
+
+    def _get(self, args: Tuple[Any, ...],
+             interp_callback: Callable) -> Result[Any]:
+        obj, objtype = args
+        return self.fget.invoke(args=(obj,), interp=interp_callback)
+
+    def getattr(self, name: Text, interp: Optional[Callable] = None,
+                state: Optional[InterpreterState] = None) -> Result[Any]:
+        if name == '__get__':
+            return Result(NativeFunction(self._get))
+        return Result(ExceptionData(None, name, AttributeError))
+
+    def setattr(self, name: Text, value: Any) -> Result[None]:
+        raise NotImplementedError
 
 
 class GuestCell:

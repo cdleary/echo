@@ -79,7 +79,6 @@ def resolve_args(attrs: code_attributes.CodeAttributes,
         return (False, argno)
 
     def populate_positional(argno: int, value: Any) -> None:
-        assert len(arg_slots) == attrs.total_argcount
         assert len(default_required) == attrs.total_argcount, default_required
         stararg_info = in_stararg_position(argno)
         argno = stararg_info[1]  # Stararg can update the slot index.

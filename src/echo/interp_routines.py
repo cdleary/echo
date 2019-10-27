@@ -172,7 +172,7 @@ def compare(opname: Text, lhs, rhs, interp_callback: Callable,
     if opname in COMPARE_TO_SPECIAL and isinstance(lhs, GuestInstance):
         special_f = lhs.getattr(COMPARE_TO_SPECIAL[opname])
         if special_f.is_exception():
-            raise NotImplementedError(special_f)
+            return Result(special_f.get_exception())
         return special_f.get_value().invoke(args=(rhs,), kwargs=None,
                                             interp=interp_callback)
 
@@ -185,13 +185,15 @@ def compare(opname: Text, lhs, rhs, interp_callback: Callable,
     raise NotImplementedError(opname, lhs, rhs)
 
 
-def method_requires_self(obj, value) -> bool:
+def method_requires_self(obj: Any, value: Any) -> bool:
     obj_is_module = isinstance(obj, GuestModule)
     if isinstance(value, GuestBuiltin) and value.bound_self is None:
         return not obj_is_module
     if isinstance(value, types.MethodType):
         return False
     if isinstance(value, GuestFunction):
+        if isinstance(obj, GuestInstance):
+            return value not in obj.dict.values()
         return not obj_is_module
     return False
 

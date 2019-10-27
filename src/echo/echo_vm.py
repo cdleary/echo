@@ -3,7 +3,7 @@
 Runs 'file' via the echo interpreter in a Python-driver-replacement style. For
 example:
 
-    python3 echo.py /tmp/example.py
+    python3 echo_vm.py /tmp/example.py
 
 This allows comparisons of echo versus the standard CPython interpreter driver
 on the command line.
@@ -15,6 +15,13 @@ import os
 import pdb
 import sys
 import types
+
+try:
+    import echo
+except ImportError:
+    sys.path.append(os.path.dirname(os.path.dirname(
+        os.path.realpath(__file__))))
+
 
 from echo import interp
 from echo import import_routines
