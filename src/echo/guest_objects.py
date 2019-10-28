@@ -306,8 +306,8 @@ class GuestClass(GuestPyObject):
     def instantiate(self, args: Tuple[Any, ...], do_call,
                     globals_: Dict[Text, Any]) -> Result[GuestInstance]:
         guest_instance = GuestInstance(self)
-        if '__init__' in self.dict_:
-            init_f = self.dict_['__init__']
+        if self.hasattr('__init__'):
+            init_f = self.getattr('__init__').get_value()
             # TODO(cdleary, 2019-01-26) What does Python do when you return
             # something non-None from initializer? Ignore?
             result = do_call(init_f, args=(guest_instance,) + args,
