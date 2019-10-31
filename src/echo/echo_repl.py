@@ -1,6 +1,8 @@
 import optparse
 import os
 import sys
+import types
+import typing
 
 
 try:
@@ -26,7 +28,12 @@ def main():
         line = input('>>> ')
         print(line)
         code = compile(line, '<stdin>', 'exec')
-        interp.interp(code, globals_=globals_, state=state)
+        code = typing.cast(types.CodeType, code)
+        result = interp.interp(code, globals_=globals_, state=state)
+        if result.is_exception():
+            print('exception!')
+        else:
+            print(result.get_value())
 
 
 if __name__ == '__main__':
