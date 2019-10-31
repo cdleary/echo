@@ -20,10 +20,12 @@ OPNAME_TO_SPECIAL = {
 }
 COMPARE_TO_SPECIAL = {
     '==': '__eq__',
+    '<': '__lt__',
+    '>': '__gt__',
 }
 GUEST_BUILTIN_NAMES = (
     'isinstance', 'issubclass', 'super', 'iter', 'type', 'zip', 'reversed',
-    'next', 'hasattr',
+    'next', 'hasattr', 'repr',
 )
 BUILTIN_EXCEPTION_TYPES = (
     AssertionError,

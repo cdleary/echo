@@ -27,7 +27,7 @@ DEBUG_PRINT_BYTECODE = bool(os.getenv('DEBUG_PRINT_BYTECODE', False))
 GUEST_BUILTINS = {
     list: {'append', 'remove', 'insert'},
     dict: {'keys', 'values', 'items'},
-    str: {'format'},
+    str: {'format', 'join'},
 }
 
 

@@ -357,6 +357,10 @@ def _is_type_builtin(x) -> bool:
     return isinstance(x, GuestBuiltin) and x.name == 'type'
 
 
+def _is_str_builtin(x) -> bool:
+    return isinstance(x, GuestBuiltin) and x.name == 'str'
+
+
 def _do_isinstance(args: Tuple[Any, ...]) -> Result[bool]:
     assert len(args) == 2, args
     for t in (bool, int, str, float, dict, list, tuple, set):
@@ -370,6 +374,9 @@ def _do_isinstance(args: Tuple[Any, ...]) -> Result[bool]:
 
     if _is_type_builtin(args[1]):
         return Result(isinstance(args[0], type))
+
+    if _is_str_builtin(args[1]):
+        return Result(isinstance(args[0], str))
 
     raise NotImplementedError(args)
 
@@ -396,6 +403,32 @@ def _do_hasattr(args: Tuple[Any, ...]) -> Result[Any]:
     b = o.hasattr(attr)
     assert isinstance(b, bool), b
     return Result(b)
+
+
+def _do_repr(args: Tuple[Any, ...], do_call) -> Result[Any]:
+    assert len(args) == 1, args
+    o = args[0]
+    if not isinstance(o, GuestPyObject):
+        return Result(repr(o))
+    frepr = o.getattr('__repr__')
+    if frepr.is_exception():
+        return frepr
+    frepr = frepr.get_value()
+    globals_ = frepr.getattr('__globals__')
+    return do_call(frepr, args=(), globals_=globals_)
+
+
+def _do_str(args: Tuple[Any, ...], do_call) -> Result[Any]:
+    assert len(args) == 1, args
+    o = args[0]
+    if not isinstance(o, GuestPyObject):
+        return Result(repr(o))
+    frepr = o.getattr('__str__')
+    if frepr.is_exception():
+        return frepr
+    frepr = frepr.get_value()
+    globals_ = frepr.getattr('__globals__')
+    return do_call(frepr, args=(), globals_=globals_)
 
 
 def _do_type(args: Tuple[Any, ...]) -> Result[Any]:
@@ -506,6 +539,8 @@ class GuestBuiltin(GuestPyObject):
             return Result(self.bound_self.items())
         if self.name == 'str.format':
             return Result(self.bound_self.format(*args))
+        if self.name == 'str.join':
+            return Result(self.bound_self.join(*args))
         if self.name == 'list.append':
             return Result(self.bound_self.append(*args))
         if self.name == 'list.insert':
@@ -536,6 +571,10 @@ class GuestBuiltin(GuestPyObject):
             return _do_next(args)
         if self.name == 'hasattr':
             return _do_hasattr(args)
+        if self.name == 'repr':
+            return _do_repr(args, call)
+        if self.name == 'str':
+            return _do_str(args, call)
         raise NotImplementedError(self.name)
 
     def getattr(self, name: Text) -> Any:
