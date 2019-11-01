@@ -380,7 +380,7 @@ def _do_isinstance(args: Tuple[Any, ...]) -> Result[bool]:
         return Result(isinstance(args[0], str))
 
     if args[0] is None:
-        return Result(args[1] is type(None))
+        return Result(args[1] is type(None))  # noqa
 
     raise NotImplementedError(args)
 
