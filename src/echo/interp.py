@@ -186,7 +186,7 @@ def do_call(f, args: Tuple[Any, ...],
                        get_exception_data=get_exception_data)
 
     kwargs = kwargs or {}
-    if f in (dict, range, print, sorted, str, set, tuple, list, hasattr,
+    if f in (dict, chr, range, print, sorted, str, set, tuple, list, hasattr,
              bytearray, object) + interp_routines.BUILTIN_EXCEPTION_TYPES:
         return Result(f(*args, **kwargs))
     if f is sys.exc_info:

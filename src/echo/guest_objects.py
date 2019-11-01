@@ -9,6 +9,7 @@ from echo.interpreter_state import InterpreterState
 from echo.code_attributes import CodeAttributes
 from echo.interp_result import Result, ExceptionData
 from echo.value import Value
+from echo.common import memoize
 
 
 class ReturnKind(Enum):
@@ -378,6 +379,9 @@ def _do_isinstance(args: Tuple[Any, ...]) -> Result[bool]:
     if _is_str_builtin(args[1]):
         return Result(isinstance(args[0], str))
 
+    if args[0] is None:
+        return Result(args[1] is type(None))
+
     raise NotImplementedError(args)
 
 
@@ -437,7 +441,10 @@ def _do_type(args: Tuple[Any, ...]) -> Result[Any]:
             return Result(args[0].get_type())
         if isinstance(args[0], GuestFunction):
             return Result(GuestFunctionType())
-        return Result(type(args[0]))
+        if _is_type_builtin(args[0]):
+            return Result(args[0])
+        res = type(args[0])
+        return Result(get_guest_builtin('type') if res is type else res)
     assert len(args) == 3, args
     name, bases, ns = args
 
@@ -519,7 +526,7 @@ def _do_iter(args: Tuple[Any, ...]) -> Result[Any]:
 class GuestBuiltin(GuestPyObject):
     """A builtin function in the echo VM."""
 
-    def __init__(self, name: Text, bound_self: Any):
+    def __init__(self, name: Text, bound_self: Any, singleton_ok: bool = True):
         self.name = name
         self.bound_self = bound_self
 
@@ -555,6 +562,8 @@ class GuestBuiltin(GuestPyObject):
             return Result(zip(*args))
         if self.name == 'reversed':
             return Result(reversed(*args))
+        if self.name == 'chr':
+            return Result(chr(*args))
         if self.name == 'isinstance':
             return _do_isinstance(args)
         if self.name == 'issubclass':
@@ -582,6 +591,11 @@ class GuestBuiltin(GuestPyObject):
 
     def setattr(self, name: Text, value: Any) -> Any:
         raise NotImplementedError(self, name, value)
+
+
+@memoize
+def get_guest_builtin(name: Text) -> GuestBuiltin:
+    return GuestBuiltin(name, None)
 
 
 class GuestPartial:

@@ -13,7 +13,7 @@ from enum import Enum
 from echo import import_routines
 from echo.guest_objects import (
     GuestCell, ReturnKind, GuestBuiltin, GuestFunction, GuestPyObject,
-    GuestModule, GuestCoroutine, GuestInstance
+    GuestModule, GuestCoroutine, GuestInstance, get_guest_builtin,
 )
 from echo.code_attributes import CodeAttributes
 from echo.interpreter_state import InterpreterState
@@ -202,7 +202,7 @@ class StatefulFrame:
         return Result(self._pop().__iter__())
 
     def _run_LOAD_BUILD_CLASS(self, arg, argval):
-        return Result(GuestBuiltin('__build_class__', None))
+        return Result(get_guest_builtin('__build_class__'))
 
     def _run_BUILD_TUPLE(self, arg, argval):
         count = arg
@@ -662,6 +662,10 @@ class StatefulFrame:
             func, callargs, kwargs=kwargs, globals_=self.globals_,
             state=self.interpreter_state,
             get_exception_data=self.get_exception_data)
+
+    def _run_PRINT_EXPR(self, arg, argval):
+        value = self._pop()
+        print(value)
 
     def _run_IMPORT_STAR(self, arg, argval):
         module = self._peek()

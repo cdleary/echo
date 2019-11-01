@@ -8,6 +8,7 @@ from echo.interp_result import Result
 from echo.interpreter_state import InterpreterState
 from echo.guest_objects import (
     GuestInstance, GuestBuiltin, GuestModule, GuestFunction, GuestClass,
+    get_guest_builtin,
 )
 from echo.value import Value
 
@@ -110,7 +111,7 @@ def code_to_str(c: types.CodeType) -> Text:
 
 def builtins_get(builtins: Union[types.ModuleType, Dict], name: Text) -> Any:
     if name in GUEST_BUILTIN_NAMES:
-        return GuestBuiltin(name, None)
+        return get_guest_builtin(name)
     if isinstance(builtins, types.ModuleType):
         return getattr(builtins, name)
     return builtins[name]

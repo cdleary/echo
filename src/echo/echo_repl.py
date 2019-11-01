@@ -1,5 +1,6 @@
 import optparse
 import os
+import readline
 import sys
 import types
 import typing
@@ -26,14 +27,11 @@ def main():
 
     while True:
         line = input('>>> ')
-        print(line)
-        code = compile(line, '<stdin>', 'exec')
+        code = compile(line, '<stdin>', 'single')
         code = typing.cast(types.CodeType, code)
-        result = interp.interp(code, globals_=globals_, state=state)
+        result = interp.interp(code, globals_=globals_, state=state, in_function=False)
         if result.is_exception():
-            print('exception!')
-        else:
-            print(result.get_value())
+            print('exception!', result.get_exception())
 
 
 if __name__ == '__main__':
