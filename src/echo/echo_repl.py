@@ -29,7 +29,8 @@ def main():
         line = input('>>> ')
         code = compile(line, '<stdin>', 'single')
         code = typing.cast(types.CodeType, code)
-        result = interp.interp(code, globals_=globals_, state=state, in_function=False)
+        result = interp.interp(code, globals_=globals_, state=state,
+                               in_function=False)
         if result.is_exception():
             print('exception!', result.get_exception())
 

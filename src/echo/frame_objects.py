@@ -531,6 +531,10 @@ class StatefulFrame:
             raise NotImplementedError(self.handling_exception_data,
                                       self.exception_data)
 
+    def _run_UNARY_NOT(self, arg, argval) -> None:
+        arg = self._pop_value()
+        self._push(arg.is_falsy())
+
     def _run_binary(self, opname):
         rhs = self._pop()
         lhs = self._pop()
