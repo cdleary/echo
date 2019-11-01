@@ -544,6 +544,8 @@ class GuestBuiltin(GuestPyObject):
         if self.name == 'dict.items':
             assert not args, args
             return Result(self.bound_self.items())
+        if self.name == 'dict.update':
+            return Result(self.bound_self.update(args[0]))
         if self.name == 'str.format':
             return Result(self.bound_self.format(*args))
         if self.name == 'str.join':

@@ -26,7 +26,7 @@ from echo.value import Value
 DEBUG_PRINT_BYTECODE = bool(os.getenv('DEBUG_PRINT_BYTECODE', False))
 GUEST_BUILTINS = {
     list: {'append', 'remove', 'insert'},
-    dict: {'keys', 'values', 'items'},
+    dict: {'keys', 'values', 'items', 'update'},
     str: {'format', 'join'},
 }
 
