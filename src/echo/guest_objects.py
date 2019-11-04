@@ -231,6 +231,8 @@ class GuestInstance(GuestPyObject):
     def hasattr(self, name: Text) -> bool:
         if name in self.dict:
             return True
+        if name == '__class__':
+            return True
         cls_hasattr = self.cls.hasattr(name)
         assert isinstance(cls_hasattr, bool), (self.cls, cls_hasattr)
         return cls_hasattr
@@ -241,6 +243,10 @@ class GuestInstance(GuestPyObject):
         try:
             value = self.dict[name]
         except KeyError:
+            if name == '__class__':
+                return Result(self.cls)
+            if name == '__dict__':
+                return Result(self.dict)
             result = self.cls.getattr(name)
             if result.is_exception():
                 return result
@@ -320,6 +326,8 @@ class GuestClass(GuestPyObject):
     def hasattr(self, name: Text) -> bool:
         if name in self.dict_:
             return True
+        if name == '__class__':
+            return True
         if any(base.hasattr(name) for base in self.bases):
             return True
         if self.metaclass and self.metaclass.hasattr(name):
@@ -327,7 +335,11 @@ class GuestClass(GuestPyObject):
         return False
 
     def getattr(self, name: Text) -> Result[Any]:
+        if name == '__dict__':
+            return Result(self.dict_)
         if name not in self.dict_:
+            if name == '__class__':
+                return Result(self.metaclass or get_guest_builtin('type'))
             for base in self.bases:
                 if base.hasattr(name):
                     return base.getattr(name)
@@ -435,6 +447,27 @@ def _do_str(args: Tuple[Any, ...], do_call) -> Result[Any]:
     return do_call(frepr, args=(), globals_=globals_)
 
 
+def _do_dir(args: Tuple[Any, ...], do_call) -> Result[Any]:
+    assert len(args) == 1, args
+    o = args[0]
+    if isinstance(o, GuestPyObject):
+        d = o.getattr('__dict__')
+        if d.is_exception():
+            return d.get_exception()
+        d = d.get_value()
+        keys = set(d.keys())
+        keys.add('__class__')
+        keys.add('__dict__')
+        if isinstance(o, GuestInstance):
+            result = _do_dir((o.cls,), do_call)
+            if result.is_exception():
+                return Result(result.get_exception())
+            assert isinstance(result.get_value(), list), result
+            keys |= set(result.get_value())
+        return Result(sorted(list(keys)))
+    return Result(dir(o))
+
+
 def _do_type(args: Tuple[Any, ...]) -> Result[Any]:
     if len(args) == 1:
         if isinstance(args[0], GuestInstance):
@@ -466,6 +499,7 @@ def _do___build_class__(args: Tuple[Any, ...], call) -> Result[GuestClass]:
         return class_eval_result.get_exception()
     cell = class_eval_result.get_value()
     if cell is None:
+        ns['__module__'] = func.globals_['__name__']
         return Result(GuestClass(name, ns, bases=bases))
 
     # Now we call the metaclass with the evaluated namespace.
@@ -586,6 +620,8 @@ class GuestBuiltin(GuestPyObject):
             return _do_repr(args, call)
         if self.name == 'str':
             return _do_str(args, call)
+        if self.name == 'dir':
+            return _do_dir(args, call)
         raise NotImplementedError(self.name)
 
     def getattr(self, name: Text) -> Any:

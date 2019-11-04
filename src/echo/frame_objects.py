@@ -669,7 +669,8 @@ class StatefulFrame:
 
     def _run_PRINT_EXPR(self, arg, argval):
         value = self._pop()
-        print(value)
+        if value is not None:
+            print(value)
 
     def _run_IMPORT_STAR(self, arg, argval):
         module = self._peek()

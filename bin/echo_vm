@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 """Usage: %prog [options] file
 
 Runs 'file' via the echo interpreter in a Python-driver-replacement style. For
@@ -15,13 +17,6 @@ import os
 import pdb
 import sys
 import types
-
-try:
-    import echo
-except ImportError:
-    sys.path.append(os.path.dirname(os.path.dirname(
-        os.path.realpath(__file__))))
-
 
 from echo import interp
 from echo import import_routines
