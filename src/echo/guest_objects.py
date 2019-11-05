@@ -289,8 +289,8 @@ class GuestClass(GuestPyObject):
         self.kwargs = kwargs
 
     def __repr__(self) -> Text:
-        return 'GuestClass(name={!r}, ...)'.format(
-            self.name, self.dict_)
+        return 'GuestClass(name={!r}, bases={!r}, metaclass={!r}, ...)'.format(
+            self.name, self.bases, self.metaclass, self.dict_)
 
     def _get_transitive_bases(self) -> Set['GuestClass']:
         bases = set(self.bases)
@@ -408,6 +408,12 @@ def _do_isinstance(args: Tuple[Any, ...]) -> Result[bool]:
 def _do_issubclass(args: Tuple[Any, ...]) -> Result[bool]:
     # TODO(cdleary, 2019-02-10): Detect "guest" subclass relations.
     assert len(args) == 2, args
+    if DEBUG_PRINT_BYTECODE:
+        print('[go:is] args:', args, file=sys.stderr)
+
+    if isinstance(args[0], GuestClass) and isinstance(args[1], GuestClass):
+        return Result(args[0].is_subtype_of(args[1]))
+
     return Result(issubclass(args[0], args[1]))
 
 
