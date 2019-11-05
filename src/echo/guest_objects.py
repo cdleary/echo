@@ -1,5 +1,6 @@
 import abc
 import itertools
+import os
 import sys
 import types
 from typing import Text, Any, Dict, Iterable, Tuple, Optional, Set, Callable
@@ -10,6 +11,9 @@ from echo.code_attributes import CodeAttributes
 from echo.interp_result import Result, ExceptionData
 from echo.value import Value
 from echo.common import memoize
+
+
+DEBUG_PRINT_BYTECODE = bool(os.getenv('DEBUG_PRINT_BYTECODE', False))
 
 
 class ReturnKind(Enum):
@@ -340,11 +344,14 @@ class GuestClass(GuestPyObject):
         if name not in self.dict_:
             if name == '__class__':
                 return Result(self.metaclass or get_guest_builtin('type'))
+            if DEBUG_PRINT_BYTECODE:
+                print('[go:ga] bases:', self.bases, 'metaclass:', self.metaclass)
             for base in self.bases:
                 if base.hasattr(name):
                     return base.getattr(name)
-            if self.metaclass and self.metaclass.hasattr(name):
-                return self.metaclass.getattr(name)
+            if self.metaclass:
+                if self.metaclass.hasattr(name):
+                    return self.metaclass.getattr(name)
             return Result(ExceptionData(
                 None,
                 f'Class {self.name} does not have attribute {name!r}',
@@ -490,7 +497,13 @@ def _do_type(args: Tuple[Any, ...]) -> Result[Any]:
     return Result(cls)
 
 
-def _do___build_class__(args: Tuple[Any, ...], call) -> Result[GuestClass]:
+def _do___build_class__(
+        args: Tuple[Any, ...],
+        *,
+        kwargs: Optional[Dict[Text, Any]] = None,
+        call) -> Result[GuestClass]:
+    if DEBUG_PRINT_BYTECODE:
+        print('[go:bc]', args)
     func, name, *bases = args
     ns = {}  # Namespace for the class.
     class_eval_result = call(func, args=(), locals_dict=ns,
@@ -500,7 +513,7 @@ def _do___build_class__(args: Tuple[Any, ...], call) -> Result[GuestClass]:
     cell = class_eval_result.get_value()
     if cell is None:
         ns['__module__'] = func.globals_['__name__']
-        return Result(GuestClass(name, ns, bases=bases))
+        return Result(GuestClass(name, ns, bases=bases, metaclass=kwargs.get('metaclass')))
 
     # Now we call the metaclass with the evaluated namespace.
     cls_result = _do_type(args=(name, bases, ns))
@@ -568,7 +581,9 @@ class GuestBuiltin(GuestPyObject):
         return 'GuestBuiltin(name={!r}, bound_self={!r}, ...)'.format(
             self.name, self.bound_self)
 
-    def invoke(self, args: Tuple[Any, ...], interp, call) -> Result[Any]:
+    def invoke(self, args: Tuple[Any, ...], *,
+               kwargs: Optional[Dict[Text, Any]] = None,
+               interp, call) -> Result[Any]:
         if self.name == 'dict.keys':
             assert not args, args
             return Result(self.bound_self.keys())
@@ -605,7 +620,7 @@ class GuestBuiltin(GuestPyObject):
         if self.name == 'issubclass':
             return _do_issubclass(args)
         if self.name == '__build_class__':
-            return _do___build_class__(args, call)
+            return _do___build_class__(args, kwargs=kwargs, call=call)
         if self.name == 'super':
             return _do_super(args)
         if self.name == 'iter':

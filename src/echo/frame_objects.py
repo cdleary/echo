@@ -615,6 +615,8 @@ class StatefulFrame:
         rest = args-len(kwargs)
         args = self._pop_n(rest, tos_is_0=False)
         to_call = self._pop()
+        if DEBUG_PRINT_BYTECODE:
+            print('[bc:cfkw]', to_call, 'args:', args, 'kwargs:', kwargs, 'callback:', self.do_call_callback)
         return self.do_call_callback(
             to_call, args, state=self.interpreter_state, kwargs=kwargs,
             globals_=self.globals_, get_exception_data=self.get_exception_data)

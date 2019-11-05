@@ -70,6 +70,9 @@ def interp(code: types.CodeType,
     TODO(cdleary): 2019-01-21 Use dis.stack_effect to cross-check stack depth
         change.
     """
+    if DEBUG_PRINT_BYTECODE:
+        print('[interp] kwargs:', kwargs)
+
     closure = closure or ()
 
     assert len(code.co_freevars) == len(closure), (
@@ -176,6 +179,9 @@ def do_call(f, args: Tuple[Any, ...],
             locals_dict: Optional[Dict[Text, Any]] = None,
             kwargs: Optional[Dict[Text, Any]] = None,
             in_function: bool = True) -> Result[Any]:
+    if DEBUG_PRINT_BYTECODE:
+        print('[interp:do_call] f:', f, 'kwargs:', kwargs)
+
     assert in_function
 
     def interp_callback(*args, **kwargs):
@@ -217,7 +223,7 @@ def do_call(f, args: Tuple[Any, ...],
     elif isinstance(f, GuestPartial):
         return f.invoke(args, interp=interp_callback)
     elif isinstance(f, GuestBuiltin):
-        return f.invoke(args, interp=interp_callback, call=do_call_callback)
+        return f.invoke(args, kwargs=kwargs, interp=interp_callback, call=do_call_callback)
     elif isinstance(f, GuestClass):
         return f.instantiate(args, do_call=do_call_callback, globals_=globals_)
     else:
