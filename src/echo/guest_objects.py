@@ -345,7 +345,8 @@ class GuestClass(GuestPyObject):
             if name == '__class__':
                 return Result(self.metaclass or get_guest_builtin('type'))
             if DEBUG_PRINT_BYTECODE:
-                print('[go:ga] bases:', self.bases, 'metaclass:', self.metaclass)
+                print('[go:ga] bases:', self.bases, 'metaclass:',
+                      self.metaclass)
             for base in self.bases:
                 if base.hasattr(name):
                     return base.getattr(name)
@@ -513,7 +514,9 @@ def _do___build_class__(
     cell = class_eval_result.get_value()
     if cell is None:
         ns['__module__'] = func.globals_['__name__']
-        return Result(GuestClass(name, ns, bases=bases, metaclass=kwargs.get('metaclass')))
+        return Result(GuestClass(
+            name, ns, bases=bases,
+            metaclass=kwargs.get('metaclass') if kwargs else None))
 
     # Now we call the metaclass with the evaluated namespace.
     cls_result = _do_type(args=(name, bases, ns))

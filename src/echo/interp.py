@@ -223,7 +223,8 @@ def do_call(f, args: Tuple[Any, ...],
     elif isinstance(f, GuestPartial):
         return f.invoke(args, interp=interp_callback)
     elif isinstance(f, GuestBuiltin):
-        return f.invoke(args, kwargs=kwargs, interp=interp_callback, call=do_call_callback)
+        return f.invoke(args, kwargs=kwargs, interp=interp_callback,
+                        call=do_call_callback)
     elif isinstance(f, GuestClass):
         return f.instantiate(args, do_call=do_call_callback, globals_=globals_)
     else:
