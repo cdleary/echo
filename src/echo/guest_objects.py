@@ -289,7 +289,8 @@ class GuestClass(GuestPyObject):
         self.kwargs = kwargs
 
     def __repr__(self) -> Text:
-        metaclass = ', metaclass={!r}'.format(self.metaclass) if self.metaclass else ''
+        metaclass = (', metaclass={!r}'.format(self.metaclass)
+                     if self.metaclass else '')
         return 'GuestClass(name={!r}, bases={!r}{metaclass})'.format(
             self.name, self.bases, metaclass=metaclass)
 
@@ -404,7 +405,8 @@ def _do_isinstance(args: Tuple[Any, ...]) -> Result[bool]:
         return Result(isinstance(args[0], args[1]))
 
     if _is_type_builtin(args[1]):
-        return Result(isinstance(args[0], (type, GuestClass, GuestFunctionType, GuestCoroutineType)))
+        type_types = (type, GuestClass, GuestFunctionType, GuestCoroutineType)
+        return Result(isinstance(args[0], type_types))
 
     if _is_str_builtin(args[1]):
         return Result(isinstance(args[0], str))
