@@ -142,6 +142,7 @@ class StatefulFrame:
         # virtualization abstraction, which is undesirable.
         assert x is not isinstance
         assert not isinstance(x, Value), x
+        assert x is not GuestCoroutine
         self.stack.append(x)
 
     def _push_value(self, x: Value) -> None:
@@ -401,6 +402,8 @@ class StatefulFrame:
         kwargs = dict(zip(kwarg_stack[::2], kwarg_stack[1::2]))
         args = self._pop_n(argc, tos_is_0=False)
         f = self._pop()
+        if DEBUG_PRINT_BYTECODE:
+            print('[fo:cf] f:', f, file=sys.stderr)
         return self.do_call_callback(
             f, args, state=self.interpreter_state, kwargs=kwargs,
             globals_=self.globals_, get_exception_data=self.get_exception_data)

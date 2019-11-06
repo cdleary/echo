@@ -289,8 +289,9 @@ class GuestClass(GuestPyObject):
         self.kwargs = kwargs
 
     def __repr__(self) -> Text:
-        return 'GuestClass(name={!r}, bases={!r}, metaclass={!r}, ...)'.format(
-            self.name, self.bases, self.metaclass, self.dict_)
+        metaclass = ', metaclass={!r}'.format(self.metaclass) if self.metaclass else ''
+        return 'GuestClass(name={!r}, bases={!r}{metaclass})'.format(
+            self.name, self.bases, metaclass=metaclass)
 
     def _get_transitive_bases(self) -> Set['GuestClass']:
         bases = set(self.bases)
@@ -374,6 +375,15 @@ class GuestFunctionType(GuestPyObject):
         raise NotImplementedError
 
 
+class GuestCoroutineType(GuestPyObject):
+
+    def getattr(self, name: Text) -> Result[Any]:
+        raise NotImplementedError
+
+    def setattr(self, name: Text, value: Any) -> Any:
+        raise NotImplementedError
+
+
 def _is_type_builtin(x) -> bool:
     return isinstance(x, GuestBuiltin) and x.name == 'type'
 
@@ -394,7 +404,7 @@ def _do_isinstance(args: Tuple[Any, ...]) -> Result[bool]:
         return Result(isinstance(args[0], args[1]))
 
     if _is_type_builtin(args[1]):
-        return Result(isinstance(args[0], type))
+        return Result(isinstance(args[0], (type, GuestClass, GuestFunctionType, GuestCoroutineType)))
 
     if _is_str_builtin(args[1]):
         return Result(isinstance(args[0], str))
@@ -409,10 +419,17 @@ def _do_issubclass(args: Tuple[Any, ...]) -> Result[bool]:
     # TODO(cdleary, 2019-02-10): Detect "guest" subclass relations.
     assert len(args) == 2, args
     if DEBUG_PRINT_BYTECODE:
-        print('[go:is] args:', args, file=sys.stderr)
+        print('[go:issubclass] arg0:', args[0], file=sys.stderr)
+        print('[go:issubclass] arg1:', args[1], file=sys.stderr)
 
     if isinstance(args[0], GuestClass) and isinstance(args[1], GuestClass):
         return Result(args[0].is_subtype_of(args[1]))
+
+    if isinstance(args[0], GuestCoroutineType):
+        return Result(_is_type_builtin(args[1]))
+
+    if not isinstance(args[1], type):
+        raise NotImplementedError(args)
 
     return Result(issubclass(args[0], args[1]))
 
@@ -484,10 +501,16 @@ def _do_dir(args: Tuple[Any, ...], do_call) -> Result[Any]:
 
 def _do_type(args: Tuple[Any, ...]) -> Result[Any]:
     if len(args) == 1:
+        if DEBUG_PRINT_BYTECODE:
+            print('[go:type]', args, file=sys.stderr)
         if isinstance(args[0], GuestInstance):
             return Result(args[0].get_type())
+        if isinstance(args[0], GuestClass):
+            return Result(args[0].metaclass or get_guest_builtin('type'))
         if isinstance(args[0], GuestFunction):
             return Result(GuestFunctionType())
+        if isinstance(args[0], GuestCoroutine):
+            return Result(GuestCoroutineType())
         if _is_type_builtin(args[0]):
             return Result(args[0])
         res = type(args[0])

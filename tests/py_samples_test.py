@@ -1,5 +1,6 @@
 import functools
 import os
+import pprint
 import sys
 from typing import Tuple, Any, Text
 
@@ -52,4 +53,6 @@ def test_echo_on_sample(path: Text):
     state.paths += sys.path[1:]
     result = interp.import_path(path, fully_qualified_name,
                                 fully_qualified_name, state)
+    if result.is_exception():
+        pprint.pprint(result.get_exception().traceback, width=120)
     assert not result.is_exception(), result.get_exception()

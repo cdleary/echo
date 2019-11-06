@@ -22,3 +22,8 @@ assert not issubclass(Base, Derived2)
 assert issubclass(Derived3, Base)
 assert not issubclass(Base, Derived3)
 assert issubclass(Derived3, Derived2)
+
+assert isinstance(Base, type)
+assert isinstance(Derived1, type)
+assert isinstance(Derived2, type)
+assert isinstance(Derived3, type)
