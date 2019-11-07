@@ -438,7 +438,8 @@ def _do_issubclass(args: Tuple[Any, ...], call: Callable) -> Result[bool]:
     if isinstance(args[0], GuestCoroutineType):
         return Result(_is_type_builtin(args[1]))
 
-    if args[1].hasattr('__subclasscheck__'):
+    if (isinstance(args[1], GuestPyObject) and
+            args[1].hasattr('__subclasscheck__')):
         scc = args[1].getattr('__subclasscheck__')
         if scc.is_exception():
             return Result(scc.get_exception())

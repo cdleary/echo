@@ -1,0 +1,1 @@
+assert issubclass(DeprecationWarning, Warning)
