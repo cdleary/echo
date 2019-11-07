@@ -386,6 +386,9 @@ class GuestFunctionType(GuestPyObject):
 
 class GuestCoroutineType(GuestPyObject):
 
+    def hasattr(self, name: Text) -> bool:
+        return False
+
     def getattr(self, name: Text) -> Result[Any]:
         raise NotImplementedError
 
@@ -559,11 +562,18 @@ def _do___build_class__(
     if class_eval_result.is_exception():
         return class_eval_result.get_exception()
     cell = class_eval_result.get_value()
+    metaclass = kwargs.get('metaclass') if kwargs else None
     if cell is None:
         ns['__module__'] = func.globals_['__name__']
-        return Result(GuestClass(
-            name, ns, bases=bases,
-            metaclass=kwargs.get('metaclass') if kwargs else None))
+        if metaclass and metaclass.hasattr('__new__'):
+            new_f = metaclass.getattr('__new__').get_value()
+            return call(new_f,
+                        args=(metaclass, name, bases, ns), kwargs=kwargs,
+                        globals_=new_f.globals_)
+        return Result(GuestClass(name, ns, bases=bases, metaclass=metaclass))
+
+    if metaclass:
+        raise NotImplementedError(metaclass, cell)
 
     # Now we call the metaclass with the evaluated namespace.
     cls_result = _do_type(args=(name, bases, ns))
@@ -598,7 +608,7 @@ class GuestSuper(GuestPyObject):
 
 
 def _do_super(args: Tuple[Any, ...]) -> Result[Any]:
-    assert len(args) == 2
+    assert len(args) == 2, args
     type_, obj = args
 
     assert obj.get_type().is_subtype_of(type_)

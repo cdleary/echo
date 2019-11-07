@@ -11,6 +11,10 @@ class CustomABC(ABC):
     pass
 
 
+assert hasattr(ABC, '__new__')
+assert hasattr(CustomABC, '__new__')
+
+
 CustomABC.register(tuple)
 
 
