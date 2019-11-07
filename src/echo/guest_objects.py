@@ -317,7 +317,16 @@ class GuestClass(GuestPyObject):
 
     def instantiate(self, args: Tuple[Any, ...], do_call,
                     globals_: Dict[Text, Any]) -> Result[GuestInstance]:
-        guest_instance = GuestInstance(self)
+        guest_instance = None
+        if self.hasattr('__new__'):
+            new_f = self.getattr('__new__').get_value()
+            result = do_call(new_f, args=(self,) + args, globals_=globals_)
+            if result.is_exception():
+                return Result(result.get_exception())
+            guest_instance = result.get_value()
+            if not _do_isinstance(args=(guest_instance, self)).get_value():
+                return Result(guest_instance)
+        guest_instance = guest_instance or GuestInstance(self)
         if self.hasattr('__init__'):
             init_f = self.getattr('__init__').get_value()
             # TODO(cdleary, 2019-01-26) What does Python do when you return
