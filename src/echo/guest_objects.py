@@ -41,10 +41,9 @@ class GuestPyObject(metaclass=abc.ABCMeta):
 
 class GuestModule(GuestPyObject):
     def __init__(self, fully_qualified_name: Text, *, filename: Text,
-                 code: types.CodeType, globals_: Dict[Text, Any]):
+                 globals_: Dict[Text, Any]):
         self.fully_qualified_name = fully_qualified_name
         self.filename = filename
-        self.code = code
         self.globals_ = globals_
 
     def __repr__(self):
@@ -417,7 +416,7 @@ def _do_isinstance(args: Tuple[Any, ...]) -> Result[bool]:
     raise NotImplementedError(args)
 
 
-def _do_issubclass(args: Tuple[Any, ...]) -> Result[bool]:
+def _do_issubclass(args: Tuple[Any, ...], call: Callable) -> Result[bool]:
     # TODO(cdleary, 2019-02-10): Detect "guest" subclass relations.
     assert len(args) == 2, args
     if DEBUG_PRINT_BYTECODE:
@@ -429,6 +428,13 @@ def _do_issubclass(args: Tuple[Any, ...]) -> Result[bool]:
 
     if isinstance(args[0], GuestCoroutineType):
         return Result(_is_type_builtin(args[1]))
+
+    if args[1].hasattr('__subclasscheck__'):
+        scc = args[1].getattr('__subclasscheck__')
+        if scc.is_exception():
+            return Result(scc.get_exception())
+        scc = scc.get_value()
+        return call(scc, args=(args[1], args[0]), globals_=scc.globals_)
 
     if not isinstance(args[1], type):
         raise NotImplementedError(args)
@@ -610,6 +616,7 @@ class GuestBuiltin(GuestPyObject):
     def __init__(self, name: Text, bound_self: Any, singleton_ok: bool = True):
         self.name = name
         self.bound_self = bound_self
+        self.dict = {}
 
     def __repr__(self):
         return 'GuestBuiltin(name={!r}, bound_self={!r}, ...)'.format(
@@ -617,7 +624,8 @@ class GuestBuiltin(GuestPyObject):
 
     def invoke(self, args: Tuple[Any, ...], *,
                kwargs: Optional[Dict[Text, Any]] = None,
-               interp, call) -> Result[Any]:
+               interp,  # Needed for interface compatibility.
+               call: Callable) -> Result[Any]:
         if self.name == 'dict.keys':
             assert not args, args
             return Result(self.bound_self.keys())
@@ -652,7 +660,7 @@ class GuestBuiltin(GuestPyObject):
         if self.name == 'isinstance':
             return _do_isinstance(args)
         if self.name == 'issubclass':
-            return _do_issubclass(args)
+            return _do_issubclass(args, call=call)
         if self.name == '__build_class__':
             return _do___build_class__(args, kwargs=kwargs, call=call)
         if self.name == 'super':
@@ -672,6 +680,9 @@ class GuestBuiltin(GuestPyObject):
         if self.name == 'dir':
             return _do_dir(args, call)
         raise NotImplementedError(self.name)
+
+    def hasattr(self, name: Text) -> bool:
+        return name in self.dict
 
     def getattr(self, name: Text) -> Any:
         raise NotImplementedError(self, name)

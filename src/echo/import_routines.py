@@ -37,6 +37,7 @@ def _import_module_at_path(path: Text,
     Returns:
         The imported module in a Result wrapper.
     """
+    assert isinstance(path, str), path
     if fully_qualified_name in state.sys_modules:
         return Result(state.sys_modules[fully_qualified_name])
 
@@ -60,8 +61,7 @@ def _import_module_at_path(path: Text,
         globals_['__path__'] = [os.path.dirname(path)]
 
     module = GuestModule(
-        fully_qualified_name, code=module_code, globals_=globals_,
-        filename=path)
+        fully_qualified_name, globals_=globals_, filename=path)
 
     # Place the imported module into the module dictionary.
     state.sys_modules[fully_qualified_name] = module
@@ -72,8 +72,8 @@ def _import_module_at_path(path: Text,
         return result
 
     if DEBUG_PRINT_IMPORTS:
-        print(f'done importing module {fully_qualified_name} at path {path}',
-              file=sys.stderr)
+        print(f'[impr] done importing module {fully_qualified_name} at '
+              f'path {path}', file=sys.stderr)
     return Result(module)
 
 
@@ -82,6 +82,10 @@ def _subimport_module_at_path(path: Text,
                               containing_package: GuestModule,
                               interp_callback: Callable,
                               state: InterpreterState) -> Result[GuestModule]:
+    if DEBUG_PRINT_IMPORTS:
+        print('[impr] path {} fqn {} containing_package {}'.format(path,
+              fully_qualified_name, containing_package), file=sys.stderr)
+
     mod_result = _import_module_at_path(
         path, fully_qualified_name, interp_callback, state)
     if mod_result.is_exception():
@@ -94,6 +98,9 @@ def _subimport_module_at_path(path: Text,
 
 def _resolve_module_or_package(dirpath: Text,
                                fqn_piece: Text) -> Result[Text]:
+    if DEBUG_PRINT_IMPORTS:
+        print('[impr] _resolve_module_or_package: dirpath:', dirpath,
+              'fqn_piece:', fqn_piece, file=sys.stderr)
     module_path = os.path.join(dirpath, fqn_piece + '.py')
     package_path = os.path.join(dirpath, fqn_piece, '__init__.py')
     if os.path.exists(module_path):
@@ -123,6 +130,11 @@ def getattr_or_subimport(current_mod: ModuleT,
                          fromlist_name: Text,
                          interp_callback: Callable,
                          state: InterpreterState) -> Result[Any]:
+    if DEBUG_PRINT_IMPORTS:
+        print('[impr] getattr_or_subimport; current_mod: {} '
+              'fromlist_name: {}'.format(current_mod, fromlist_name),
+              file=sys.stderr)
+
     if isinstance(current_mod, ModuleType):
         return Result(getattr(current_mod, fromlist_name))
 
@@ -360,10 +372,19 @@ def run_IMPORT_NAME(importing_path: Text,
                     globals_: Dict[Text, Any],
                     interp_callback: Callable,
                     state: InterpreterState) -> Result[Any]:
+    if DEBUG_PRINT_IMPORTS:
+        print('[impr] run_IMPORT_NAME importing_path {} level {} fromlist {} '
+              'multi_module_name {}'.format(
+                importing_path, level, fromlist, multi_module_name),
+              file=sys.stderr)
+
     if multi_module_name in state.sys_modules:
         return Result(state.sys_modules[multi_module_name])
 
-    if multi_module_name in SPECIAL_MODULES:
+    if multi_module_name == '_abc':
+        return Result(ExceptionData(
+            None, 'Cannot import C-module _abc.', ImportError))
+    elif multi_module_name in SPECIAL_MODULES:
         module = __import__(multi_module_name, globals_)  # type: ModuleType
         result = _extract_fromlist(module, module, fromlist, interp_callback,
                                    state)
@@ -375,6 +396,9 @@ def run_IMPORT_NAME(importing_path: Text,
     if result.is_exception():
         return result
 
+    if DEBUG_PRINT_IMPORTS:
+        print('[impr] run_IMPORT_NAME result: {}'.format(result.get_value()),
+              file=sys.stderr)
     root, leaf, fromlist_values = result.get_value()
 
     if fromlist is None:
