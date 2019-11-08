@@ -40,7 +40,7 @@ DEBUG_PRINT_BYTECODE = bool(os.getenv('DEBUG_PRINT_BYTECODE', False))
 def interp(code: types.CodeType,
            *,
            globals_: Dict[Text, Any],
-           state: InterpreterState,
+           interp_state: InterpreterState,
            locals_dict: Optional[Dict[Text, Any]] = None,
            args: Optional[Tuple[Any, ...]] = None,
            kwargs: Optional[Dict[Text, Any]] = None,
@@ -120,10 +120,10 @@ def interp(code: types.CodeType,
                 instructions[i+1].offset-instruction.offset)
     del instructions
 
-    interp_callback = functools.partial(interp, state=state)
-    do_call_callback = functools.partial(do_call, state=state)
+    interp_callback = functools.partial(interp, interp_state=interp_state)
+    do_call_callback = functools.partial(do_call, interp_state=interp_state)
     f = StatefulFrame(code, pc_to_instruction, pc_to_bc_width, locals_,
-                      locals_dict, globals_, cellvars, state, in_function,
+                      locals_dict, globals_, cellvars, interp_state, in_function,
                       interp_callback, do_call_callback)
 
     if attrs.generator:
@@ -174,7 +174,7 @@ def _do_call_classmethod(
 def do_call(f, args: Tuple[Any, ...],
             *,
             get_exception_data: Callable[[], Optional[ExceptionData]],
-            state: InterpreterState,
+            interp_state: InterpreterState,
             globals_: Dict[Text, Any],
             locals_dict: Optional[Dict[Text, Any]] = None,
             kwargs: Optional[Dict[Text, Any]] = None,
@@ -185,10 +185,10 @@ def do_call(f, args: Tuple[Any, ...],
     assert in_function
 
     def interp_callback(*args, **kwargs):
-        return interp(*args, **kwargs, state=state)
+        return interp(*args, **kwargs, interp_state=interp_state)
 
     def do_call_callback(*args, **kwargs):
-        return do_call(*args, **kwargs, state=state,
+        return do_call(*args, **kwargs, interp_state=interp_state,
                        get_exception_data=get_exception_data)
 
     kwargs = kwargs or {}
@@ -207,7 +207,8 @@ def do_call(f, args: Tuple[Any, ...],
         return Result(globals_)
     elif isinstance(f, (GuestFunction, GuestMethod)):
         return f.invoke(args=args, kwargs=kwargs, locals_dict=locals_dict,
-                        interp=interp_callback)
+                        interp_state=interp_state,
+                        interp_callback=interp_callback)
     elif isinstance(f, (types.MethodType, types.FunctionType)):
         # Builtin object method.
         return Result(f(*args, **kwargs))
@@ -221,12 +222,12 @@ def do_call(f, args: Tuple[Any, ...],
     elif f is classmethod:
         return _do_call_classmethod(args, kwargs)
     elif isinstance(f, GuestPartial):
-        return f.invoke(args, interp=interp_callback)
+        return f.invoke(args, interp_callback=interp_callback, interp_state=interp_state)
     elif isinstance(f, GuestBuiltin):
-        return f.invoke(args, kwargs=kwargs, interp=interp_callback,
-                        call=do_call_callback)
+        return f.invoke(args, kwargs=kwargs, interp_callback=interp_callback,
+                        call=do_call_callback, interp_state=interp_state)
     elif isinstance(f, GuestClass):
-        return f.instantiate(args, do_call=do_call_callback, globals_=globals_)
+        return f.instantiate(args, do_call=do_call_callback, globals_=globals_, interp_state=interp_state)
     else:
         raise NotImplementedError(f, args, kwargs)
 
@@ -237,13 +238,13 @@ def run_function(f: types.FunctionType, *args: Tuple[Any, ...],
     state = InterpreterState(script_directory=None)
     globals_ = globals_ or globals()
     result = interp(get_code(f), globals_=globals_, defaults=f.__defaults__,
-                    args=args, state=state)
+                    args=args, interp_state=state)
     return result.get_value()
 
 
 def import_path(path: Text, module_name: Text, fully_qualified_name: Text,
                 state: InterpreterState) -> Result[import_routines.ModuleT]:
-    interp_callback = functools.partial(interp, state=state)
+    interp_callback = functools.partial(interp, interp_state=state)
     result = import_routines.import_path(
         path, module_name, fully_qualified_name, interp_callback, state)
     return result

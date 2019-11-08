@@ -59,6 +59,20 @@ class BlockInfo:
                                               self.level)
 
 
+def wrap_with_push(frame: 'StatefulFrame', state: InterpreterState,
+                   f: Callable) -> Callable:
+    @functools.wraps(f)
+    def push_wrapper(*args, **kwargs):
+        prior = state.last_frame
+        state.last_frame = frame
+        try:
+            return f(*args, **kwargs)
+        finally:
+            state.last_frame = prior
+
+    return push_wrapper
+
+
 class StatefulFrame:
     """A frame is the context in which some code executes.
 
@@ -76,7 +90,7 @@ class StatefulFrame:
                  locals_dict: Dict[Text, Any],
                  globals_: Dict[Text, Any],
                  cellvars: Tuple[GuestCell, ...],
-                 interpreter_state: InterpreterState,
+                 interp_state: InterpreterState,
                  in_function: bool,
                  interp_callback: Callable,
                  do_call_callback: Callable):
@@ -94,15 +108,15 @@ class StatefulFrame:
         self.cellvars = cellvars
         self.consts = code.co_consts
         self.names = code.co_names
-        self.interpreter_state = interpreter_state
+        self.interp_state = interp_state
         self.in_function = in_function
 
         # TODO(cdleary, 2019-01-21): Investigate why this "builtins" ref is
         # sometimes a dict and other times a module?
         self.builtins = sys.modules['builtins']  # globals_['__builtins__']
 
-        self.interp_callback = interp_callback
-        self.do_call_callback = do_call_callback
+        self.interp_callback = wrap_with_push(self, interp_state, interp_callback)
+        self.do_call_callback = wrap_with_push(self, interp_state, do_call_callback)
 
     def _handle_exception(self):
         """Returns whether the exception was handled in this function."""
@@ -405,7 +419,7 @@ class StatefulFrame:
         if DEBUG_PRINT_BYTECODE:
             print('[fo:cf] f:', f, file=sys.stderr)
         return self.do_call_callback(
-            f, args, state=self.interpreter_state, kwargs=kwargs,
+            f, args, interp_state=self.interp_state, kwargs=kwargs,
             globals_=self.globals_, get_exception_data=self.get_exception_data)
 
     def _run_STORE_NAME(self, arg, argval):
@@ -427,7 +441,7 @@ class StatefulFrame:
         if isinstance(obj, GuestPyObject):
             obj.setattr(argval, value)
         elif obj is sys and argval == 'path':
-            sys.path = self.interpreter_state.paths = value
+            sys.path = self.interp_state.paths = value
         else:
             raise NotImplementedError(obj, value)
 
@@ -456,7 +470,7 @@ class StatefulFrame:
         level = self._pop()
         return import_routines.run_IMPORT_NAME(
             self.code.co_filename, level, fromlist, argval, self.globals_,
-            self.interp_callback, self.interpreter_state)
+            self.interp_callback, self.interp_state)
 
     def _run_IMPORT_FROM(self, arg, argval):
         module = self._peek()
@@ -464,7 +478,7 @@ class StatefulFrame:
             return Result(getattr(module, argval))
         elif isinstance(module, GuestModule):
             return import_routines.getattr_or_subimport(
-                module, argval, self.interp_callback, self.interpreter_state)
+                module, argval, self.interp_callback, self.interp_state)
         else:
             raise NotImplementedError(module)
 
@@ -501,14 +515,14 @@ class StatefulFrame:
                 and argval == '__dict__'):
             return Result(type.__dict__)
         elif isinstance(obj, GuestInstance):
-            return obj.getattr(argval, self.interp_callback,
-                               self.interpreter_state)
+            return obj.getattr(argval, interp_callback=self.interp_callback,
+                               interp_state=self.interp_state)
         elif isinstance(obj, GuestPyObject):
-            return obj.getattr(argval)
+            return obj.getattr(argval, interp_state=self.interp_state, interp_callback=self.interp_callback)
         elif obj is sys and argval == 'path':
-            return Result(self.interpreter_state.paths)
+            return Result(self.interp_state.paths)
         elif obj is sys and argval == 'modules':
-            return Result(self.interpreter_state.sys_modules)
+            return Result(self.interp_state.sys_modules)
         else:
             try:
                 return Result(getattr(obj, argval))
@@ -522,7 +536,7 @@ class StatefulFrame:
             return Result(interp_routines.exception_match(lhs, rhs))
         else:
             return interp_routines.compare(
-                argval, lhs, rhs, self.interp_callback, self.interpreter_state)
+                argval, lhs, rhs, self.interp_callback, self.interp_state)
 
     def _run_END_FINALLY(self, arg, argval):
         # From the Python docs: "The interpreter recalls whether the
@@ -542,7 +556,7 @@ class StatefulFrame:
         rhs = self._pop()
         lhs = self._pop()
         return interp_routines.run_binop(opname, lhs, rhs,
-                                         self.interp_callback)
+                                         self.interp_callback, self.interp_state)
 
     def _run_BINARY_ADD(self, arg, argval):
         return self._run_binary('BINARY_ADD')
@@ -577,7 +591,7 @@ class StatefulFrame:
         if ({type(lhs), type(rhs)} <=
                 interp_routines.BUILTIN_VALUE_TYPES | {list}):
             return interp_routines.run_binop('BINARY_ADD', lhs, rhs,
-                                             self.interp_callback)
+                                             self.interp_callback, self.interp_state)
         else:
             raise NotImplementedError(lhs, rhs)
 
@@ -622,7 +636,7 @@ class StatefulFrame:
             print('[bc:cfkw]', to_call, 'args:', args, 'kwargs:', kwargs,
                   'callback:', self.do_call_callback)
         return self.do_call_callback(
-            to_call, args, state=self.interpreter_state, kwargs=kwargs,
+            to_call, args, interp_state=self.interp_state, kwargs=kwargs,
             globals_=self.globals_, get_exception_data=self.get_exception_data)
 
     def _run_SETUP_LOOP(self, arg, argval):
@@ -658,7 +672,7 @@ class StatefulFrame:
             print('[bc:cm]', method, args, 'self_value:', self_value,
                   file=sys.stderr)
         return self.do_call_callback(
-            method, args, globals_=self.globals_, state=self.interpreter_state,
+            method, args, globals_=self.globals_, interp_state=self.interp_state,
             get_exception_data=self.get_exception_data)
 
     def _run_CALL_FUNCTION_EX(self, arg, argval):
@@ -670,7 +684,7 @@ class StatefulFrame:
         func = self._pop()
         return self.do_call_callback(
             func, callargs, kwargs=kwargs, globals_=self.globals_,
-            state=self.interpreter_state,
+            interp_state=self.interp_state,
             get_exception_data=self.get_exception_data)
 
     def _run_PRINT_EXPR(self, arg, argval):
@@ -680,7 +694,7 @@ class StatefulFrame:
 
     def _run_IMPORT_STAR(self, arg, argval):
         module = self._peek()
-        import_routines.import_star(module, self.globals_)
+        import_routines.import_star(module, self.globals_, interp_state=self.interp_state, interp_callback=self.interp_callback)
         self._pop()  # Docs say 'module is popped after loading all names'.
 
     def _run_UNPACK_SEQUENCE(self, arg, argval):
