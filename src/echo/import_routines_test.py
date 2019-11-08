@@ -56,7 +56,8 @@ def test_sample_import_manual_procedure(fs):
     assert _find_absolute_import_path(
         'foo', search_paths).get_value() == '/root/foo/__init__.py'
     foo = _import_module_at_path(
-        '/root/foo/__init__.py', 'foo', interp_callback, interp_state).get_value()
+        '/root/foo/__init__.py', 'foo', interp_callback,
+        interp_state).get_value()
     bar = _subimport_module_at_path(
         '/root/foo/bar/__init__.py', 'foo.bar', foo,
         interp_callback, interp_state).get_value()
@@ -64,8 +65,10 @@ def test_sample_import_manual_procedure(fs):
         '/root/foo/bar/baz.py', 'foo.bar.baz', bar,
         interp_callback, interp_state).get_value()
 
-    assert foo.getattr('bar', interp_callback=interp_callback, interp_state=interp_state).get_value() is bar
-    assert bar.getattr('baz', interp_callback=interp_callback, interp_state=interp_state).get_value() is baz
+    assert foo.getattr('bar', interp_callback=interp_callback,
+                       interp_state=interp_state).get_value() is bar
+    assert bar.getattr('baz', interp_callback=interp_callback,
+                       interp_state=interp_state).get_value() is baz
 
 
 def test_sample_import_name(fs):
@@ -84,12 +87,15 @@ def test_sample_import_name(fs):
     result = _import_name(
         'foo.bar.baz', level=0, fromlist=('data',),
         importing_path='/script.py', importing_fully_qualified_name='__main__',
-        search_paths=['/root'], interp_state=interp_state, interp_callback=interp_callback)
+        search_paths=['/root'], interp_state=interp_state,
+        interp_callback=interp_callback)
     assert not result.is_exception()
     root, leaf, fromlist_values = result.get_value()
     assert fromlist_values == (42,)
-    assert leaf.getattr('__name__', interp_callback=interp_callback, interp_state=interp_state).get_value() == 'foo.bar.baz'
-    assert root.getattr('__name__', interp_callback=interp_callback, interp_state=interp_state).get_value() == 'foo'
+    assert leaf.getattr('__name__', interp_callback=interp_callback,
+                        interp_state=interp_state).get_value() == 'foo.bar.baz'
+    assert root.getattr('__name__', interp_callback=interp_callback,
+                        interp_state=interp_state).get_value() == 'foo'
 
 
 def test_from_import_attribute(fs):

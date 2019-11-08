@@ -123,8 +123,8 @@ def interp(code: types.CodeType,
     interp_callback = functools.partial(interp, interp_state=interp_state)
     do_call_callback = functools.partial(do_call, interp_state=interp_state)
     f = StatefulFrame(code, pc_to_instruction, pc_to_bc_width, locals_,
-                      locals_dict, globals_, cellvars, interp_state, in_function,
-                      interp_callback, do_call_callback)
+                      locals_dict, globals_, cellvars, interp_state,
+                      in_function, interp_callback, do_call_callback)
 
     if attrs.generator:
         return Result(GuestGenerator(f))
@@ -222,12 +222,14 @@ def do_call(f, args: Tuple[Any, ...],
     elif f is classmethod:
         return _do_call_classmethod(args, kwargs)
     elif isinstance(f, GuestPartial):
-        return f.invoke(args, interp_callback=interp_callback, interp_state=interp_state)
+        return f.invoke(args, interp_callback=interp_callback,
+                        interp_state=interp_state)
     elif isinstance(f, GuestBuiltin):
         return f.invoke(args, kwargs=kwargs, interp_callback=interp_callback,
                         call=do_call_callback, interp_state=interp_state)
     elif isinstance(f, GuestClass):
-        return f.instantiate(args, do_call=do_call_callback, globals_=globals_, interp_state=interp_state)
+        return f.instantiate(args, do_call=do_call_callback, globals_=globals_,
+                             interp_state=interp_state)
     else:
         raise NotImplementedError(f, args, kwargs)
 

@@ -23,10 +23,9 @@ SPECIAL_MODULES = (
 ModuleT = Union[ModuleType, GuestModule]
 
 
-def _import_module_at_path(path: Text,
-                           fully_qualified_name: Text,
-                           interp_callback: Callable,
-                           interp_state: InterpreterState) -> Result[GuestModule]:
+def _import_module_at_path(
+        path: Text, fully_qualified_name: Text, interp_callback: Callable,
+        interp_state: InterpreterState) -> Result[GuestModule]:
     """Imports a module at the given path and runs its code.
 
     * Reads in the file,
@@ -77,11 +76,10 @@ def _import_module_at_path(path: Text,
     return Result(module)
 
 
-def _subimport_module_at_path(path: Text,
-                              fully_qualified_name: Text,
-                              containing_package: GuestModule,
-                              interp_callback: Callable,
-                              interp_state: InterpreterState) -> Result[GuestModule]:
+def _subimport_module_at_path(
+        path: Text, fully_qualified_name: Text,
+        containing_package: GuestModule, interp_callback: Callable,
+        interp_state: InterpreterState) -> Result[GuestModule]:
     if DEBUG_PRINT_IMPORTS:
         print('[impr] path {} fqn {} containing_package {}'.format(path,
               fully_qualified_name, containing_package), file=sys.stderr)
@@ -138,7 +136,8 @@ def getattr_or_subimport(current_mod: ModuleT,
     if isinstance(current_mod, ModuleType):
         return Result(getattr(current_mod, fromlist_name))
 
-    result = current_mod.getattr(fromlist_name, interp_state=interp_state, interp_callback=interp_callback)
+    result = current_mod.getattr(fromlist_name, interp_state=interp_state,
+                                 interp_callback=interp_callback)
     if not result.is_exception():
         return result
 
@@ -153,17 +152,19 @@ def getattr_or_subimport(current_mod: ModuleT,
         current_mod, interp_callback, interp_state)
 
 
-def _extract_fromlist(start_module: ModuleT,
-                      module: ModuleT,
-                      fromlist: Optional[Sequence[Text]],
-                      interp_callback: Callable,
-                      interp_state: InterpreterState) -> Result[Tuple[Any, ...]]:
+def _extract_fromlist(
+        start_module: ModuleT,
+        module: ModuleT,
+        fromlist: Optional[Sequence[Text]],
+        interp_callback: Callable,
+        interp_state: InterpreterState) -> Result[Tuple[Any, ...]]:
     if fromlist is None or fromlist == ('*',):
         return Result((start_module, module, ()))
 
     results = []  # List[Any]
     for name in fromlist:
-        result = getattr_or_subimport(module, name, interp_callback, interp_state)
+        result = getattr_or_subimport(module, name, interp_callback,
+                                      interp_state)
         if result.is_exception():
             return Result(result.get_exception())
         results.append(result.get_value())
@@ -256,7 +257,8 @@ def _ascend_to_target_package(
     for _ in range(level-1):
         path, fqn = parent(path, fqn)
 
-    import_result = _import_module_at_path(path, fqn, interp_callback, interp_state)
+    import_result = _import_module_at_path(path, fqn, interp_callback,
+                                           interp_state)
     if import_result.is_exception():
         return Result(import_result.get_exception())
     return Result((import_result.get_value(), os.path.dirname(path)))
@@ -280,7 +282,8 @@ def _import_name_with_level(
 
     multi_module_pieces = tuple(multi_module_name.split('.'))
     current_mod = _traverse_module_pieces(
-        start_mod, start_dirpath, multi_module_pieces, interp_callback, interp_state)
+        start_mod, start_dirpath, multi_module_pieces, interp_callback,
+        interp_state)
     if current_mod.is_exception():
         return Result(current_mod.get_exception())
 
@@ -389,9 +392,10 @@ def run_IMPORT_NAME(importing_path: Text,
         result = _extract_fromlist(module, module, fromlist, interp_callback,
                                    interp_state)
     else:
-        result = _import_name(multi_module_name, level, fromlist,
-                              importing_path, globals_['__name__'],
-                              interp_state.paths, interp_callback, interp_state)
+        result = _import_name(
+            multi_module_name, level, fromlist, importing_path,
+            globals_['__name__'], interp_state.paths, interp_callback,
+            interp_state)
 
     if result.is_exception():
         return result
@@ -405,7 +409,8 @@ def run_IMPORT_NAME(importing_path: Text,
         return Result(root)
 
     if fromlist == ('*',):
-        import_star(leaf, globals_, interp_state=interp_state, interp_callback=interp_callback)
+        import_star(leaf, globals_, interp_state=interp_state,
+                    interp_callback=interp_callback)
     else:
         for name, value in zip(fromlist, fromlist_values):
             globals_[name] = value
@@ -421,4 +426,6 @@ def import_star(module: GuestModule,
                 ) -> None:
     for name in module.keys():
         if not name.startswith('_'):
-            globals_[name] = module.getattr(name, interp_state=interp_state, interp_callback=interp_callback).get_value()
+            globals_[name] = module.getattr(
+                name, interp_state=interp_state,
+                interp_callback=interp_callback).get_value()

@@ -115,8 +115,10 @@ class StatefulFrame:
         # sometimes a dict and other times a module?
         self.builtins = sys.modules['builtins']  # globals_['__builtins__']
 
-        self.interp_callback = wrap_with_push(self, interp_state, interp_callback)
-        self.do_call_callback = wrap_with_push(self, interp_state, do_call_callback)
+        self.interp_callback = wrap_with_push(
+            self, interp_state, interp_callback)
+        self.do_call_callback = wrap_with_push(
+            self, interp_state, do_call_callback)
 
     def _handle_exception(self):
         """Returns whether the exception was handled in this function."""
@@ -518,7 +520,8 @@ class StatefulFrame:
             return obj.getattr(argval, interp_callback=self.interp_callback,
                                interp_state=self.interp_state)
         elif isinstance(obj, GuestPyObject):
-            return obj.getattr(argval, interp_state=self.interp_state, interp_callback=self.interp_callback)
+            return obj.getattr(argval, interp_state=self.interp_state,
+                               interp_callback=self.interp_callback)
         elif obj is sys and argval == 'path':
             return Result(self.interp_state.paths)
         elif obj is sys and argval == 'modules':
@@ -555,8 +558,8 @@ class StatefulFrame:
     def _run_binary(self, opname):
         rhs = self._pop()
         lhs = self._pop()
-        return interp_routines.run_binop(opname, lhs, rhs,
-                                         self.interp_callback, self.interp_state)
+        return interp_routines.run_binop(
+            opname, lhs, rhs, self.interp_callback, self.interp_state)
 
     def _run_BINARY_ADD(self, arg, argval):
         return self._run_binary('BINARY_ADD')
@@ -590,8 +593,9 @@ class StatefulFrame:
         rhs = self._pop()
         if ({type(lhs), type(rhs)} <=
                 interp_routines.BUILTIN_VALUE_TYPES | {list}):
-            return interp_routines.run_binop('BINARY_ADD', lhs, rhs,
-                                             self.interp_callback, self.interp_state)
+            return interp_routines.run_binop(
+                'BINARY_ADD', lhs, rhs, self.interp_callback,
+                self.interp_state)
         else:
             raise NotImplementedError(lhs, rhs)
 
@@ -672,7 +676,8 @@ class StatefulFrame:
             print('[bc:cm]', method, args, 'self_value:', self_value,
                   file=sys.stderr)
         return self.do_call_callback(
-            method, args, globals_=self.globals_, interp_state=self.interp_state,
+            method, args, globals_=self.globals_,
+            interp_state=self.interp_state,
             get_exception_data=self.get_exception_data)
 
     def _run_CALL_FUNCTION_EX(self, arg, argval):
@@ -694,7 +699,10 @@ class StatefulFrame:
 
     def _run_IMPORT_STAR(self, arg, argval):
         module = self._peek()
-        import_routines.import_star(module, self.globals_, interp_state=self.interp_state, interp_callback=self.interp_callback)
+        import_routines.import_star(
+            module, self.globals_,
+            interp_state=self.interp_state,
+            interp_callback=self.interp_callback)
         self._pop()  # Docs say 'module is popped after loading all names'.
 
     def _run_UNPACK_SEQUENCE(self, arg, argval):
