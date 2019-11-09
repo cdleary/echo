@@ -15,7 +15,7 @@ subprocess.check_call([
     'pytype', '--config=pytype.cfg',
     '--python-version=%s' % VERSION_MAJOR_MINOR,
 ])
-subprocess.check_call(['pycodestyle', '.'])
+subprocess.check_call(['pycodestyle', 'src/'])
 
 PASS_BANNER = 'PRESUBMIT PASS!'
 PASS_BANNER_LEN = len(PASS_BANNER)+2
