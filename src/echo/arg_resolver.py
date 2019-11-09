@@ -2,12 +2,20 @@
 
 import sys
 import types
-from typing import Text, Dict, Optional, Tuple, Any, List
+from typing import Text, Dict, Optional, Tuple, Any, List, Sequence
 
-from echo.interp_result import Result
+from echo.interp_result import Result, ExceptionData
 from echo import code_attributes
 
 from termcolor import cprint
+
+
+def _arg_join(arg_names: Sequence[Text]) -> Text:
+    pieces = []
+    for name in arg_names:
+        pieces.append("'{}'".format(name))
+    s = ', '.join(pieces[:-1])
+    return s + ', and ' + pieces[-1]
 
 
 def resolve_args(attrs: code_attributes.CodeAttributes,
@@ -37,6 +45,14 @@ def resolve_args(attrs: code_attributes.CodeAttributes,
         arg_slots[stararg_index] = ()
     else:
         stararg_index = None
+        if len(args) > attrs.total_argcount:
+            msg = '{}() takes {} positional arguments but {} {} given'.format(
+                    attrs.name, attrs.total_argcount, len(args),
+                    'was' if len(args) == 1 else 'were')
+            return Result(ExceptionData(
+                traceback=None,
+                parameter=msg,
+                exception=TypeError(msg)))
 
     if attrs.starkwargs:
         starkwarg_index = attrs.total_argcount
@@ -123,7 +139,17 @@ def resolve_args(attrs: code_attributes.CodeAttributes,
         arg_slots[argno] = defaults[note]
 
     for arg in arg_slots:
-        assert arg != Sentinel, arg_slots
+        if arg == Sentinel:
+            missing_count = sum(1 for arg in arg_slots if arg == Sentinel)
+            missing_names = [name for i, name in enumerate(arg_names)
+                             if arg_slots[i] == Sentinel]
+            missing = _arg_join(missing_names)
+            msg = '{}() missing {} required positional arguments: {}'.format(
+                    attrs.name, missing_count, missing)
+            return Result(ExceptionData(
+                traceback=None,
+                parameter=msg,
+                exception=TypeError(msg)))
 
     # For convenience we inform the caller how many slots should be appended to
     # reach the number of local slots.

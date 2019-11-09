@@ -80,7 +80,7 @@ class GuestFunction(GuestPyObject):
                  kwarg_defaults: Optional[Dict[Text, Any]] = None,
                  closure=None):
         self.code = code
-        self._code_attrs = CodeAttributes.from_code(code)
+        self._code_attrs = CodeAttributes.from_code(code, name=name)
         self.globals_ = globals_
         self.name = name
         self.defaults = defaults
@@ -106,7 +106,7 @@ class GuestFunction(GuestPyObject):
 
         return interp_callback(
             self.code, globals_=self.globals_, args=args, kwargs=kwargs,
-            defaults=self.defaults, locals_dict=locals_dict,
+            defaults=self.defaults, locals_dict=locals_dict, name=self.name,
             kwarg_defaults=self.kwarg_defaults, closure=self.closure)
 
     def getattr(self, name: Text,

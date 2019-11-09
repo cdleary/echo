@@ -41,6 +41,7 @@ def interp(code: types.CodeType,
            *,
            globals_: Dict[Text, Any],
            interp_state: InterpreterState,
+           name: Text,
            locals_dict: Optional[Dict[Text, Any]] = None,
            args: Optional[Tuple[Any, ...]] = None,
            kwargs: Optional[Dict[Text, Any]] = None,
@@ -82,12 +83,11 @@ def interp(code: types.CodeType,
     def gprint(*args): interp_routines.cprint(*args, color='green')
 
     # Set up arguments as a precursor to establishing the locals.
-    attrs = code_attributes.CodeAttributes.from_code(code)
+    attrs = code_attributes.CodeAttributes.from_code(code, name)
     arg_result = resolve_args(
         attrs, args, kwargs, defaults, kwarg_defaults)
     if arg_result.is_exception():
-        raise NotImplementedError('Exception while resolving args.',
-                                  arg_result.get_exception())
+        return Result(arg_result.get_exception())
 
     arg_locals, additional_local_count = arg_result.get_value()
 
@@ -240,7 +240,7 @@ def run_function(f: types.FunctionType, *args: Tuple[Any, ...],
     state = InterpreterState(script_directory=None)
     globals_ = globals_ or globals()
     result = interp(get_code(f), globals_=globals_, defaults=f.__defaults__,
-                    args=args, interp_state=state)
+                    args=args, interp_state=state, name=f.__name__)
     return result.get_value()
 
 

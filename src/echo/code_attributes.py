@@ -12,7 +12,7 @@ class CodeAttributes:
     def __init__(self, argcount: int, kwonlyargcount: int, nlocals: int,
                  starargs: bool, starkwargs: bool, coroutine: bool,
                  varnames: Tuple[Text],
-                 generator: bool, async_generator: bool,
+                 generator: bool, async_generator: bool, name: Text, *,
                  code: Optional[types.CodeType] = None):
         self.argcount = argcount
         self.kwonlyargcount = kwonlyargcount
@@ -24,6 +24,7 @@ class CodeAttributes:
         self.generator = generator
         self.async_generator = async_generator
         self.code = code
+        self.name = name
 
     @property
     def total_argcount(self) -> int:
@@ -46,7 +47,7 @@ class CodeAttributes:
                 'total_argcount={0.total_argcount})').format(self)
 
     @classmethod
-    def from_code(cls, code: types.CodeType) -> 'CodeAttributes':
+    def from_code(cls, code: types.CodeType, name: Text) -> 'CodeAttributes':
         """Creates CodeAttributes with values extracted from VM code object."""
         return cls(
             argcount=code.co_argcount,
@@ -58,4 +59,4 @@ class CodeAttributes:
             generator=bool(code.co_flags & cls.GENERATOR_FLAG),
             async_generator=bool(code.co_flags & cls.ASYNC_GENERATOR_FLAG),
             coroutine=bool(code.co_flags & cls.COROUTINE_FLAG),
-            code=code)
+            code=code, name=name)

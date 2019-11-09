@@ -66,7 +66,8 @@ def _import_module_at_path(
     interp_state.sys_modules[fully_qualified_name] = module
 
     # Run the code within the module.
-    result = interp_callback(module_code, globals_=globals_, in_function=False)
+    result = interp_callback(module_code, globals_=globals_, in_function=False,
+                             name=fully_qualified_name)
     if result.is_exception():
         return result
 
