@@ -667,7 +667,7 @@ class GuestSuper(GuestPyObject):
             return result
         value = result.get_value()
         if isinstance(value, GuestFunction):
-            return Result(GuestMethod(value, bound_self=self))
+            return Result(GuestMethod(value, bound_self=self.obj))
         return Result(value)
 
     def setattr(self, name: Text, value: Any) -> Result[None]:
