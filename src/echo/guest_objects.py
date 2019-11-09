@@ -247,7 +247,7 @@ class GuestInstance(GuestPyObject):
     def __init__(self, cls: 'GuestClass'):
         assert isinstance(cls, GuestClass), cls
         self.cls = cls
-        self.dict = {}
+        self.dict_ = {}
 
     def __repr__(self) -> Text:
         return 'GuestInstance(cls={!r})'.format(self.cls)
@@ -256,7 +256,7 @@ class GuestInstance(GuestPyObject):
         return self.cls
 
     def hasattr(self, name: Text) -> bool:
-        if name in self.dict:
+        if name in self.dict_:
             return True
         if name == '__class__':
             return True
@@ -270,12 +270,12 @@ class GuestInstance(GuestPyObject):
                 interp_callback: Optional[Callable] = None,
                 ) -> Result[Any]:
         try:
-            value = self.dict[name]
+            value = self.dict_[name]
         except KeyError:
             if name == '__class__':
                 return Result(self.cls)
             if name == '__dict__':
-                return Result(self.dict)
+                return Result(self.dict_)
             result = self.cls.getattr(name, interp_state=interp_state,
                                       interp_callback=interp_callback)
             if result.is_exception():
@@ -304,7 +304,7 @@ class GuestInstance(GuestPyObject):
         return Result(value)
 
     def setattr(self, name: Text, value: Any):
-        self.dict[name] = value
+        self.dict_[name] = value
 
 
 class GuestClass(GuestPyObject):
@@ -652,8 +652,8 @@ class GuestSuper(GuestPyObject):
                 interp_state: InterpreterState,
                 interp_callback: Optional[Callable] = None,
                 ) -> Result[Any]:
-        if name in self.obj.dict:
-            result = Result(self.obj.dict[name])
+        if name in self.obj.dict_:
+            result = Result(self.obj.dict_[name])
         else:
             result = self.type_.getattr(name, interp_state=interp_state)
         if result.is_exception():
@@ -681,7 +681,8 @@ def _do_super(args: Tuple[Any, ...],
         assert len(args) == 2, args
         type_, obj = args
 
-    assert obj.get_type().is_subtype_of(type_)
+    obj_type = obj.get_type()
+    assert obj_type.is_subtype_of(type_), (obj, obj_type, type_)
     return Result(GuestSuper(type_.bases[0], obj))
 
 
@@ -713,7 +714,7 @@ class GuestBuiltin(GuestPyObject):
             self.name, self.bound_self)
 
     def is_subtype_of(self, other: 'GuestClass') -> bool:
-        raise NotImplementedError(other)
+        return False
 
     def invoke(self, args: Tuple[Any, ...], *,
                interp_state: InterpreterState,
