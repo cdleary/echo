@@ -1,6 +1,8 @@
 import abc
+import collections
 import itertools
 import os
+import pprint
 import sys
 import types
 from typing import Text, Any, Dict, Iterable, Tuple, Optional, Set, Callable
@@ -258,7 +260,8 @@ class GuestInstance(GuestPyObject):
     def hasattr(self, name: Text) -> bool:
         if name in self.dict_:
             return True
-        if name == '__class__':
+        # Special members.
+        if name in ('__class__',):
             return True
         cls_hasattr = self.cls.hasattr(name)
         assert isinstance(cls_hasattr, bool), (self.cls, cls_hasattr)
@@ -321,6 +324,42 @@ class GuestClass(GuestPyObject):
 
     def get_type(self) -> 'GuestClass':
         return self.metaclass or get_guest_builtin('type')
+
+    def _get_mro(self) -> Tuple['GuestPyObject', ...]:
+        """The MRO is a preorder DFS of the 'derives from' relation."""
+        derives_from = []
+        frontier = collections.deque([self])
+        while frontier:
+            cls = frontier.popleft()
+            for base in cls.bases:
+                derives_from.append((cls, base))
+                frontier.append(base)
+
+        #print('derives_from:', pprint.pformat(derives_from))
+
+        cls_to_subclasses = collections.defaultdict(list)
+        for cls, base in derives_from:
+            cls_to_subclasses[base].append(cls)
+        cls_to_subclasses = dict(cls_to_subclasses)
+        #print('cls_to_subclasses:', pprint.pformat(cls_to_subclasses))
+
+        ready = collections.deque([self])
+        order = []
+
+        def is_ready(c) -> bool:
+            return all(sc in order for sc in cls_to_subclasses.get(c, []))
+
+        assert is_ready(self)
+
+        while ready:
+            c = ready.popleft()
+            order.append(c)
+            for b in reversed(c.bases):
+                if is_ready(b):
+                    ready.appendleft(b)
+
+        order.append(get_guest_builtin('object'))
+        return tuple(order)
 
     def _get_transitive_bases(self) -> Set['GuestClass']:
         bases = set(self.bases)
@@ -389,6 +428,8 @@ class GuestClass(GuestPyObject):
         if name == '__dict__':
             return Result(self.dict_)
         if name not in self.dict_:
+            if name == '__mro__':
+                return Result(self._get_mro())
             if name == '__class__':
                 return Result(self.metaclass or get_guest_builtin('type'))
             if DEBUG_PRINT_BYTECODE:
