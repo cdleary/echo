@@ -5,7 +5,9 @@ import os
 import pprint
 import sys
 import types
-from typing import Text, Any, Dict, Iterable, Tuple, Optional, Set, Callable
+from typing import (
+    Text, Any, Dict, Iterable, Tuple, Optional, Set, Callable, Union,
+)
 from enum import Enum
 
 from echo.interpreter_state import InterpreterState
@@ -246,15 +248,15 @@ class GuestMethod(GuestPyObject):
 
 class GuestInstance(GuestPyObject):
 
-    def __init__(self, cls: 'GuestClass'):
-        assert isinstance(cls, GuestClass), cls
+    def __init__(self, cls: Union['GuestClass', 'GuestBuiltin']):
+        assert isinstance(cls, (GuestClass, GuestBuiltin)), cls
         self.cls = cls
         self.dict_ = {}
 
     def __repr__(self) -> Text:
         return '<{} object>'.format(self.cls.name)
 
-    def get_type(self) -> 'GuestClass':
+    def get_type(self) -> Union['GuestClass', 'GuestBuiltin']:
         return self.cls
 
     def hasattr(self, name: Text) -> bool:
@@ -335,13 +337,10 @@ class GuestClass(GuestPyObject):
                 derives_from.append((cls, base))
                 frontier.append(base)
 
-        #print('derives_from:', pprint.pformat(derives_from))
-
         cls_to_subclasses = collections.defaultdict(list)
         for cls, base in derives_from:
             cls_to_subclasses[base].append(cls)
         cls_to_subclasses = dict(cls_to_subclasses)
-        #print('cls_to_subclasses:', pprint.pformat(cls_to_subclasses))
 
         ready = collections.deque([self])
         order = []
@@ -361,22 +360,10 @@ class GuestClass(GuestPyObject):
         order.append(get_guest_builtin('object'))
         return tuple(order)
 
-    def _get_transitive_bases(self) -> Set['GuestClass']:
-        bases = set(self.bases)
-        while True:
-            new_bases = set(itertools.chain.from_iterable(
-                c.bases for c in bases))
-            size_before = len(bases)
-            bases |= new_bases
-            size_after = len(bases)
-            if size_after == size_before:
-                break
-        return bases
-
     def is_subtype_of(self, other: 'GuestClass') -> bool:
         if self is other:
             return True
-        return other in self._get_transitive_bases()
+        return other in self._get_mro()
 
     def is_strict_subtype_of(self, other: 'GuestClass') -> bool:
         if self is other:
@@ -582,6 +569,11 @@ def _do_str(args: Tuple[Any, ...], do_call) -> Result[Any]:
     frepr = frepr.get_value()
     globals_ = frepr.getattr('__globals__')
     return do_call(frepr, args=(), globals_=globals_)
+
+
+def _do_object(args: Tuple[Any, ...]) -> Result[Any]:
+    assert len(args) == 0, args
+    return Result(GuestInstance(cls=get_guest_builtin('object')))
 
 
 def _do_dir(args: Tuple[Any, ...], do_call, *,
@@ -822,6 +814,8 @@ class GuestBuiltin(GuestPyObject):
             return _do_repr(args, call)
         if self.name == 'str':
             return _do_str(args, call)
+        if self.name == 'object':
+            return _do_object(args)
         if self.name == 'dir':
             return _do_dir(args, call, interp_state=interp_state,
                            interp_callback=interp_callback)
@@ -834,7 +828,12 @@ class GuestBuiltin(GuestPyObject):
                 *,
                 interp_state: InterpreterState,
                 interp_callback: Optional[Callable] = None,
-                ) -> Any:
+                ) -> Result[Any]:
+        if self.name == 'object':
+            if name == '__init__':
+                return Result(get_guest_builtin('object.__init__'))
+            if name == '__str__':
+                return Result(get_guest_builtin('object.__str__'))
         raise NotImplementedError(self, name)
 
     def setattr(self, name: Text, value: Any) -> Any:
