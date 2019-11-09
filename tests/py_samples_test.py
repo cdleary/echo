@@ -54,5 +54,6 @@ def test_echo_on_sample(path: Text):
     result = interp.import_path(path, fully_qualified_name,
                                 fully_qualified_name, state)
     if result.is_exception():
+        print(result.get_exception().exception)
         pprint.pprint(result.get_exception().traceback, width=120)
     assert not result.is_exception(), result.get_exception()

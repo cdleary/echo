@@ -5,7 +5,9 @@ class Base:
 
 class Derived(Base):
     def __init__(self, derived_stuff, base_stuff):
-        super(Derived, self).__init__(base_stuff)
+        s = super(Derived, self)
+        print('super:', s)
+        s.__init__(base_stuff)
         self.derived_stuff = derived_stuff
 
 

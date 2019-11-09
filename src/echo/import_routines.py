@@ -106,10 +106,11 @@ def _resolve_module_or_package(dirpath: Text,
         return Result(module_path)
     if os.path.exists(package_path):
         return Result(package_path)
+    msg = 'Could not find module or package with name: {!r}'.format(fqn_piece),
     return Result(ExceptionData(
         None,
-        'Could not find module or package with name: {!r}'.format(fqn_piece),
-        ImportError))
+        None,
+        ImportError(msg)))
 
 
 def _find_absolute_import_path(module_name: Text,

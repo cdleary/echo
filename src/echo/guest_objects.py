@@ -250,7 +250,7 @@ class GuestInstance(GuestPyObject):
         self.dict_ = {}
 
     def __repr__(self) -> Text:
-        return 'GuestInstance(cls={!r})'.format(self.cls)
+        return '<{} object>'.format(self.cls.name)
 
     def get_type(self) -> 'GuestClass':
         return self.cls
@@ -317,10 +317,7 @@ class GuestClass(GuestPyObject):
         self.kwargs = kwargs
 
     def __repr__(self) -> Text:
-        metaclass = (', metaclass={!r}'.format(self.metaclass)
-                     if self.metaclass else '')
-        return 'GuestClass(name={!r}, bases={!r}{metaclass})'.format(
-            self.name, self.bases, metaclass=metaclass)
+        return '<eclass \'{}.{}\'>'.format(self.dict_['__module__'], self.name)
 
     def get_type(self) -> 'GuestClass':
         return self.metaclass or get_guest_builtin('type')
@@ -643,9 +640,17 @@ def _do___build_class__(
 
 
 class GuestSuper(GuestPyObject):
-    def __init__(self, type_, obj):
+    def __init__(self, type_, obj, obj_type):
         self.type_ = type_
         self.obj = obj
+        self.obj_type = obj_type
+
+    def get_type(self) -> 'GuestPyObject':
+        return get_guest_builtin('super')
+
+    def __repr__(self) -> Text:
+        return "<esuper: <class '{}'>, <{} object>>".format(
+            self.type_.name, self.obj_type.name)
 
     def getattr(self, name: Text,
                 *,
@@ -655,7 +660,9 @@ class GuestSuper(GuestPyObject):
         if name in self.obj.dict_:
             result = Result(self.obj.dict_[name])
         else:
-            result = self.type_.getattr(name, interp_state=interp_state)
+            # TODO(cdleary): 2019-11-09 Replace with real MRO lookup.
+            base = self.type_.bases[0]
+            result = base.getattr(name, interp_state=interp_state)
         if result.is_exception():
             return result
         value = result.get_value()
@@ -682,8 +689,7 @@ def _do_super(args: Tuple[Any, ...],
         type_, obj = args
 
     obj_type = obj.get_type()
-    assert obj_type.is_subtype_of(type_), (obj, obj_type, type_)
-    return Result(GuestSuper(type_.bases[0], obj))
+    return Result(GuestSuper(type_, obj, obj_type))
 
 
 _ITER_BUILTIN_TYPES = (
