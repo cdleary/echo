@@ -13,7 +13,7 @@ class MyMeta(type):
         print('super:', s)
         super_new = s.__new__
         print('super.__new__:', super_new)
-        #assert super_new is type.__new__
+        assert super_new is type.__new__
         cls = super_new(mcls, name, bases, namespace)
         print('cls:', cls)
         return cls

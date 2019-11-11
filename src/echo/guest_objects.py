@@ -594,6 +594,17 @@ def _do_object(args: Tuple[Any, ...]) -> Result[Any]:
     return Result(GuestInstance(cls=get_guest_builtin('object')))
 
 
+def _do_type_new(args: Tuple[Any, ...],
+        *,
+        interp_state: InterpreterState,
+        interp_callback: Callable,
+        kwargs: Optional[Dict[Text, Any]] = None,
+        call: Callable) -> Result[GuestClass]:
+    metaclass, name, bases, ns = args
+    cls = GuestClass(name, dict_=ns, bases=bases, metaclass=metaclass)
+    return Result(cls)
+
+
 def _do_dir(args: Tuple[Any, ...], do_call, *,
             interp_callback: Callable,
             interp_state: InterpreterState) -> Result[Any]:
@@ -654,7 +665,7 @@ def _do___build_class__(
         interp_state: InterpreterState,
         interp_callback: Callable,
         kwargs: Optional[Dict[Text, Any]] = None,
-        call) -> Result[GuestClass]:
+        call: Callable) -> Result[GuestClass]:
     if DEBUG_PRINT_BYTECODE:
         print('[go:bc]', args)
     func, name, *bases = args
@@ -732,7 +743,14 @@ class GuestSuper(GuestPyObject):
         mro = mro[i+1:]
 
         for t in mro:
-            if not hasattr(t, 'dict_') or name not in t.dict_:
+            if _is_type_builtin(t):
+                if name == '__new__':
+                    return Result(get_guest_builtin('type.__new__'))
+                continue
+            if _is_object_builtin(t):
+                continue
+            assert isinstance(t, GuestClass), t
+            if name not in t.dict_:
                 continue
             result = t.getattr(name, interp_state=interp_state,
                                interp_callback=interp_callback)
@@ -858,6 +876,11 @@ class GuestBuiltin(GuestPyObject):
             return _do___build_class__(
                 args, kwargs=kwargs, call=call, interp_state=interp_state,
                 interp_callback=interp_callback)
+        if self.name == 'type.__new__':
+            assert not kwargs
+            return _do_type_new(
+                args, kwargs=kwargs, call=call, interp_state=interp_state,
+                interp_callback=interp_callback)
         if self.name == 'super':
             return _do_super(args, interp_state)
         if self.name == 'iter':
@@ -892,6 +915,9 @@ class GuestBuiltin(GuestPyObject):
                 return Result(get_guest_builtin('object.__init__'))
             if name == '__str__':
                 return Result(get_guest_builtin('object.__str__'))
+        if self.name == 'type':
+            if name == '__new__':
+                return Result(get_guest_builtin('type.__new__'))
         raise NotImplementedError(self, name)
 
     def setattr(self, name: Text, value: Any) -> Any:
