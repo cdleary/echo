@@ -48,6 +48,7 @@ COMPARE_OPS = {
     '<': operator.lt,
     '>': operator.gt,
     '>=': operator.ge,
+    '<=': operator.le,
     'is not': operator.is_not,
     'is': operator.is_,
     'in': lambda a, b: operator.contains(b, a),

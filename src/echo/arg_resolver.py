@@ -47,7 +47,6 @@ def resolve_args(attrs: code_attributes.CodeAttributes,
     else:
         stararg_index = None
         if len(args) > attrs.total_argcount:
-            print('bad args: {}'.format(pprint.pformat(args)))
             msg = '{}() takes {} positional arguments but {} {} given'.format(
                     attrs.name, attrs.total_argcount, len(args),
                     'was' if len(args) == 1 else 'were')

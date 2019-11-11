@@ -95,10 +95,7 @@ class GuestFunction(GuestPyObject):
         }
 
     def __repr__(self):
-        return ('GuestFunction(code={!r}, name={!r}, closure={!r}, '
-                'defaults={!r}, kwarg_defaults={!r})').format(
-                    self.code, self.name, self.closure, self.defaults,
-                    self.kwarg_defaults)
+        return '<efunction {} at {:#x}>'.format(self.name, id(self))
 
     def invoke(self, *, args: Tuple[Any, ...],
                interp_callback: Callable,
@@ -327,7 +324,7 @@ class GuestClass(GuestPyObject):
     def get_type(self) -> 'GuestClass':
         return self.metaclass or get_guest_builtin('type')
 
-    def _get_mro(self) -> Tuple['GuestPyObject', ...]:
+    def get_mro(self) -> Tuple['GuestPyObject', ...]:
         """The MRO is a preorder DFS of the 'derives from' relation."""
         derives_from = []
         frontier = collections.deque([self])
@@ -363,7 +360,7 @@ class GuestClass(GuestPyObject):
     def is_subtype_of(self, other: 'GuestClass') -> bool:
         if self is other:
             return True
-        return other in self._get_mro()
+        return other in self.get_mro()
 
     def is_strict_subtype_of(self, other: 'GuestClass') -> bool:
         if self is other:
@@ -416,7 +413,7 @@ class GuestClass(GuestPyObject):
             return Result(self.dict_)
         if name not in self.dict_:
             if name == '__mro__':
-                return Result(self._get_mro())
+                return Result(self.get_mro())
             if name == '__class__':
                 return Result(self.metaclass or get_guest_builtin('type'))
             if DEBUG_PRINT_BYTECODE:
@@ -653,6 +650,7 @@ def _do___build_class__(
             new_f = metaclass.getattr(
                 '__new__', interp_state=interp_state,
                 interp_callback=interp_callback).get_value()
+            print('calling new_f:', new_f, 'metaclass:', metaclass, file=sys.stderr)
             return call(new_f,
                         args=(metaclass, name, bases, ns), kwargs=kwargs,
                         globals_=new_f.globals_)
@@ -672,39 +670,71 @@ def _do___build_class__(
     return cls_result
 
 
+
+def get_mro(o: GuestPyObject):
+    if _is_type_builtin(o):
+        return (get_guest_builtin('type'), get_guest_builtin('object'))
+    assert isinstance(o, GuestClass), o
+    return o.get_mro()
+
+
 class GuestSuper(GuestPyObject):
-    def __init__(self, type_, obj, obj_type):
+    def __init__(self, type_, obj_or_type, obj_or_type_type):
         self.type_ = type_
-        self.obj = obj
-        self.obj_type = obj_type
+        self.obj_or_type = obj_or_type
+        self.obj_or_type_type = obj_or_type_type
 
     def get_type(self) -> 'GuestPyObject':
         return get_guest_builtin('super')
 
     def __repr__(self) -> Text:
         return "<esuper: <class '{}'>, <{} object>>".format(
-            self.type_.name, self.obj_type.name)
+            self.type_.name, self.obj_or_type_type.name)
 
     def getattr(self, name: Text,
                 *,
                 interp_state: InterpreterState,
                 interp_callback: Optional[Callable] = None,
                 ) -> Result[Any]:
-        if name in self.obj.dict_:
-            result = Result(self.obj.dict_[name])
-        else:
-            # TODO(cdleary): 2019-11-09 Replace with real MRO lookup.
-            base = self.type_.bases[0]
-            result = base.getattr(name, interp_state=interp_state)
-        if result.is_exception():
+        if name == '__thisclass__':
+            return Result(self.type_)
+        if name == '__self_class__':
+            return Result(self.obj_or_type_type)
+        if name == '__self__':
+            return Result(self.obj_or_type)
+        if name == '__class__':
+            return Result(get_guest_builtin('super'))
+
+        print('[go:super] super getattr:', repr(name), 'obj:', self.obj_or_type)
+        start_type = self.obj_or_type_type
+        mro = get_mro(start_type)
+        try:
+            i = mro.index(self.type_)
+        except ValueError:
+            return self._obj_getattr(name, interp_state=interp_state, interp_callback=interp_callback)
+        mro = mro[i+1:]
+
+        print('[go:super]  searching mro:', mro)
+
+        for t in mro:
+            print('[go:super]  checking:', t, 'for', name)
+            if not hasattr(t, 'dict_') or name not in t.dict_:
+                continue
+            result = t.getattr(name, interp_state=interp_state,
+                               interp_callback=interp_callback)
+            if result.is_exception():
+                return result
+
+            value = result.get_value()
+            if isinstance(value, GuestFunction) and isinstance(self.obj_or_type, GuestInstance):
+                return Result(GuestMethod(value, bound_self=self.obj_or_type))
+
             return result
-        value = result.get_value()
-        if isinstance(value, GuestFunction):
-            return Result(GuestMethod(value, bound_self=self.obj))
-        return Result(value)
+
+        return Result(ExceptionData(None, None, AttributeError(f"'super' object has no attribute {name!r}")))
 
     def setattr(self, name: Text, value: Any) -> Result[None]:
-        return self.obj.setattr(name, value)
+        return self.obj_or_type.setattr(name, value)
 
 
 def _do_super(args: Tuple[Any, ...],
@@ -716,13 +746,22 @@ def _do_super(args: Tuple[Any, ...],
         type_ = cell._storage
         if not isinstance(type_, GuestClass):
             raise NotImplementedError
-        obj = frame.locals_[0]
+        obj_or_type = frame.locals_[0]
     else:
         assert len(args) == 2, args
-        type_, obj = args
+        type_, obj_or_type = args
 
-    obj_type = obj.get_type()
-    return Result(GuestSuper(type_, obj, obj_type))
+    if DEBUG_PRINT_BYTECODE:
+        print(f'[go:super] type_: {type_} obj: {obj}', file=sys.stderr)
+
+    def supercheck():
+        if isinstance(obj_or_type, GuestClass):
+            return obj_or_type
+        assert isinstance(obj_or_type, GuestInstance)
+        return obj_or_type.get_type()
+
+    obj_type = supercheck()
+    return Result(GuestSuper(type_, obj_or_type, obj_type))
 
 
 _ITER_BUILTIN_TYPES = (
@@ -749,6 +788,8 @@ class GuestBuiltin(GuestPyObject):
         self.dict = {}
 
     def __repr__(self):
+        if self.name == 'object':
+            return "<builtin class 'object'>"
         return 'GuestBuiltin(name={!r}, bound_self={!r}, ...)'.format(
             self.name, self.bound_self)
 

@@ -419,7 +419,7 @@ class StatefulFrame:
         args = self._pop_n(argc, tos_is_0=False)
         f = self._pop()
         if DEBUG_PRINT_BYTECODE:
-            print('[fo:cf] f:', f, file=sys.stderr)
+            print('[fo:cf] f:', f, 'args:', args, file=sys.stderr)
         return self.do_call_callback(
             f, args, interp_state=self.interp_state, kwargs=kwargs,
             globals_=self.globals_, get_exception_data=self.get_exception_data)
@@ -673,8 +673,9 @@ class StatefulFrame:
         if self_value is not UnboundLocalSentinel:
             args = (self_value,) + args
         if DEBUG_PRINT_BYTECODE:
-            print('[bc:cm]', method, args, 'self_value:', self_value,
-                  file=sys.stderr)
+            print(f'[bc:cm] method: {method}', file=sys.stderr)
+            print(f'[bc:cm] args: {args}', file=sys.stderr)
+            print(f'[bc:cm] self_value: {self_value}', file=sys.stderr)
         return self.do_call_callback(
             method, args, globals_=self.globals_,
             interp_state=self.interp_state,
@@ -687,6 +688,8 @@ class StatefulFrame:
             kwargs = None
         callargs = self._pop()
         func = self._pop()
+        if DEBUG_PRINT_BYTECODE:
+            print('[fo:cfex] f:', func, 'args:', callargs, file=sys.stderr)
         return self.do_call_callback(
             func, callargs, kwargs=kwargs, globals_=self.globals_,
             interp_state=self.interp_state,
