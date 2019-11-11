@@ -309,8 +309,25 @@ class GuestInstance(GuestPyObject):
         self.dict_[name] = value
 
 
+GuestClassOrBuiltin = Union['GuestClass', 'GuestBuiltin']
+
+
+def get_bases(c: GuestClassOrBuiltin) -> Tuple[GuestPyObject, ...]:
+    if isinstance(c, GuestClass):
+        return c.bases
+    if _is_type_builtin(c):
+        return (get_guest_builtin('object'),)
+    if _is_object_builtin(c):
+        return ()
+    raise NotImplementedError(c)
+
+
 class GuestClass(GuestPyObject):
-    def __init__(self, name: Text, dict_: Dict[Text, Any], *, bases=None,
+    bases: Tuple[GuestClassOrBuiltin, ...]
+    metaclass: Optional[GuestClassOrBuiltin]
+
+    def __init__(self, name: Text, dict_: Dict[Text, Any], *,
+                 bases: Optional[Tuple[GuestClassOrBuiltin]] = None,
                  metaclass=None, kwargs=None):
         self.name = name
         self.dict_ = dict_
@@ -326,11 +343,11 @@ class GuestClass(GuestPyObject):
 
     def get_mro(self) -> Tuple['GuestPyObject', ...]:
         """The MRO is a preorder DFS of the 'derives from' relation."""
-        derives_from = []
+        derives_from = []  # (cls, base)
         frontier = collections.deque([self])
         while frontier:
             cls = frontier.popleft()
-            for base in cls.bases:
+            for base in get_bases(cls):
                 derives_from.append((cls, base))
                 frontier.append(base)
 
@@ -350,7 +367,7 @@ class GuestClass(GuestPyObject):
         while ready:
             c = ready.popleft()
             order.append(c)
-            for b in reversed(c.bases):
+            for b in reversed(get_bases(c)):
                 if is_ready(b):
                     ready.appendleft(b)
 
@@ -467,6 +484,10 @@ class GuestCoroutineType(GuestPyObject):
 
 def _is_type_builtin(x) -> bool:
     return isinstance(x, GuestBuiltin) and x.name == 'type'
+
+
+def _is_object_builtin(x) -> bool:
+    return isinstance(x, GuestBuiltin) and x.name == 'object'
 
 
 def _is_str_builtin(x) -> bool:
@@ -637,6 +658,7 @@ def _do___build_class__(
     if DEBUG_PRINT_BYTECODE:
         print('[go:bc]', args)
     func, name, *bases = args
+    bases = tuple(bases)
     ns = {}  # Namespace for the class.
     class_eval_result = call(func, args=(), locals_dict=ns,
                              globals_=func.globals_)
