@@ -650,7 +650,6 @@ def _do___build_class__(
             new_f = metaclass.getattr(
                 '__new__', interp_state=interp_state,
                 interp_callback=interp_callback).get_value()
-            print('calling new_f:', new_f, 'metaclass:', metaclass, file=sys.stderr)
             return call(new_f,
                         args=(metaclass, name, bases, ns), kwargs=kwargs,
                         globals_=new_f.globals_)
@@ -668,7 +667,6 @@ def _do___build_class__(
     # object.
 
     return cls_result
-
 
 
 def get_mro(o: GuestPyObject):
@@ -705,19 +703,13 @@ class GuestSuper(GuestPyObject):
         if name == '__class__':
             return Result(get_guest_builtin('super'))
 
-        print('[go:super] super getattr:', repr(name), 'obj:', self.obj_or_type)
         start_type = self.obj_or_type_type
         mro = get_mro(start_type)
-        try:
-            i = mro.index(self.type_)
-        except ValueError:
-            return self._obj_getattr(name, interp_state=interp_state, interp_callback=interp_callback)
+        # Look at everything succeeding 'type_' in the MRO order.
+        i = mro.index(self.type_)
         mro = mro[i+1:]
 
-        print('[go:super]  searching mro:', mro)
-
         for t in mro:
-            print('[go:super]  checking:', t, 'for', name)
             if not hasattr(t, 'dict_') or name not in t.dict_:
                 continue
             result = t.getattr(name, interp_state=interp_state,
@@ -726,12 +718,15 @@ class GuestSuper(GuestPyObject):
                 return result
 
             value = result.get_value()
-            if isinstance(value, GuestFunction) and isinstance(self.obj_or_type, GuestInstance):
+            if (isinstance(value, GuestFunction) and
+                    isinstance(self.obj_or_type, GuestInstance)):
                 return Result(GuestMethod(value, bound_self=self.obj_or_type))
 
             return result
 
-        return Result(ExceptionData(None, None, AttributeError(f"'super' object has no attribute {name!r}")))
+        return Result(ExceptionData(
+            None, None,
+            AttributeError(f"'super' object has no attribute {name!r}")))
 
     def setattr(self, name: Text, value: Any) -> Result[None]:
         return self.obj_or_type.setattr(name, value)
@@ -752,7 +747,7 @@ def _do_super(args: Tuple[Any, ...],
         type_, obj_or_type = args
 
     if DEBUG_PRINT_BYTECODE:
-        print(f'[go:super] type_: {type_} obj: {obj}', file=sys.stderr)
+        print(f'[go:super] type_: {type_} obj: {obj_or_type}', file=sys.stderr)
 
     def supercheck():
         if isinstance(obj_or_type, GuestClass):
