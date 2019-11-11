@@ -594,7 +594,8 @@ def _do_object(args: Tuple[Any, ...]) -> Result[Any]:
     return Result(GuestInstance(cls=get_guest_builtin('object')))
 
 
-def _do_type_new(args: Tuple[Any, ...],
+def _do_type_new(
+        args: Tuple[Any, ...],
         *,
         interp_state: InterpreterState,
         interp_callback: Callable,
