@@ -75,9 +75,14 @@ class GuestModule(GuestPyObject):
         except KeyError:
             return Result(ExceptionData(None, name, AttributeError))
 
-    def setattr(self, name: Text, value: Any):
+    def setattr(self, name: Text, value: Any,
+                *,
+                interp_state: InterpreterState,
+                interp_callback: Optional[Callable] = None,
+                ) -> Result[None]:
         assert not isinstance(value, Result), value
         self.globals_[name] = value
+        return Result(None)
 
 
 class GuestFunction(GuestPyObject):
@@ -112,19 +117,33 @@ class GuestFunction(GuestPyObject):
             kwarg_defaults=self.kwarg_defaults, closure=self.closure)
 
     def hasattr(self, name: Text) -> bool:
-        return name in self.dict_
+        return name in self.dict_ or name in ('__get__',)
+
+    def _get(self, args, *,
+               interp_callback: Callable,
+               interp_state: InterpreterState,
+            ) -> Result[Any]:
+        _self, obj, objtype = args
+        assert self is _self
+        return Result(GuestMethod(f=_self, bound_self=obj))
 
     def getattr(self, name: Text,
                 *,
                 interp_state: InterpreterState,
                 interp_callback: Optional[Callable] = None,
                 ) -> Result[Any]:
+        if name == '__get__':
+            return Result(GuestMethod(NativeFunction(self._get), bound_self=self))
         try:
             return Result(self.dict_[name])
         except KeyError:
             return Result(ExceptionData(None, name, AttributeError))
 
-    def setattr(self, name: Text, value: Any) -> Result[None]:
+    def setattr(self, name: Text, value: Any,
+                *,
+                interp_state: InterpreterState,
+                interp_callback: Optional[Callable] = None,
+                ) -> Result[None]:
         self.dict_[name] = value
         return Result(None)
 
@@ -209,8 +228,8 @@ class GuestMethod(GuestPyObject):
         self.bound_self = bound_self
 
     def __repr__(self) -> Text:
-        return 'GuestMethod(f={!r}, bound_self={!r})'.format(
-            self.f, self.bound_self)
+        return '<ebound method {} of {!r}>'.format(
+            self.f.name, self.bound_self)
 
     @property
     def code(self): return self.f.code
@@ -246,6 +265,25 @@ class GuestMethod(GuestPyObject):
             interp_state=interp_state, locals_dict=locals_dict,
             interp_callback=interp_callback)
 
+def _invoke_desc(self, cls_attr,
+            *,
+            interp_state: InterpreterState,
+            interp_callback: Optional[Callable] = None,
+            ) -> Result[Any]:
+    assert cls_attr.hasattr('__get__')
+    f_result = cls_attr.getattr('__get__', interp_state=interp_state,
+                                interp_callback=interp_callback)
+    if f_result.is_exception():
+        return Result(f_result.get_exception())
+    objtype_result = _do_type(args=(cls_attr,))
+    if objtype_result.is_exception():
+        return Result(objtype_result.get_exception())
+    objtype = objtype_result.get_value()
+    return f_result.get_value().invoke(
+        args=(self, objtype), interp_callback=interp_callback,
+        interp_state=interp_state)
+
+
 
 class GuestInstance(GuestPyObject):
 
@@ -275,42 +313,66 @@ class GuestInstance(GuestPyObject):
                 interp_state: InterpreterState,
                 interp_callback: Optional[Callable] = None,
                 ) -> Result[Any]:
+        cls_attr = None
+        if self.cls.hasattr(name):
+            cls_attr = self.cls.getattr(name, interp_state=interp_state,
+                                        interp_callback=interp_callback)
+            if cls_attr.is_exception():
+                return Result(cls_attr.get_exception())
+            cls_attr = cls_attr.get_value()
+
+        if (isinstance(cls_attr, GuestInstance)
+                and cls_attr.hasattr('__get__')
+                and cls_attr.hasattr('__set__')):
+            # Overriding descriptor.
+            return _invoke_desc(self, cls_attr, interp_state=interp_state,
+                                     interp_callback=interp_callback)
+
         try:
-            value = self.dict_[name]
+            return Result(self.dict_[name])
         except KeyError:
             if name == '__class__':
                 return Result(self.cls)
             if name == '__dict__':
                 return Result(self.dict_)
-            result = self.cls.getattr(name, interp_state=interp_state,
-                                      interp_callback=interp_callback)
-            if result.is_exception():
-                return result
-            value = result.get_value()
-            if isinstance(value, GuestFunction):
-                return Result(GuestMethod(value, bound_self=self))
 
-        if (isinstance(value, (GuestInstance, GuestProperty)) and
-                value.hasattr('__get__')):
-            f_result = value.getattr('__get__', interp_state=interp_state,
+        if isinstance(cls_attr, GuestPyObject) and cls_attr.hasattr('__get__'):
+            return _invoke_desc(self, cls_attr, interp_state=interp_state,
                                      interp_callback=interp_callback)
+
+        if cls_attr is not None:
+            return Result(cls_attr)
+
+        return Result(ExceptionData(
+            None,
+            f"'{self.cls.name}' object does not have attribute {name!r}",
+            AttributeError))
+
+    def setattr(self, name: Text, value: Any,
+                *,
+                interp_state: InterpreterState,
+                interp_callback: Optional[Callable] = None,
+                ) -> Result[None]:
+        cls_attr = None
+        if self.cls.hasattr(name):
+            cls_attr = self.cls.getattr(name, interp_state=interp_state,
+                                        interp_callback=interp_callback)
+            if cls_attr.is_exception():
+                return Result(cls_attr.get_exception())
+            cls_attr = cls_attr.get_value()
+
+        if (isinstance(cls_attr, GuestInstance)
+                and cls_attr.hasattr('__set__')):
+            f_result = cls_attr.getattr('__set__', interp_state=interp_state,
+                                        interp_callback=interp_callback)
             if f_result.is_exception():
                 return Result(f_result.get_exception())
-            objtype_result = _do_type(args=(value,))
-            if objtype_result.is_exception():
-                return Result(objtype_result.get_exception())
-            objtype = objtype_result.get_value()
-            result = f_result.get_value().invoke(
-                args=(value, objtype), interp_callback=interp_callback,
+            return f_result.get_value().invoke(
+                args=(self, value), interp_callback=interp_callback,
                 interp_state=interp_state)
-            if result.is_exception():
-                return Result(result.get_exception())
-            value = result.get_value()
 
-        return Result(value)
-
-    def setattr(self, name: Text, value: Any):
         self.dict_[name] = value
+        return Result(None)
 
 
 GuestClassOrBuiltin = Union['GuestClass', 'GuestBuiltin']
@@ -444,35 +506,40 @@ class GuestClass(GuestPyObject):
                 ) -> Result[Any]:
         if name == '__dict__':
             return Result(self.dict_)
-        if name not in self.dict_:
-            if name == '__mro__':
-                return Result(self.get_mro())
-            if name == '__class__':
-                return Result(self.metaclass or get_guest_builtin('type'))
-            if name == '__bases__':
-                return Result(self.bases)
-            if name == '__subclasses__':
-                return Result(get_guest_builtin('type.__subclasses__'))
-            if DEBUG_PRINT_BYTECODE:
-                print('[go:ga] bases:', self.bases, 'metaclass:',
-                      self.metaclass)
-            for base in self.bases:
-                if base.hasattr(name):
-                    return base.getattr(name, interp_state=interp_state,
-                                        interp_callback=interp_callback)
-            if self.metaclass:
-                if self.metaclass.hasattr(name):
-                    return self.metaclass.getattr(
-                        name, interp_state=interp_state,
-                        interp_callback=interp_callback)
-            return Result(ExceptionData(
-                None,
-                f'Class {self.name} does not have attribute {name!r}',
-                AttributeError))
-        return Result(self.dict_[name])
+        if name in self.dict_:
+            return Result(self.dict_[name])
+        if name == '__mro__':
+            return Result(self.get_mro())
+        if name == '__class__':
+            return Result(self.metaclass or get_guest_builtin('type'))
+        if name == '__bases__':
+            return Result(self.bases)
+        if name == '__subclasses__':
+            return Result(get_guest_builtin('type.__subclasses__'))
+        if DEBUG_PRINT_BYTECODE:
+            print('[go:ga] bases:', self.bases, 'metaclass:',
+                  self.metaclass)
+        for base in self.bases:
+            if base.hasattr(name):
+                return base.getattr(name, interp_state=interp_state,
+                                    interp_callback=interp_callback)
+        if self.metaclass:
+            if self.metaclass.hasattr(name):
+                return self.metaclass.getattr(
+                    name, interp_state=interp_state,
+                    interp_callback=interp_callback)
+        return Result(ExceptionData(
+            None,
+            f'Class {self.name} does not have attribute {name!r}',
+            AttributeError))
 
-    def setattr(self, name: Text, value: Any) -> Any:
+    def setattr(self, name: Text, value: Any,
+                *,
+                interp_state: InterpreterState,
+                interp_callback: Optional[Callable] = None,
+                ) -> Result[None]:
         self.dict_[name] = value
+        return Result(None)
 
 
 class GuestFunctionType(GuestPyObject):
@@ -723,7 +790,7 @@ def _do_type(args: Tuple[Any, ...]) -> Result[Any]:
     if len(args) == 1:
         if DEBUG_PRINT_BYTECODE:
             print('[go:type]', args, file=sys.stderr)
-        if isinstance(args[0], GuestInstance):
+        if isinstance(args[0], (GuestInstance, GuestSuper)):
             return Result(args[0].get_type())
         if isinstance(args[0], GuestClass):
             return Result(args[0].metaclass or get_guest_builtin('type'))
@@ -844,24 +911,22 @@ class GuestSuper(GuestPyObject):
             assert isinstance(t, GuestClass), t
             if name not in t.dict_:
                 continue
-            result = t.getattr(name, interp_state=interp_state,
-                               interp_callback=interp_callback)
-            if result.is_exception():
-                return result
-
-            value = result.get_value()
-            if (isinstance(value, GuestFunction) and
-                    isinstance(self.obj_or_type, GuestInstance)):
-                return Result(GuestMethod(value, bound_self=self.obj_or_type))
-
-            return result
+            cls_attr = t.getattr(name, interp_state=interp_state,
+                             interp_callback=interp_callback)
+            if cls_attr.is_exception():
+                return cls_attr.get_exception()
+            cls_attr = cls_attr.get_value()
+            if not isinstance(self.obj_or_type, GuestClass) and cls_attr.hasattr('__get__'):
+                return _invoke_desc(self.obj_or_type, cls_attr, interp_state=interp_state,
+                             interp_callback=interp_callback)
+            return Result(cls_attr)
 
         return Result(ExceptionData(
             None, None,
             AttributeError(f"'super' object has no attribute {name!r}")))
 
-    def setattr(self, name: Text, value: Any) -> Result[None]:
-        return self.obj_or_type.setattr(name, value)
+    def setattr(self, *args, **kwargs) -> Result[None]:
+        return self.obj_or_type.setattr(*args, **kwargs)
 
 
 def _do_super(args: Tuple[Any, ...],
@@ -919,6 +984,8 @@ class GuestBuiltin(GuestPyObject):
             return "<ebuiltin class 'object'>"
         if self.name == 'type':
             return "<eclass 'type'>"
+        if self.name == 'super':
+            return "<eclass 'super'>"
         return 'GuestBuiltin(name={!r}, bound_self={!r}, ...)'.format(
             self.name, self.bound_self)
 
@@ -1009,7 +1076,7 @@ class GuestBuiltin(GuestPyObject):
         raise NotImplementedError(self.name)
 
     def hasattr(self, name: Text) -> bool:
-        if self.name in ('object', 'type') and name in ('__subclasshook__',):
+        if self.name in ('object', 'type') and name in ('__subclasshook__', '__str__'):
             return True
         return name in self.dict
 
@@ -1091,7 +1158,9 @@ class GuestProperty(GuestPyObject):
     def _get(self, args: Tuple[Any, ...], *,
              interp_state: InterpreterState,
              interp_callback: Callable) -> Result[Any]:
-        obj, objtype = args
+        print('GuestProperty.__get__ args:', args)
+        _self, obj, objtype = args
+        assert _self is self
         return self.fget.invoke(args=(obj,), interp_callback=interp_callback,
                                 interp_state=interp_state)
 
@@ -1101,7 +1170,7 @@ class GuestProperty(GuestPyObject):
                 interp_callback: Optional[Callable] = None
                 ) -> Result[Any]:
         if name == '__get__':
-            return Result(NativeFunction(self._get))
+            return Result(GuestMethod(NativeFunction(self._get), bound_self=self))
         return Result(ExceptionData(None, name, AttributeError))
 
     def setattr(self, name: Text, value: Any) -> Result[None]:

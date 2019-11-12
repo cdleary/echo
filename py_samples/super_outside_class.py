@@ -17,7 +17,7 @@ assert super(Derived, o).f() == 'Base'
 
 #print("Leaf super's f:", super(Leaf, Leaf).f)
 
-assert super(Leaf, Leaf).f is Derived.f
+assert super(Leaf, Leaf).f is Derived.f, super(Leaf, Leaf).f 
 assert super(Derived, Leaf).f is Base.f
 
 assert super(Base, Leaf).__thisclass__ is Base

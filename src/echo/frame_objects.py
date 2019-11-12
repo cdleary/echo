@@ -37,6 +37,12 @@ class UnboundLocalSentinel:
     pass
 
 
+# Indicates we should not push the result of executing some bytecode onto the
+# stack, but allows us to use our normal result type for signaling errors.
+class NoStackPushSentinel:
+    pass
+
+
 class BlockKind(Enum):
     EXCEPT_HANDLER = 'EXCEPT_HANDLER'
     SETUP_LOOP = 'SETUP_LOOP'
@@ -449,9 +455,13 @@ class StatefulFrame:
             print('[bc:sa] obj {!r} attr {!r} val {!r}'.format(
                 obj, argval, value), file=sys.stderr)
         if isinstance(obj, GuestPyObject):
-            obj.setattr(argval, value)
+            res = obj.setattr(argval, value, interp_state=self.interp_state, interp_callback=self.interp_callback)
+            if res.is_exception():
+                return res
+            return Result(NoStackPushSentinel)
         elif obj is sys and argval == 'path':
             sys.path = self.interp_state.paths = value
+            return Result(NoStackPushSentinel)
         else:
             raise NotImplementedError(obj, value)
 
@@ -765,7 +775,7 @@ class StatefulFrame:
                     return result
             elif isinstance(result.get_value(), Value):
                 self._push_value(result.get_value())
-            else:
+            elif result.get_value() is not NoStackPushSentinel:
                 self._push(result.get_value())
 
         stack_depth_after = len(self.stack)

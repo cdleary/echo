@@ -1,13 +1,16 @@
 class Base:
     def __init__(self):
-        assert type(self) is Derived
+        assert type(self) is Derived, type(self)
         self.attr = 42
 
 
 class Derived(Base):
     def __init__(self):
         assert type(self) is Derived
-        super().__init__()
+        s = super()
+        print(s)
+        print(s.__init__)
+        s.__init__()
         self.other_attr = 64
 
 

@@ -92,7 +92,9 @@ def _subimport_module_at_path(
         return mod_result
 
     module_name = fqn_suffix(fully_qualified_name)
-    containing_package.setattr(module_name, mod_result.get_value())
+    res = containing_package.setattr(module_name, mod_result.get_value(), interp_state=interp_state, interp_callback=interp_callback)
+    if res.is_exception():
+        return Result(res.get_exception())
     return mod_result
 
 
