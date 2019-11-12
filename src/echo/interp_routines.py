@@ -9,7 +9,7 @@ from echo.interp_result import Result
 from echo.interpreter_state import InterpreterState
 from echo.guest_objects import (
     GuestInstance, GuestBuiltin, GuestModule, GuestFunction, GuestClass,
-    get_guest_builtin,
+    get_guest_builtin, GuestPyObject
 )
 from echo.value import Value
 
@@ -198,6 +198,14 @@ def compare(opname: Text, lhs, rhs, interp_callback: Callable,
 
     if isinstance(lhs, GuestClass) and isinstance(rhs, GuestClass):
         return Result(lhs is rhs)
+
+    if (isinstance(lhs, GuestClass) and not isinstance(rhs, GuestClass)
+            and not lhs.hasattr('__eq__')):
+        return Result(False)
+
+    if (not isinstance(lhs, GuestPyObject)
+            and not isinstance(rhs, GuestPyObject)):
+        return Result(COMPARE_OPS[opname](lhs, rhs))
 
     raise NotImplementedError(opname, lhs, rhs, type(rhs))
 

@@ -399,6 +399,7 @@ class GuestClass(GuestPyObject):
 
     def instantiate(self, args: Tuple[Any, ...], *,
                     interp_state: InterpreterState,
+                    interp_callback: Callable,
                     do_call: Callable,
                     globals_: Dict[Text, Any]) -> Result[GuestInstance]:
         guest_instance = None
@@ -409,7 +410,9 @@ class GuestClass(GuestPyObject):
             if result.is_exception():
                 return Result(result.get_exception())
             guest_instance = result.get_value()
-            if not _do_isinstance(args=(guest_instance, self)).get_value():
+            if not _do_isinstance(args=(guest_instance, self), call=do_call,
+                                  interp_state=interp_state,
+                                  interp_callback=interp_callback).get_value():
                 return Result(guest_instance)
         guest_instance = guest_instance or GuestInstance(self)
         if self.hasattr('__init__'):
@@ -511,13 +514,30 @@ def _is_str_builtin(x) -> bool:
     return isinstance(x, GuestBuiltin) and x.name == 'str'
 
 
-def _do_isinstance(args: Tuple[Any, ...]) -> Result[bool]:
+def _do_isinstance(
+        args: Tuple[Any, ...],
+        call: Callable, *,
+        interp_state: InterpreterState,
+        interp_callback: Callable) -> Result[bool]:
     assert len(args) == 2, args
+
+    if (isinstance(args[1], GuestClass) and
+            args[1].hasattr('__instancecheck__')):
+        ic = args[1].getattr('__instancecheck__', interp_state=interp_state,
+                             interp_callback=interp_callback)
+        if ic.is_exception():
+            return Result(ic.get_exception())
+        ic = ic.get_value()
+        result = call(ic, args=(args[1], args[0]), globals_=ic.globals_)
+        return result
+
     for t in (bool, int, str, float, dict, list, tuple, set):
         if args[1] is t:
             return Result(isinstance(args[0], t))
+
     if args[1] is type:
         return Result(isinstance(args[0], (type, GuestClass)))
+
     if isinstance(args[1], type) and issubclass(args[1], Exception):
         # TODO(leary) How does the real type builtin make it here?
         return Result(isinstance(args[0], args[1]))
@@ -537,11 +557,16 @@ def _do_isinstance(args: Tuple[Any, ...]) -> Result[bool]:
     if _is_object_builtin(args[1]):
         return Result(True)  # Everything is an object.
 
+    if (not isinstance(args[0], GuestPyObject)
+            and isinstance(args[1], GuestClass)):
+        return Result(type(args[0]) in args[1].get_mro())
+
     raise NotImplementedError(args)
 
 
 def _do_issubclass(
-        args: Tuple[Any, ...], call: Callable, *,
+        args: Tuple[Any, ...],
+        call: Callable, *,
         interp_state: InterpreterState,
         interp_callback: Callable) -> Result[bool]:
     # TODO(cdleary, 2019-02-10): Detect "guest" subclass relations.
@@ -573,6 +598,9 @@ def _do_issubclass(
 
     if not isinstance(args[1], type):
         raise NotImplementedError(args)
+
+    if isinstance(args[0], GuestClass):
+        return Result(args[1] in args[0].get_mro())
 
     return Result(issubclass(args[0], args[1]))
 
@@ -938,7 +966,8 @@ class GuestBuiltin(GuestPyObject):
         if self.name == 'chr':
             return Result(chr(*args))
         if self.name == 'isinstance':
-            return _do_isinstance(args)
+            return _do_isinstance(args, call=call, interp_state=interp_state,
+                                  interp_callback=interp_callback)
         if self.name == 'issubclass':
             return _do_issubclass(args, call=call, interp_state=interp_state,
                                   interp_callback=interp_callback)

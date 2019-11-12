@@ -13,6 +13,6 @@ assert MyABC in Foo.__mro__
 assert Foo.__mro__ == getattr(Foo, '__mro__', ())
 
 
-#assert Foo.__bases__ == (MyABC,)
-#assert MyABC.__subclasses__() == [Foo]
+assert Foo.__bases__ == (MyABC,)
+assert MyABC.__subclasses__() == [Foo]
 assert issubclass(Foo, MyABC)

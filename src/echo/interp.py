@@ -255,6 +255,7 @@ def do_call(f, args: Tuple[Any, ...],
                         call=do_call_callback, interp_state=interp_state)
     elif isinstance(f, GuestClass):
         return f.instantiate(args, do_call=do_call_callback, globals_=globals_,
+                             interp_callback=interp_callback,
                              interp_state=interp_state)
     else:
         raise NotImplementedError(f, args, kwargs)
