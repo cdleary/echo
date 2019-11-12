@@ -196,6 +196,9 @@ def compare(opname: Text, lhs, rhs, interp_callback: Callable,
     if is_set_of_strings(lhs) and is_set_of_strings(rhs):
         return Result(lhs == rhs)
 
+    if isinstance(lhs, GuestClass) and isinstance(rhs, GuestClass):
+        return Result(lhs is rhs)
+
     raise NotImplementedError(opname, lhs, rhs, type(rhs))
 
 

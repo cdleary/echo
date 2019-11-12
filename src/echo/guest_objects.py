@@ -9,6 +9,7 @@ from typing import (
     Text, Any, Dict, Iterable, Tuple, Optional, Set, Callable, Union,
 )
 from enum import Enum
+import weakref
 
 from echo.interpreter_state import InterpreterState
 from echo.code_attributes import CodeAttributes
@@ -328,6 +329,7 @@ def get_bases(c: GuestClassOrBuiltin) -> Tuple[GuestPyObject, ...]:
 class GuestClass(GuestPyObject):
     bases: Tuple[GuestClassOrBuiltin, ...]
     metaclass: Optional[GuestClassOrBuiltin]
+    subclasses: Set['GuestClass']
 
     def __init__(self, name: Text, dict_: Dict[Text, Any], *,
                  bases: Optional[Tuple[GuestClassOrBuiltin]] = None,
@@ -337,6 +339,14 @@ class GuestClass(GuestPyObject):
         self.bases = bases or ()
         self.metaclass = metaclass
         self.kwargs = kwargs
+        self.subclasses = weakref.WeakSet()
+
+        for base in self.bases:
+            if isinstance(base, (GuestBuiltin, GuestClass)):
+                base.note_subclass(self)
+
+    def note_subclass(self, derived: 'GuestClass') -> None:
+        self.subclasses.add(derived)
 
     def __repr__(self) -> Text:
         return '<eclass \'{}.{}\'>'.format(self.dict_['__module__'], self.name)
@@ -416,7 +426,7 @@ class GuestClass(GuestPyObject):
     def hasattr(self, name: Text) -> bool:
         if name in self.dict_:
             return True
-        if name == '__class__':
+        if name in ('__class__', '__bases__', '__subclasses__', '__mro__'):
             return True
         if any(base.hasattr(name) for base in self.bases):
             return True
@@ -436,6 +446,10 @@ class GuestClass(GuestPyObject):
                 return Result(self.get_mro())
             if name == '__class__':
                 return Result(self.metaclass or get_guest_builtin('type'))
+            if name == '__bases__':
+                return Result(self.bases)
+            if name == '__subclasses__':
+                return Result(get_guest_builtin('type.__subclasses__'))
             if DEBUG_PRINT_BYTECODE:
                 print('[go:ga] bases:', self.bases, 'metaclass:',
                       self.metaclass)
@@ -543,7 +557,8 @@ def _do_issubclass(
         if scc.is_exception():
             return Result(scc.get_exception())
         scc = scc.get_value()
-        return call(scc, args=(args[1], args[0]), globals_=scc.globals_)
+        result = call(scc, args=(args[1], args[0]), globals_=scc.globals_)
+        return result
 
     if isinstance(args[0], GuestClass) and isinstance(args[1], GuestClass):
         return Result(args[0].is_subtype_of(args[1]))
@@ -625,6 +640,29 @@ def _do_type_new(
     metaclass, name, bases, ns = args
     cls = GuestClass(name, dict_=ns, bases=bases, metaclass=metaclass)
     return Result(cls)
+
+
+def _do_type_subclasses(
+        args: Tuple[Any, ...],
+        *,
+        interp_state: InterpreterState,
+        interp_callback: Callable,
+        kwargs: Optional[Dict[Text, Any]] = None,
+        call: Callable) -> Result[GuestClass]:
+    assert len(args) == 1, args
+    c = args[0]
+    assert isinstance(c, GuestClass), c
+    return Result(sorted(list(c.subclasses)))
+
+
+def _do_object_subclasshook(
+        args: Tuple[Any, ...],
+        *,
+        interp_state: InterpreterState,
+        interp_callback: Callable,
+        kwargs: Optional[Dict[Text, Any]] = None,
+        call: Callable) -> Result[GuestClass]:
+    return Result(NotImplemented)
 
 
 def _do_dir(args: Tuple[Any, ...], do_call, *,
@@ -856,6 +894,9 @@ class GuestBuiltin(GuestPyObject):
         return 'GuestBuiltin(name={!r}, bound_self={!r}, ...)'.format(
             self.name, self.bound_self)
 
+    def note_subclass(self, cls: 'GuestClass') -> None:
+        pass
+
     def is_subtype_of(self, other: 'GuestClass') -> bool:
         return False
 
@@ -909,6 +950,14 @@ class GuestBuiltin(GuestPyObject):
             return _do_type_new(
                 args, kwargs=kwargs, call=call, interp_state=interp_state,
                 interp_callback=interp_callback)
+        if self.name == 'type.__subclasses__':
+            return _do_type_subclasses(
+                args, kwargs=kwargs, call=call, interp_state=interp_state,
+                interp_callback=interp_callback)
+        if self.name == 'object.__subclasshook__':
+            return _do_object_subclasshook(
+                args, kwargs=kwargs, call=call, interp_state=interp_state,
+                interp_callback=interp_callback)
         if self.name == 'super':
             return _do_super(args, interp_state)
         if self.name == 'iter':
@@ -931,6 +980,8 @@ class GuestBuiltin(GuestPyObject):
         raise NotImplementedError(self.name)
 
     def hasattr(self, name: Text) -> bool:
+        if self.name in ('object', 'type') and name in ('__subclasshook__',):
+            return True
         return name in self.dict
 
     def getattr(self, name: Text,
@@ -948,6 +999,10 @@ class GuestBuiltin(GuestPyObject):
         if self.name == 'type':
             if name == '__new__':
                 return Result(get_guest_builtin('type.__new__'))
+            if name == '__subclasshook__':
+                return Result(get_guest_builtin('object.__subclasshook__'))
+            if name == '__subclasses__':
+                return Result(get_guest_builtin('type.__subclasses__'))
         raise NotImplementedError(self, name)
 
     def setattr(self, name: Text, value: Any) -> Any:

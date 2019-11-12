@@ -182,10 +182,10 @@ def _do_call_getattr(
     assert len(args) == 3, args
     if DEBUG_PRINT_BYTECODE:
         print(f'[interp:dcga] args: {args} kwargs: {kwargs}', file=sys.stderr)
+
     if not isinstance(args[0], GuestPyObject):
         return Result(getattr(*args))
 
-    print(args)
     if not args[0].hasattr(args[1]):
         return Result(args[2])
     return args[0].getattr(args[1], interp_state=interp_state,
