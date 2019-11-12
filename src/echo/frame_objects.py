@@ -445,6 +445,9 @@ class StatefulFrame:
     def _run_STORE_ATTR(self, arg, argval):
         obj = self._pop()
         value = self._pop()
+        if DEBUG_PRINT_BYTECODE:
+            print('[bc:sa] obj {!r} attr {!r} val {!r}'.format(
+                obj, argval, value), file=sys.stderr)
         if isinstance(obj, GuestPyObject):
             obj.setattr(argval, value)
         elif obj is sys and argval == 'path':
@@ -513,7 +516,7 @@ class StatefulFrame:
     def _run_LOAD_ATTR(self, arg, argval):
         obj = self._pop()
         if DEBUG_PRINT_BYTECODE:
-            print('[bc:la] obj', repr(obj), file=sys.stderr)
+            print('[bc:la] obj', repr(obj), 'attr', argval, file=sys.stderr)
         for type_, methods in GUEST_BUILTINS.items():
             if isinstance(obj, type_) and argval in methods:
                 return Result(GuestBuiltin(

@@ -702,7 +702,7 @@ def _do___build_class__(
     if class_eval_result.is_exception():
         return class_eval_result.get_exception()
     cell = class_eval_result.get_value()
-    metaclass = kwargs.get('metaclass') if kwargs else None
+    metaclass = kwargs.pop('metaclass', None) if kwargs else None
     if cell is None:
         ns['__module__'] = func.globals_['__name__']
         if metaclass and metaclass.hasattr('__new__'):
