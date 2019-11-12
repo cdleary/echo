@@ -188,7 +188,8 @@ def _do_call_getattr(
     print(args)
     if not args[0].hasattr(args[1]):
         return Result(args[2])
-    return args[0].getattr(args[1])
+    return args[0].getattr(args[1], interp_state=interp_state,
+                           interp_callback=interp_callback)
 
 
 def do_call(f, args: Tuple[Any, ...],
@@ -226,7 +227,7 @@ def do_call(f, args: Tuple[Any, ...],
         return Result((exc, p, t))
     if f is globals:
         return Result(globals_)
-    elif isinstance(f, (GuestFunction, GuestMethod)):
+    elif isinstance(f, (GuestFunction, GuestMethod, GuestClassMethod)):
         return f.invoke(args=args, kwargs=kwargs, locals_dict=locals_dict,
                         interp_state=interp_state,
                         interp_callback=interp_callback)

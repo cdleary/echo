@@ -199,6 +199,11 @@ class StatefulFrame:
         tos_mi = self.stack[-arg]
         list.append(tos_mi, tos)
 
+    def _run_SET_ADD(self, arg, argval):
+        tos = self._pop()
+        tos_mi = self.stack[-arg]
+        set.add(tos_mi, tos)
+
     def _run_POP_BLOCK(self, arg, argval):
         self.block_stack.pop()
 

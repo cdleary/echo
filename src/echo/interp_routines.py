@@ -167,7 +167,7 @@ def compare(opname: Text, lhs, rhs, interp_callback: Callable,
         return Result(True)
 
     if opname in ('in', 'not in') and type(rhs) in (
-            tuple, list, dict, type(os.environ), weakref.WeakSet):
+            tuple, list, dict, set, type(os.environ), weakref.WeakSet):
         for e in rhs:
             e_result = compare('==', lhs, e, interp_callback, interp_state)
             if e_result.is_exception():

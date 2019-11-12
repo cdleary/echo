@@ -12,6 +12,8 @@ from termcolor import cprint
 
 
 def _arg_join(arg_names: Sequence[Text]) -> Text:
+    if len(arg_names) == 1:
+        return "'{}'".format(arg_names[0])
     pieces = []
     for name in arg_names:
         pieces.append("'{}'".format(name))
@@ -145,8 +147,9 @@ def resolve_args(attrs: code_attributes.CodeAttributes,
             missing_names = [name for i, name in enumerate(arg_names)
                              if arg_slots[i] == Sentinel]
             missing = _arg_join(missing_names)
-            msg = '{}() missing {} required positional arguments: {}'.format(
-                    attrs.name, missing_count, missing)
+            msg = '{}() missing {} required positional argument{}: {}'.format(
+                    attrs.name, missing_count,
+                    '' if missing_count == 1 else 's', missing)
             return Result(ExceptionData(
                 traceback=None,
                 parameter=msg,

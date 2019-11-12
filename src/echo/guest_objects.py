@@ -110,6 +110,9 @@ class GuestFunction(GuestPyObject):
             defaults=self.defaults, locals_dict=locals_dict, name=self.name,
             kwarg_defaults=self.kwarg_defaults, closure=self.closure)
 
+    def hasattr(self, name: Text) -> bool:
+        return name in self.dict_
+
     def getattr(self, name: Text,
                 *,
                 interp_state: InterpreterState,
@@ -1024,6 +1027,13 @@ class GuestProperty(GuestPyObject):
 class GuestClassMethod(GuestPyObject):
     def __init__(self, f: GuestFunction):
         self.f = f
+        self.dict_ = {}
+
+    def invoke(self, *args, **kwargs) -> Result[Any]:
+        return self.f.invoke(*args, **kwargs)
+
+    def hasattr(self, name: Text) -> bool:
+        return name in self.dict_
 
     def getattr(self, name: Text) -> Result[Any]:
         raise NotImplementedError(name)
