@@ -120,9 +120,9 @@ class GuestFunction(GuestPyObject):
         return name in self.dict_ or name in ('__get__',)
 
     def _get(self, args, *,
-               interp_callback: Callable,
-               interp_state: InterpreterState,
-            ) -> Result[Any]:
+             interp_callback: Callable,
+             interp_state: InterpreterState,
+             ) -> Result[Any]:
         _self, obj, objtype = args
         assert self is _self
         return Result(GuestMethod(f=_self, bound_self=obj))
@@ -133,7 +133,8 @@ class GuestFunction(GuestPyObject):
                 interp_callback: Optional[Callable] = None,
                 ) -> Result[Any]:
         if name == '__get__':
-            return Result(GuestMethod(NativeFunction(self._get), bound_self=self))
+            return Result(GuestMethod(NativeFunction(
+                self._get, 'efunction.__get__'), bound_self=self))
         try:
             return Result(self.dict_[name])
         except KeyError:
@@ -223,7 +224,7 @@ class GuestGenerator(GuestPyObject):
 
 class GuestMethod(GuestPyObject):
 
-    def __init__(self, f: GuestFunction, bound_self):
+    def __init__(self, f: Union[GuestFunction, 'NativeFunction'], bound_self):
         self.f = f
         self.bound_self = bound_self
 
@@ -265,11 +266,13 @@ class GuestMethod(GuestPyObject):
             interp_state=interp_state, locals_dict=locals_dict,
             interp_callback=interp_callback)
 
-def _invoke_desc(self, cls_attr,
-            *,
-            interp_state: InterpreterState,
-            interp_callback: Optional[Callable] = None,
-            ) -> Result[Any]:
+
+def _invoke_desc(
+        self, cls_attr,
+        *,
+        interp_state: InterpreterState,
+        interp_callback: Optional[Callable] = None,
+        ) -> Result[Any]:
     assert cls_attr.hasattr('__get__')
     f_result = cls_attr.getattr('__get__', interp_state=interp_state,
                                 interp_callback=interp_callback)
@@ -282,7 +285,6 @@ def _invoke_desc(self, cls_attr,
     return f_result.get_value().invoke(
         args=(self, objtype), interp_callback=interp_callback,
         interp_state=interp_state)
-
 
 
 class GuestInstance(GuestPyObject):
@@ -326,7 +328,7 @@ class GuestInstance(GuestPyObject):
                 and cls_attr.hasattr('__set__')):
             # Overriding descriptor.
             return _invoke_desc(self, cls_attr, interp_state=interp_state,
-                                     interp_callback=interp_callback)
+                                interp_callback=interp_callback)
 
         try:
             return Result(self.dict_[name])
@@ -338,7 +340,7 @@ class GuestInstance(GuestPyObject):
 
         if isinstance(cls_attr, GuestPyObject) and cls_attr.hasattr('__get__'):
             return _invoke_desc(self, cls_attr, interp_state=interp_state,
-                                     interp_callback=interp_callback)
+                                interp_callback=interp_callback)
 
         if cls_attr is not None:
             return Result(cls_attr)
@@ -912,13 +914,15 @@ class GuestSuper(GuestPyObject):
             if name not in t.dict_:
                 continue
             cls_attr = t.getattr(name, interp_state=interp_state,
-                             interp_callback=interp_callback)
+                                 interp_callback=interp_callback)
             if cls_attr.is_exception():
                 return cls_attr.get_exception()
             cls_attr = cls_attr.get_value()
-            if not isinstance(self.obj_or_type, GuestClass) and cls_attr.hasattr('__get__'):
-                return _invoke_desc(self.obj_or_type, cls_attr, interp_state=interp_state,
-                             interp_callback=interp_callback)
+            if (not isinstance(self.obj_or_type, GuestClass)
+                    and cls_attr.hasattr('__get__')):
+                return _invoke_desc(
+                    self.obj_or_type, cls_attr, interp_state=interp_state,
+                    interp_callback=interp_callback)
             return Result(cls_attr)
 
         return Result(ExceptionData(
@@ -1076,7 +1080,8 @@ class GuestBuiltin(GuestPyObject):
         raise NotImplementedError(self.name)
 
     def hasattr(self, name: Text) -> bool:
-        if self.name in ('object', 'type') and name in ('__subclasshook__', '__str__'):
+        if (self.name in ('object', 'type')
+                and name in ('__subclasshook__', '__str__')):
             return True
         return name in self.dict
 
@@ -1126,8 +1131,9 @@ class GuestPartial:
 
 class NativeFunction(GuestPyObject):
 
-    def __init__(self, f: Callable):
+    def __init__(self, f: Callable, name: Text):
         self.f = f
+        self.name = name
 
     def getattr(self, name: Text,
                 *,
@@ -1170,7 +1176,8 @@ class GuestProperty(GuestPyObject):
                 interp_callback: Optional[Callable] = None
                 ) -> Result[Any]:
         if name == '__get__':
-            return Result(GuestMethod(NativeFunction(self._get), bound_self=self))
+            return Result(GuestMethod(NativeFunction(
+                self._get, 'eproperty.__get__'), bound_self=self))
         return Result(ExceptionData(None, name, AttributeError))
 
     def setattr(self, name: Text, value: Any) -> Result[None]:

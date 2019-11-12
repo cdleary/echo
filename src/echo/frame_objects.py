@@ -455,7 +455,8 @@ class StatefulFrame:
             print('[bc:sa] obj {!r} attr {!r} val {!r}'.format(
                 obj, argval, value), file=sys.stderr)
         if isinstance(obj, GuestPyObject):
-            res = obj.setattr(argval, value, interp_state=self.interp_state, interp_callback=self.interp_callback)
+            res = obj.setattr(argval, value, interp_state=self.interp_state,
+                              interp_callback=self.interp_callback)
             if res.is_exception():
                 return res
             return Result(NoStackPushSentinel)
