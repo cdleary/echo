@@ -506,6 +506,8 @@ def _do_isinstance(args: Tuple[Any, ...]) -> Result[bool]:
         return Result(isinstance(args[0], args[1]))
 
     if _is_type_builtin(args[1]):
+        if _is_type_builtin(args[0]) or _is_object_builtin(args[0]):
+            return Result(True)
         type_types = (type, GuestClass, GuestFunctionType, GuestCoroutineType)
         return Result(isinstance(args[0], type_types))
 
@@ -514,6 +516,9 @@ def _do_isinstance(args: Tuple[Any, ...]) -> Result[bool]:
 
     if args[0] is None:
         return Result(args[1] is type(None))  # noqa
+
+    if _is_object_builtin(args[1]):
+        return Result(True)  # Everything is an object.
 
     raise NotImplementedError(args)
 
@@ -538,6 +543,11 @@ def _do_issubclass(args: Tuple[Any, ...], call: Callable) -> Result[bool]:
             return Result(scc.get_exception())
         scc = scc.get_value()
         return call(scc, args=(args[1], args[0]), globals_=scc.globals_)
+
+    if _is_object_builtin(args[0]) and _is_type_builtin(args[1]):
+        return Result(False)
+    if _is_type_builtin(args[0]) and _is_object_builtin(args[1]):
+        return Result(True)
 
     if not isinstance(args[1], type):
         raise NotImplementedError(args)
@@ -647,7 +657,11 @@ def _do_type(args: Tuple[Any, ...]) -> Result[Any]:
         if _is_type_builtin(args[0]):
             return Result(args[0])
         res = type(args[0])
-        return Result(get_guest_builtin('type') if res is type else res)
+        if res is object:
+            return Result(get_guest_builtin('object'))
+        if res is type:
+            return Result(get_guest_builtin('type'))
+        return Result(res)
     assert len(args) == 3, args
     name, bases, ns = args
 
@@ -825,7 +839,9 @@ class GuestBuiltin(GuestPyObject):
 
     def __repr__(self):
         if self.name == 'object':
-            return "<builtin class 'object'>"
+            return "<ebuiltin class 'object'>"
+        if self.name == 'type':
+            return "<eclass 'type'>"
         return 'GuestBuiltin(name={!r}, bound_self={!r}, ...)'.format(
             self.name, self.bound_self)
 
@@ -916,6 +932,8 @@ class GuestBuiltin(GuestPyObject):
                 return Result(get_guest_builtin('object.__init__'))
             if name == '__str__':
                 return Result(get_guest_builtin('object.__str__'))
+            if name == '__bases__':
+                return Result(())
         if self.name == 'type':
             if name == '__new__':
                 return Result(get_guest_builtin('type.__new__'))
