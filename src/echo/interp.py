@@ -9,6 +9,7 @@ import logging
 import operator
 import os
 import types
+import weakref
 import sys
 
 from io import StringIO
@@ -171,6 +172,25 @@ def _do_call_classmethod(
     return Result(GuestClassMethod(args[0]))
 
 
+def _do_call_getattr(
+        args: Tuple[Any, ...],
+        kwargs: Optional[Dict[Text, Any]],
+        *,
+        interp_state: InterpreterState,
+        interp_callback: Callable,
+        ) -> Result[Any]:
+    assert len(args) == 3, args
+    if DEBUG_PRINT_BYTECODE:
+        print(f'[interp:dcga] args: {args} kwargs: {kwargs}', file=sys.stderr)
+    if not isinstance(args[0], GuestPyObject):
+        return Result(getattr(*args))
+
+    print(args)
+    if not args[0].hasattr(args[1]):
+        return Result(args[2])
+    return args[0].getattr(args[1])
+
+
 def do_call(f, args: Tuple[Any, ...],
             *,
             get_exception_data: Callable[[], Optional[ExceptionData]],
@@ -193,7 +213,8 @@ def do_call(f, args: Tuple[Any, ...],
 
     kwargs = kwargs or {}
     if f in (dict, chr, range, print, sorted, str, set, tuple, list, hasattr,
-             bytearray, object) + interp_routines.BUILTIN_EXCEPTION_TYPES:
+             bytearray, object, frozenset, weakref.WeakSet,
+             weakref.ref) + interp_routines.BUILTIN_EXCEPTION_TYPES:
         return Result(f(*args, **kwargs))
     if f is sys.exc_info:
         exception_data = get_exception_data()
@@ -221,6 +242,10 @@ def do_call(f, args: Tuple[Any, ...],
         return _do_call_property(args, kwargs)
     elif f is classmethod:
         return _do_call_classmethod(args, kwargs)
+    elif f is getattr:
+        return _do_call_getattr(
+            args=args, kwargs=kwargs, interp_callback=interp_callback,
+            interp_state=interp_state)
     elif isinstance(f, GuestPartial):
         return f.invoke(args, interp_callback=interp_callback,
                         interp_state=interp_state)

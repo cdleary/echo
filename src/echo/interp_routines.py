@@ -3,6 +3,7 @@ import os
 import sys
 import types
 from typing import Text, Any, Union, Dict, Callable
+import weakref
 
 from echo.interp_result import Result
 from echo.interpreter_state import InterpreterState
@@ -166,7 +167,7 @@ def compare(opname: Text, lhs, rhs, interp_callback: Callable,
         return Result(True)
 
     if opname in ('in', 'not in') and type(rhs) in (
-            tuple, list, dict, type(os.environ)):
+            tuple, list, dict, type(os.environ), weakref.WeakSet):
         for e in rhs:
             e_result = compare('==', lhs, e, interp_callback, interp_state)
             if e_result.is_exception():
@@ -195,7 +196,7 @@ def compare(opname: Text, lhs, rhs, interp_callback: Callable,
     if is_set_of_strings(lhs) and is_set_of_strings(rhs):
         return Result(lhs == rhs)
 
-    raise NotImplementedError(opname, lhs, rhs)
+    raise NotImplementedError(opname, lhs, rhs, type(rhs))
 
 
 def method_requires_self(obj: Any, value: Any) -> bool:

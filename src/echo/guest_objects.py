@@ -523,12 +523,24 @@ def _do_isinstance(args: Tuple[Any, ...]) -> Result[bool]:
     raise NotImplementedError(args)
 
 
-def _do_issubclass(args: Tuple[Any, ...], call: Callable) -> Result[bool]:
+def _do_issubclass(
+        args: Tuple[Any, ...], call: Callable, *,
+        interp_state: InterpreterState,
+        interp_callback: Callable) -> Result[bool]:
     # TODO(cdleary, 2019-02-10): Detect "guest" subclass relations.
     assert len(args) == 2, args
     if DEBUG_PRINT_BYTECODE:
         print('[go:issubclass] arg0:', args[0], file=sys.stderr)
         print('[go:issubclass] arg1:', args[1], file=sys.stderr)
+
+    if (isinstance(args[1], GuestPyObject) and
+            args[1].hasattr('__subclasscheck__')):
+        scc = args[1].getattr('__subclasscheck__', interp_state=interp_state,
+                              interp_callback=interp_callback)
+        if scc.is_exception():
+            return Result(scc.get_exception())
+        scc = scc.get_value()
+        return call(scc, args=(args[1], args[0]), globals_=scc.globals_)
 
     if isinstance(args[0], GuestClass) and isinstance(args[1], GuestClass):
         return Result(args[0].is_subtype_of(args[1]))
@@ -536,17 +548,9 @@ def _do_issubclass(args: Tuple[Any, ...], call: Callable) -> Result[bool]:
     if isinstance(args[0], GuestCoroutineType):
         return Result(_is_type_builtin(args[1]))
 
-    if (isinstance(args[1], GuestPyObject) and
-            args[1].hasattr('__subclasscheck__')):
-        scc = args[1].getattr('__subclasscheck__')
-        if scc.is_exception():
-            return Result(scc.get_exception())
-        scc = scc.get_value()
-        return call(scc, args=(args[1], args[0]), globals_=scc.globals_)
-
     if _is_object_builtin(args[0]) and _is_type_builtin(args[1]):
         return Result(False)
-    if _is_type_builtin(args[0]) and _is_object_builtin(args[1]):
+    if _is_object_builtin(args[1]):
         return Result(True)
 
     if not isinstance(args[1], type):
@@ -611,6 +615,10 @@ def _do_type_new(
         interp_callback: Callable,
         kwargs: Optional[Dict[Text, Any]] = None,
         call: Callable) -> Result[GuestClass]:
+    if kwargs:
+        kwarg_metaclass = kwargs.pop('metaclass', args[0])
+        assert kwarg_metaclass is args[0]
+        assert not kwargs, kwargs
     metaclass, name, bases, ns = args
     cls = GuestClass(name, dict_=ns, bases=bases, metaclass=metaclass)
     return Result(cls)
@@ -888,13 +896,13 @@ class GuestBuiltin(GuestPyObject):
         if self.name == 'isinstance':
             return _do_isinstance(args)
         if self.name == 'issubclass':
-            return _do_issubclass(args, call=call)
+            return _do_issubclass(args, call=call, interp_state=interp_state,
+                                  interp_callback=interp_callback)
         if self.name == '__build_class__':
             return _do___build_class__(
                 args, kwargs=kwargs, call=call, interp_state=interp_state,
                 interp_callback=interp_callback)
         if self.name == 'type.__new__':
-            assert not kwargs
             return _do_type_new(
                 args, kwargs=kwargs, call=call, interp_state=interp_state,
                 interp_callback=interp_callback)
