@@ -6,7 +6,7 @@ version: 2
 jobs:
   build:
     docker:
-      - image: circleci/python:3.6.1
+      - image: circleci/python:3.7.1
 
     working_directory: ~/repo
 
@@ -42,7 +42,7 @@ jobs:
           name: pytype
           command: |
             . venv/bin/activate
-            pytype --config=pytype.cfg --python-version=3.6
+            pytype --config=pytype.cfg --python-version=3.7
 
       - run:
           name: pycodestyle
