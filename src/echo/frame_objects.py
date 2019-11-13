@@ -431,9 +431,11 @@ class StatefulFrame:
         f = self._pop()
         if DEBUG_PRINT_BYTECODE:
             print('[fo:cf] f:', f, 'args:', args, file=sys.stderr)
-        return self.do_call_callback(
+        result = self.do_call_callback(
             f, args, interp_state=self.interp_state, kwargs=kwargs,
             globals_=self.globals_, get_exception_data=self.get_exception_data)
+        assert isinstance(result, Result), (result, f)
+        return result
 
     def _run_STORE_NAME(self, arg, argval):
         if self.in_function:
@@ -751,7 +753,10 @@ class StatefulFrame:
             self.line = instruction.starts_line
 
         if instruction.opname == 'RETURN_VALUE':
-            return Result((self._pop_value(), ReturnKind.RETURN))
+            v = self._pop_value()
+            if DEBUG_PRINT_BYTECODE:
+                print('[bc:rv]', v, file=sys.stderr)
+            return Result((v, ReturnKind.RETURN))
 
         if instruction.opname == 'YIELD_VALUE':
             self.pc += self.pc_to_bc_width[self.pc]

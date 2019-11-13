@@ -13,7 +13,7 @@ import weakref
 
 from echo.interpreter_state import InterpreterState
 from echo.code_attributes import CodeAttributes
-from echo.interp_result import Result, ExceptionData
+from echo.interp_result import Result, ExceptionData, check_result
 from echo.value import Value
 from echo.common import memoize
 
@@ -103,6 +103,7 @@ class GuestFunction(GuestPyObject):
     def __repr__(self):
         return '<efunction {} at {:#x}>'.format(self.name, id(self))
 
+    @check_result
     def invoke(self, *, args: Tuple[Any, ...],
                interp_callback: Callable,
                interp_state: InterpreterState,
@@ -117,7 +118,7 @@ class GuestFunction(GuestPyObject):
             kwarg_defaults=self.kwarg_defaults, closure=self.closure)
 
     def hasattr(self, name: Text) -> bool:
-        return name in self.dict_ or name in ('__get__',)
+        return name in self.dict_ or name in ('__get__', '__class__')
 
     def _get(self, args, *,
              interp_callback: Callable,
@@ -125,6 +126,8 @@ class GuestFunction(GuestPyObject):
              ) -> Result[Any]:
         _self, obj, objtype = args
         assert self is _self
+        if obj is None:
+            return Result(_self)
         return Result(GuestMethod(f=_self, bound_self=obj))
 
     def getattr(self, name: Text,
@@ -132,6 +135,8 @@ class GuestFunction(GuestPyObject):
                 interp_state: InterpreterState,
                 interp_callback: Optional[Callable] = None,
                 ) -> Result[Any]:
+        if name == '__class__':
+            return Result(GuestFunctionType.singleton)
         if name == '__get__':
             return Result(GuestMethod(NativeFunction(
                 self._get, 'efunction.__get__'), bound_self=self))
@@ -250,12 +255,20 @@ class GuestMethod(GuestPyObject):
     @property
     def closure(self): return self.f.closure
 
-    def getattr(self, *args, **kwargs):
-        return self.f.getattr(*args, **kwargs)
+    def hasattr(self, name: Text) -> bool:
+        return name in ('__self__', '__func__') or self.f.hasattr(name)
+
+    def getattr(self, name: Text, *args, **kwargs) -> Result[Any]:
+        if name == '__self__':
+            return Result(self.bound_self)
+        if name == '__func__':
+            return Result(self.f)
+        return self.f.getattr(name, *args, **kwargs)
 
     def setattr(self, *args, **kwargs):
         return self.f.setattr(*args, **kwargs)
 
+    @check_result
     def invoke(self, *, args: Tuple[Any, ...],
                interp_callback: Callable,
                interp_state: InterpreterState,
@@ -267,6 +280,7 @@ class GuestMethod(GuestPyObject):
             interp_callback=interp_callback)
 
 
+@check_result
 def _invoke_desc(
         self, cls_attr,
         *,
@@ -350,6 +364,7 @@ class GuestInstance(GuestPyObject):
             f"'{self.cls.name}' object does not have attribute {name!r}",
             AttributeError))
 
+    @check_result
     def setattr(self, name: Text, value: Any,
                 *,
                 interp_state: InterpreterState,
@@ -466,6 +481,8 @@ class GuestClass(GuestPyObject):
                     interp_callback: Callable,
                     do_call: Callable,
                     globals_: Dict[Text, Any]) -> Result[GuestInstance]:
+        if DEBUG_PRINT_BYTECODE:
+            print(f'[go:gc] instantiate args: {args}', file=sys.stderr)
         guest_instance = None
         if self.hasattr('__new__'):
             new_f = self.getattr(
@@ -484,6 +501,7 @@ class GuestClass(GuestPyObject):
                 '__init__', interp_state=interp_state).get_value()
             # TODO(cdleary, 2019-01-26) What does Python do when you return
             # something non-None from initializer? Ignore?
+            assert isinstance(guest_instance, GuestPyObject), guest_instance
             result = do_call(init_f, args=(guest_instance,) + args,
                              globals_=globals_)
             if result.is_exception():
@@ -501,6 +519,7 @@ class GuestClass(GuestPyObject):
             return True
         return False
 
+    @check_result
     def getattr(self, name: Text,
                 *,
                 interp_state: InterpreterState,
@@ -508,8 +527,19 @@ class GuestClass(GuestPyObject):
                 ) -> Result[Any]:
         if name == '__dict__':
             return Result(self.dict_)
+
         if name in self.dict_:
-            return Result(self.dict_[name])
+            v = self.dict_[name]
+            if isinstance(v, GuestPyObject) and v.hasattr('__get__'):
+                f_result = v.getattr('__get__', interp_state=interp_state,
+                                            interp_callback=interp_callback)
+                if f_result.is_exception():
+                    return Result(f_result.get_exception())
+                return f_result.get_value().invoke(
+                    args=(None, self), interp_callback=interp_callback,
+                    interp_state=interp_state)
+            return Result(v)
+
         if name == '__mro__':
             return Result(self.get_mro())
         if name == '__class__':
@@ -545,6 +575,19 @@ class GuestClass(GuestPyObject):
 
 
 class GuestFunctionType(GuestPyObject):
+    name = 'efunction'
+
+    def hasattr(self, name: Text) -> bool:
+        return name in ('__code__', '__globals__', '__get__')
+
+    def _get_desc(self, args, *,
+             interp_callback: Callable,
+             interp_state: InterpreterState,
+             ) -> Result[Any]:
+        self, obj, objtype = args
+        if obj is None:
+            return Result(self)
+        return Result(GuestMethod(self, bound_self=obj))
 
     def getattr(self, name: Text,
                 *,
@@ -553,10 +596,17 @@ class GuestFunctionType(GuestPyObject):
                 ) -> Result[Any]:
         if name in ('__code__', '__globals__'):
             return Result(None)
+
+        if name == '__get__':
+            return Result(NativeFunction(self._get_desc, 'efunction.__get__'))
+
         raise NotImplementedError
 
     def setattr(self, name: Text, value: Any) -> Any:
         raise NotImplementedError
+
+
+GuestFunctionType.singleton = GuestFunctionType()
 
 
 class GuestCoroutineType(GuestPyObject):
@@ -630,6 +680,9 @@ def _do_isinstance(
             and isinstance(args[1], GuestClass)):
         return Result(type(args[0]) in args[1].get_mro())
 
+    if isinstance(args[0], GuestPyObject) and isinstance(args[1], GuestClass):
+        return Result(args[0].get_type() in args[1].get_mro())
+
     raise NotImplementedError(args)
 
 
@@ -651,7 +704,7 @@ def _do_issubclass(
         if scc.is_exception():
             return Result(scc.get_exception())
         scc = scc.get_value()
-        result = call(scc, args=(args[1], args[0]), globals_=scc.globals_)
+        result = call(scc, args=(args[0],), globals_=scc.globals_)
         return result
 
     if isinstance(args[0], GuestClass) and isinstance(args[1], GuestClass):
@@ -797,9 +850,11 @@ def _do_type(args: Tuple[Any, ...]) -> Result[Any]:
         if isinstance(args[0], GuestClass):
             return Result(args[0].metaclass or get_guest_builtin('type'))
         if isinstance(args[0], GuestFunction):
-            return Result(GuestFunctionType())
+            return Result(GuestFunctionType.singleton)
         if isinstance(args[0], GuestCoroutine):
             return Result(GuestCoroutineType())
+        if isinstance(args[0], GuestClassMethod):
+            return Result(classmethod)
         if _is_type_builtin(args[0]):
             return Result(args[0])
         res = type(args[0])
@@ -820,6 +875,8 @@ def _do_type(args: Tuple[Any, ...]) -> Result[Any]:
     return Result(cls)
 
 
+
+@check_result
 def _do___build_class__(
         args: Tuple[Any, ...],
         *,
@@ -835,7 +892,7 @@ def _do___build_class__(
     class_eval_result = call(func, args=(), locals_dict=ns,
                              globals_=func.globals_)
     if class_eval_result.is_exception():
-        return class_eval_result.get_exception()
+        return Result(class_eval_result.get_exception())
     cell = class_eval_result.get_value()
     metaclass = kwargs.pop('metaclass', None) if kwargs else None
     if cell is None:
@@ -999,6 +1056,7 @@ class GuestBuiltin(GuestPyObject):
     def is_subtype_of(self, other: 'GuestClass') -> bool:
         return False
 
+    @check_result
     def invoke(self, args: Tuple[Any, ...], *,
                interp_state: InterpreterState,
                kwargs: Optional[Dict[Text, Any]] = None,
@@ -1121,6 +1179,7 @@ class GuestPartial:
         self.f = f
         self.args = args
 
+    @check_result
     def invoke(self, args: Tuple[Any, ...], *,
                interp_state: InterpreterState,
                interp_callback: Callable) -> Any:
@@ -1135,6 +1194,9 @@ class NativeFunction(GuestPyObject):
         self.f = f
         self.name = name
 
+    def get_type(self) -> GuestPyObject:
+        return GuestFunctionType.singleton
+
     def getattr(self, name: Text,
                 *,
                 interp_state: InterpreterState,
@@ -1145,6 +1207,7 @@ class NativeFunction(GuestPyObject):
     def setattr(self, name: Text, value: Any) -> Result[None]:
         raise NotImplementedError
 
+    @check_result
     def invoke(self, *, args: Tuple[Any, ...],
                interp_callback: Callable,
                interp_state: InterpreterState,
@@ -1161,15 +1224,17 @@ class GuestProperty(GuestPyObject):
     def hasattr(self, name: Text):
         return name in ('__get__', '__set__')
 
+    @check_result
     def _get(self, args: Tuple[Any, ...], *,
              interp_state: InterpreterState,
              interp_callback: Callable) -> Result[Any]:
-        print('GuestProperty.__get__ args:', args)
+        #print('GuestProperty.__get__ args:', args)
         _self, obj, objtype = args
         assert _self is self
         return self.fget.invoke(args=(obj,), interp_callback=interp_callback,
                                 interp_state=interp_state)
 
+    @check_result
     def getattr(self, name: Text,
                 *,
                 interp_state: InterpreterState,
@@ -1189,13 +1254,37 @@ class GuestClassMethod(GuestPyObject):
         self.f = f
         self.dict_ = {}
 
+    def __repr__(self) -> Text:
+        return '<eclassmethod object at {:#x}>'.format(id(self))
+
     def invoke(self, *args, **kwargs) -> Result[Any]:
         return self.f.invoke(*args, **kwargs)
 
     def hasattr(self, name: Text) -> bool:
-        return name in self.dict_
+        return name in self.dict_ or name == '__get__'
 
-    def getattr(self, name: Text) -> Result[Any]:
+    @check_result
+    def _get(self, args: Tuple[Any, ...], *,
+             interp_state: InterpreterState,
+             interp_callback: Callable) -> Result[Any]:
+        _self, obj, objtype = args
+        assert _self is self
+        if obj is not None:
+            objtype = _do_type(args=(obj,))
+        return Result(GuestMethod(self.f, bound_self=objtype))
+
+    @check_result
+    def getattr(self, name: Text,
+                *,
+                interp_state: InterpreterState,
+                interp_callback: Optional[Callable] = None,
+                ) -> Result[Any]:
+        if name == '__get__':
+            #print('eclassmethod.__get__', file=sys.stderr)
+            return Result(GuestMethod(NativeFunction(
+                self._get, 'eclassmethod.__get__'), bound_self=self))
+        if name == '__func__':
+            return Result(self.f)
         raise NotImplementedError(name)
 
     def setattr(self, name: Text, value: Any) -> Result[None]:

@@ -5,7 +5,7 @@ import sys
 import types
 from typing import Text, Dict, Optional, Tuple, Any, List, Sequence
 
-from echo.interp_result import Result, ExceptionData
+from echo.interp_result import Result, ExceptionData, check_result
 from echo import code_attributes
 
 from termcolor import cprint
@@ -21,6 +21,7 @@ def _arg_join(arg_names: Sequence[Text]) -> Text:
     return s + ', and ' + pieces[-1]
 
 
+@check_result
 def resolve_args(attrs: code_attributes.CodeAttributes,
                  args: Optional[Tuple[Any, ...]] = None,
                  kwargs: Optional[Dict[Text, Any]] = None,

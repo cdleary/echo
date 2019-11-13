@@ -1,6 +1,7 @@
 """ADT that encapsulates 'interpreter result value or error data'."""
 
 import collections
+import functools
 from enum import Enum
 from typing import TypeVar, Union, Generic, Text
 
@@ -42,3 +43,16 @@ class Result(Generic[T]):
     def get_exception(self) -> ExceptionData:
         assert isinstance(self.value, ExceptionData)
         return self.value
+
+
+
+def check_result(f):
+    """Helper decorator that checks a function returns a Result."""
+    @functools.wraps(f)
+    def checker(*args, **kwargs):
+        result = f(*args, **kwargs)
+        assert isinstance(result, Result), (f, args, kwargs, result)
+        return result
+    return checker
+
+

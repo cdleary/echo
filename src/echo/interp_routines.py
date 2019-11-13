@@ -5,11 +5,11 @@ import types
 from typing import Text, Any, Union, Dict, Callable
 import weakref
 
-from echo.interp_result import Result
+from echo.interp_result import Result, check_result
 from echo.interpreter_state import InterpreterState
 from echo.guest_objects import (
     GuestInstance, GuestBuiltin, GuestModule, GuestFunction, GuestClass,
-    get_guest_builtin, GuestPyObject
+    get_guest_builtin, GuestPyObject, GuestClassMethod, GuestMethod
 )
 from echo.value import Value
 
@@ -82,6 +82,7 @@ _BINARY_OPS = {
 }
 
 
+@check_result
 def run_binop(opname: Text, lhs: Any, rhs: Any, interp_callback: Callable,
               interp_state: InterpreterState) -> Result[Any]:
     if (opname in ('BINARY_TRUE_DIVIDE', 'BINARY_MODULO') and type(rhs) is int
@@ -131,6 +132,7 @@ def exception_match(lhs, rhs) -> bool:
     raise NotImplementedError(lhs, rhs)
 
 
+@check_result
 def compare(opname: Text, lhs, rhs, interp_callback: Callable,
             interp_state: InterpreterState) -> Result[bool]:
     if (isinstance(lhs, BUILTIN_VALUE_TYPES_TUP)
@@ -199,13 +201,16 @@ def compare(opname: Text, lhs, rhs, interp_callback: Callable,
     if isinstance(lhs, GuestClass) and isinstance(rhs, GuestClass):
         return Result(lhs is rhs)
 
-    if (isinstance(lhs, GuestClass) and not isinstance(rhs, GuestClass)
+    if (opname == '==' and isinstance(lhs, GuestClass) and not isinstance(rhs, GuestClass)
             and not lhs.hasattr('__eq__')):
         return Result(False)
 
     if (not isinstance(lhs, GuestPyObject)
             and not isinstance(rhs, GuestPyObject)):
         return Result(COMPARE_OPS[opname](lhs, rhs))
+
+    if opname == '!=' and isinstance(lhs, GuestMethod) and not isinstance(rhs, GuestPyObject):
+        return Result(True)
 
     raise NotImplementedError(opname, lhs, rhs, type(rhs))
 

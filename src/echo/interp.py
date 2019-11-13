@@ -19,7 +19,7 @@ from typing import (
 )
 
 from echo.common import dis_to_str, get_code
-from echo.interp_result import Result, ExceptionData
+from echo.interp_result import Result, ExceptionData, check_result
 from echo import import_routines
 from echo.arg_resolver import resolve_args
 from echo import code_attributes
@@ -28,7 +28,7 @@ from echo.guest_objects import (
     GuestModule, GuestFunction, GuestInstance, GuestBuiltin, GuestPyObject,
     GuestPartial, GuestClass, GuestCell, GuestMethod, GuestGenerator,
     GuestAsyncGenerator, ReturnKind, GuestTraceback, GuestProperty,
-    GuestClassMethod
+    GuestClassMethod, NativeFunction
 )
 from echo import interp_routines
 from echo.frame_objects import StatefulFrame, UnboundLocalSentinel
@@ -38,6 +38,7 @@ from echo.value import Value
 DEBUG_PRINT_BYTECODE = bool(os.getenv('DEBUG_PRINT_BYTECODE', False))
 
 
+@check_result
 def interp(code: types.CodeType,
            *,
            globals_: Dict[Text, Any],
@@ -143,6 +144,7 @@ def interp(code: types.CodeType,
     return Result(v.wrapped)
 
 
+@check_result
 def _do_call_functools_partial(
         args: Tuple[Any, ...],
         kwargs: Optional[Dict[Text, Any]]) -> Result[Any]:
@@ -153,6 +155,7 @@ def _do_call_functools_partial(
     return Result(guest_partial)
 
 
+@check_result
 def _do_call_property(
         args: Tuple[Any, ...],
         kwargs: Optional[Dict[Text, Any]]) -> Result[Any]:
@@ -172,6 +175,7 @@ def _do_call_classmethod(
     return Result(GuestClassMethod(args[0]))
 
 
+@check_result
 def _do_call_getattr(
         args: Tuple[Any, ...],
         kwargs: Optional[Dict[Text, Any]],
@@ -192,6 +196,7 @@ def _do_call_getattr(
                            interp_callback=interp_callback)
 
 
+@check_result
 def do_call(f, args: Tuple[Any, ...],
             *,
             get_exception_data: Callable[[], Optional[ExceptionData]],
@@ -227,7 +232,7 @@ def do_call(f, args: Tuple[Any, ...],
         return Result((exc, p, t))
     if f is globals:
         return Result(globals_)
-    elif isinstance(f, (GuestFunction, GuestMethod, GuestClassMethod)):
+    elif isinstance(f, (GuestFunction, GuestMethod, GuestClassMethod, NativeFunction)):
         return f.invoke(args=args, kwargs=kwargs, locals_dict=locals_dict,
                         interp_state=interp_state,
                         interp_callback=interp_callback)
@@ -258,7 +263,11 @@ def do_call(f, args: Tuple[Any, ...],
                              interp_callback=interp_callback,
                              interp_state=interp_state)
     else:
-        raise NotImplementedError(f, args, kwargs)
+        if isinstance(f, GuestPyObject):
+            type_name = f.get_type().name
+        else:
+            type_name = type(f).__name__
+        return Result(ExceptionData(None, None, TypeError("'{}' object is not callable".format(type_name))))
 
 
 def run_function(f: types.FunctionType, *args: Tuple[Any, ...],

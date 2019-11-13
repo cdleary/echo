@@ -12,7 +12,7 @@ class Foo:
 
 
 f = Foo()
-assert f.foo == 42
+assert f.foo == 42, f.foo
 f.foo = 128
 assert f.foo == 42
 assert f.__dict__['foo'] == 64, f.__dict__
