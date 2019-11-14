@@ -287,5 +287,5 @@ def import_path(path: Text, module_name: Text, fully_qualified_name: Text,
                 state: InterpreterState) -> Result[import_routines.ModuleT]:
     interp_callback = functools.partial(interp, interp_state=state)
     result = import_routines.import_path(
-        path, module_name, fully_qualified_name, interp_callback, state)
+        path, module_name, fully_qualified_name, interp_callback=interp_callback, interp_state=state)
     return result

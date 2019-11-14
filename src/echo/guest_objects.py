@@ -631,14 +631,25 @@ GuestFunctionType.singleton = GuestFunctionType()
 
 class GuestCoroutineType(GuestPyObject):
 
+    def __init__(self):
+        self.dict_ = {}
+
     def hasattr(self, name: Text) -> bool:
         return False
 
-    def getattr(self, name: Text) -> Result[Any]:
-        raise NotImplementedError
+    def getattr(self, name: Text,
+                *,
+                interp_state: InterpreterState,
+                interp_callback: Optional[Callable] = None,
+                ) -> Result[Any]:
+        if name == '__mro__':
+            return Result((self, get_guest_builtin('type')))
+        if name == '__dict__':
+            return Result(self.dict_)
+        raise NotImplementedError(name)
 
     def setattr(self, name: Text, value: Any) -> Any:
-        raise NotImplementedError
+        raise NotImplementedError(name, value)
 
 
 def _is_type_builtin(x) -> bool:
@@ -711,7 +722,6 @@ def _do_issubclass(
         call: Callable, *,
         interp_state: InterpreterState,
         interp_callback: Callable) -> Result[bool]:
-    # TODO(cdleary, 2019-02-10): Detect "guest" subclass relations.
     assert len(args) == 2, args
     if DEBUG_PRINT_BYTECODE:
         print('[go:issubclass] arg0:', args[0], file=sys.stderr)

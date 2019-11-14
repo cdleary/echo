@@ -1,4 +1,5 @@
 import builtins
+import functools
 import logging
 import os
 import sys
@@ -24,8 +25,33 @@ SPECIAL_MODULES = (
 ModuleT = Union[ModuleType, GuestModule]
 
 
+
+def bump_import_depth(f):
+    @functools.wraps(f)
+    def wrapper(*args, **kwargs):
+        interp_state = kwargs['interp_state']
+        assert isinstance(interp_state, InterpreterState), interp_state
+        interp_state.import_depth += 1
+        try:
+            result = f(*args, **kwargs)
+        finally:
+            interp_state.import_depth -= 1
+        return result
+    return wrapper
+
+
+def log(interp_state: InterpreterState, s: Text) -> None:
+    if not DEBUG_PRINT_IMPORTS:
+        return
+    leader = '| ' * interp_state.import_depth
+    print(f'[impr] {leader}{s}',
+          file=sys.stderr)
+    
+
+
+@bump_import_depth
 def _import_module_at_path(
-        path: Text, fully_qualified_name: Text, interp_callback: Callable,
+        path: Text, fully_qualified_name: Text, *, interp_callback: Callable,
         interp_state: InterpreterState) -> Result[GuestModule]:
     """Imports a module at the given path and runs its code.
 
@@ -41,9 +67,7 @@ def _import_module_at_path(
     if fully_qualified_name in interp_state.sys_modules:
         return Result(interp_state.sys_modules[fully_qualified_name])
 
-    if DEBUG_PRINT_IMPORTS:
-        print(f'importing module {fully_qualified_name} at path {path}',
-              file=sys.stderr)
+    log(interp_state, f'importing module {fully_qualified_name} at path {path}')
 
     with open(path) as f:
         contents = f.read()
@@ -72,9 +96,8 @@ def _import_module_at_path(
     if result.is_exception():
         return result
 
-    if DEBUG_PRINT_IMPORTS:
-        print(f'[impr] done importing module {fully_qualified_name} at '
-              f'path {path}', file=sys.stderr)
+    log(interp_state, f'done importing module {fully_qualified_name} at '
+          f'path {path}')
     return Result(module)
 
 
@@ -82,9 +105,8 @@ def _subimport_module_at_path(
         path: Text, fully_qualified_name: Text,
         containing_package: GuestModule, interp_callback: Callable,
         interp_state: InterpreterState) -> Result[GuestModule]:
-    if DEBUG_PRINT_IMPORTS:
-        print('[impr] path {} fqn {} containing_package {}'.format(path,
-              fully_qualified_name, containing_package), file=sys.stderr)
+    log(interp_state, 'path {} fqn {} containing_package {}'.format(path,
+          fully_qualified_name, containing_package))
 
     mod_result = _import_module_at_path(
         path, fully_qualified_name, interp_callback, interp_state)
@@ -100,11 +122,8 @@ def _subimport_module_at_path(
     return mod_result
 
 
-def _resolve_module_or_package(dirpath: Text,
-                               fqn_piece: Text) -> Result[Text]:
-    if DEBUG_PRINT_IMPORTS:
-        print('[impr] _resolve_module_or_package: dirpath:', dirpath,
-              'fqn_piece:', fqn_piece, file=sys.stderr)
+def _resolve_module_or_package(
+        dirpath: Text, fqn_piece: Text) -> Result[Text]:
     module_path = os.path.join(dirpath, fqn_piece + '.py')
     package_path = os.path.join(dirpath, fqn_piece, '__init__.py')
     if os.path.exists(module_path):
@@ -135,10 +154,8 @@ def getattr_or_subimport(current_mod: ModuleT,
                          fromlist_name: Text,
                          interp_callback: Callable,
                          interp_state: InterpreterState) -> Result[Any]:
-    if DEBUG_PRINT_IMPORTS:
-        print('[impr] getattr_or_subimport; current_mod: {} '
-              'fromlist_name: {}'.format(current_mod, fromlist_name),
-              file=sys.stderr)
+    log(interp_state, 'getattr_or_subimport; current_mod: {} '
+          'fromlist_name: {}'.format(current_mod, fromlist_name))
 
     if isinstance(current_mod, ModuleType):
         return Result(getattr(current_mod, fromlist_name))
@@ -317,7 +334,8 @@ def _import_name_without_level(
 
     # First import the "start path" as the first module-or-package.
     start_mod_result = _import_module_at_path(
-        start_path, start_fqn, interp_callback, interp_state)
+        start_path, start_fqn, interp_callback=interp_callback,
+        interp_state=interp_state)
     if start_mod_result.is_exception():
         return Result(start_mod_result.get_exception())
     start_mod = start_mod_result.get_value()
@@ -371,8 +389,8 @@ def import_path(path: Text, module_name: Text, fully_qualified_name: Text,
                 interp_state: InterpreterState) -> Result[ModuleT]:
     if fully_qualified_name in interp_state.sys_modules:
         return Result(interp_state.sys_modules[fully_qualified_name])
-    return _import_module_at_path(path, fully_qualified_name, interp_callback,
-                                  interp_state)
+    return _import_module_at_path(path, fully_qualified_name, interp_callback=interp_callback,
+                                  interp_state=interp_state)
 
 
 def run_IMPORT_NAME(importing_path: Text,
@@ -382,11 +400,9 @@ def run_IMPORT_NAME(importing_path: Text,
                     globals_: Dict[Text, Any],
                     interp_callback: Callable,
                     interp_state: InterpreterState) -> Result[Any]:
-    if DEBUG_PRINT_IMPORTS:
-        print('[impr] run_IMPORT_NAME importing_path {} level {} fromlist {} '
-              'multi_module_name {}'.format(
-                importing_path, level, fromlist, multi_module_name),
-              file=sys.stderr)
+    log(interp_state, 'run_IMPORT_NAME importing_path {} level {} fromlist {} '
+          'multi_module_name {}'.format(
+            importing_path, level, fromlist, multi_module_name))
 
     if multi_module_name in interp_state.sys_modules:
         return Result(interp_state.sys_modules[multi_module_name])
@@ -407,9 +423,7 @@ def run_IMPORT_NAME(importing_path: Text,
     if result.is_exception():
         return result
 
-    if DEBUG_PRINT_IMPORTS:
-        print('[impr] run_IMPORT_NAME result: {}'.format(result.get_value()),
-              file=sys.stderr)
+    log(interp_state, 'run_IMPORT_NAME result: {}'.format(result.get_value()))
     root, leaf, fromlist_values = result.get_value()
 
     if fromlist is None:

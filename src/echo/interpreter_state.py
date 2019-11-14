@@ -17,3 +17,4 @@ class InterpreterState:
         # ''"
         self.paths = [script_directory] if script_directory else []
         self.last_frame = None
+        self.import_depth = 0

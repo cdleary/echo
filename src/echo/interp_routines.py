@@ -238,7 +238,6 @@ def _name_is_from_metaclass(cls: GuestClass, name: Text):
     return False
 
 
-@debugged
 def method_requires_self(obj: Any, name: Text, value: Any) -> bool:
     obj_is_module = isinstance(obj, GuestModule)
     if isinstance(value, GuestBuiltin) and value.bound_self is None:
