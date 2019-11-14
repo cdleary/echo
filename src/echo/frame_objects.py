@@ -684,7 +684,7 @@ class StatefulFrame:
         return self.handling_exception_data
 
     def _run_CALL_METHOD(self, arg, argval):
-        # Note: new in 3.7.
+        # Note: new in 3.7. See also _run_LOAD_METHOD
         #
         # https://docs.python.org/3.7/library/dis.html#opcode-CALL_METHOD
         positional_argc = arg

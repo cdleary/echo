@@ -222,6 +222,8 @@ def method_requires_self(obj: Any, value: Any) -> bool:
     if isinstance(value, types.MethodType):
         return False
     if isinstance(value, GuestFunction):
+        if isinstance(obj, GuestClass):
+            return False
         if isinstance(obj, GuestInstance):
             return value not in obj.dict_.values()
         return not obj_is_module

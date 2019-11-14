@@ -11,8 +11,10 @@ class Foo:
 
 
 
-f = Foo()
-assert f.foo == 42, f.foo
-f.foo = 128
-assert f.foo == 42
-assert f.__dict__['foo'] == 64, f.__dict__
+o = Foo()
+assert hasattr(Foo.__dict__['foo'], '__get__')
+assert hasattr(Foo.__dict__['foo'], '__set__')
+assert o.foo == 42, o.foo
+o.foo = 128
+assert o.foo == 42
+assert o.__dict__['foo'] == 64, o.__dict__

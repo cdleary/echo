@@ -324,22 +324,29 @@ class GuestInstance(GuestPyObject):
         assert isinstance(cls_hasattr, bool), (self.cls, cls_hasattr)
         return cls_hasattr
 
+    def _search_mro_for(self, name: Text) -> Optional[Any]:
+        for cls in self.cls.get_mro():
+            if not isinstance(cls, GuestClass):
+                continue
+            if name in cls.dict_:
+                return cls.dict_[name]
+        return None
+
     def getattr(self, name: Text,
                 *,
                 interp_state: InterpreterState,
                 interp_callback: Optional[Callable] = None,
                 ) -> Result[Any]:
-        cls_attr = None
-        if self.cls.hasattr(name):
-            cls_attr = self.cls.getattr(name, interp_state=interp_state,
-                                        interp_callback=interp_callback)
-            if cls_attr.is_exception():
-                return Result(cls_attr.get_exception())
-            cls_attr = cls_attr.get_value()
+        cls_attr = self._search_mro_for(name)
+
+        if DEBUG_PRINT_BYTECODE:
+            print('[go:gi:ga] self:', self, 'name:', name, 'cls_attr:', cls_attr, file=sys.stderr)
 
         if (isinstance(cls_attr, GuestInstance)
                 and cls_attr.hasattr('__get__')
                 and cls_attr.hasattr('__set__')):
+            if DEBUG_PRINT_BYTECODE:
+                print('[go:gi:ga] overriding descriptor:', cls_attr, file=sys.stderr)
             # Overriding descriptor.
             return _invoke_desc(self, cls_attr, interp_state=interp_state,
                                 interp_callback=interp_callback)
@@ -353,6 +360,8 @@ class GuestInstance(GuestPyObject):
                 return Result(self.dict_)
 
         if isinstance(cls_attr, GuestPyObject) and cls_attr.hasattr('__get__'):
+            if DEBUG_PRINT_BYTECODE:
+                print('[go:gi:ga] non-overriding descriptor:', cls_attr, file=sys.stderr)
             return _invoke_desc(self, cls_attr, interp_state=interp_state,
                                 interp_callback=interp_callback)
 
@@ -371,12 +380,8 @@ class GuestInstance(GuestPyObject):
                 interp_callback: Optional[Callable] = None,
                 ) -> Result[None]:
         cls_attr = None
-        if self.cls.hasattr(name):
-            cls_attr = self.cls.getattr(name, interp_state=interp_state,
-                                        interp_callback=interp_callback)
-            if cls_attr.is_exception():
-                return Result(cls_attr.get_exception())
-            cls_attr = cls_attr.get_value()
+        if name in self.cls.dict_:
+            cls_attr = self.cls.dict_[name]
 
         if (isinstance(cls_attr, GuestInstance)
                 and cls_attr.hasattr('__set__')):
