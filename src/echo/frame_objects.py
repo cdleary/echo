@@ -620,22 +620,6 @@ class StatefulFrame:
         else:
             raise NotImplementedError(lhs, rhs)
 
-    def _run_LOAD_METHOD(self, arg, argval):
-        # Note: New in 3.7.
-        #
-        # https://docs.python.org/3.7/library/dis.html#opcode-LOAD_METHOD
-        obj = self._peek()
-        attr_result = self._run_LOAD_ATTR(arg, argval)
-        if attr_result.is_exception():
-            return attr_result
-        if DEBUG_PRINT_BYTECODE:
-            print('[bc:lm] LOAD_ATTR ', attr_result, file=sys.stderr)
-        self._push(attr_result.get_value())
-        if interp_routines.method_requires_self(obj, attr_result.get_value()):
-            self._push(obj)
-        else:
-            self._push(UnboundLocalSentinel)
-
     def _run_SETUP_EXCEPT(self, arg, argval):
         self.block_stack.append(BlockInfo(
             BlockKind.SETUP_EXCEPT, arg+self.pc+self.pc_to_bc_width[self.pc],
@@ -682,6 +666,23 @@ class StatefulFrame:
 
     def get_exception_data(self) -> Optional[ExceptionData]:
         return self.handling_exception_data
+
+    def _run_LOAD_METHOD(self, arg, argval):
+        # Note: New in 3.7. See also _run_CALL_METHOD
+        #
+        # https://docs.python.org/3.7/library/dis.html#opcode-LOAD_METHOD
+        obj = self._peek()
+        attr_result = self._run_LOAD_ATTR(arg, argval)
+        if attr_result.is_exception():
+            return attr_result
+        if DEBUG_PRINT_BYTECODE:
+            print('[bc:lm] LOAD_ATTR ', attr_result, file=sys.stderr)
+        self._push(attr_result.get_value())
+        if interp_routines.method_requires_self(
+                obj, argval, attr_result.get_value()):
+            self._push(obj)
+        else:
+            self._push(UnboundLocalSentinel)
 
     def _run_CALL_METHOD(self, arg, argval):
         # Note: new in 3.7. See also _run_LOAD_METHOD

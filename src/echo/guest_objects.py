@@ -309,7 +309,7 @@ class GuestInstance(GuestPyObject):
         self.dict_ = {}
 
     def __repr__(self) -> Text:
-        return '<{} object>'.format(self.cls.name)
+        return '<{} eobject>'.format(self.cls.name)
 
     def get_type(self) -> Union['GuestClass', 'GuestBuiltin']:
         return self.cls
@@ -324,7 +324,18 @@ class GuestInstance(GuestPyObject):
         assert isinstance(cls_hasattr, bool), (self.cls, cls_hasattr)
         return cls_hasattr
 
-    def _search_mro_for(self, name: Text) -> Optional[Any]:
+    def _search_mro_for(
+            self, name: Text,
+            *,
+            interp_state: InterpreterState,
+            interp_callback: Optional[Callable] = None,
+            ) -> Optional[Any]:
+        if isinstance(self.cls, GuestBuiltin):
+            if self.cls.hasattr(name):
+                return self.cls.getattr(
+                    name, interp_state=interp_state,
+                    interp_callback=interp_callback).get_value()
+            return None
         for cls in self.cls.get_mro():
             if not isinstance(cls, GuestClass):
                 continue
@@ -337,16 +348,19 @@ class GuestInstance(GuestPyObject):
                 interp_state: InterpreterState,
                 interp_callback: Optional[Callable] = None,
                 ) -> Result[Any]:
-        cls_attr = self._search_mro_for(name)
+        cls_attr = self._search_mro_for(name, interp_state=interp_state,
+                                        interp_callback=interp_callback)
 
         if DEBUG_PRINT_BYTECODE:
-            print('[go:gi:ga] self:', self, 'name:', name, 'cls_attr:', cls_attr, file=sys.stderr)
+            print('[go:gi:ga] self:', self, 'name:', name, 'cls_attr:',
+                  cls_attr, file=sys.stderr)
 
         if (isinstance(cls_attr, GuestInstance)
                 and cls_attr.hasattr('__get__')
                 and cls_attr.hasattr('__set__')):
             if DEBUG_PRINT_BYTECODE:
-                print('[go:gi:ga] overriding descriptor:', cls_attr, file=sys.stderr)
+                print('[go:gi:ga] overriding descriptor:', cls_attr,
+                      file=sys.stderr)
             # Overriding descriptor.
             return _invoke_desc(self, cls_attr, interp_state=interp_state,
                                 interp_callback=interp_callback)
@@ -361,7 +375,8 @@ class GuestInstance(GuestPyObject):
 
         if isinstance(cls_attr, GuestPyObject) and cls_attr.hasattr('__get__'):
             if DEBUG_PRINT_BYTECODE:
-                print('[go:gi:ga] non-overriding descriptor:', cls_attr, file=sys.stderr)
+                print('[go:gi:ga] non-overriding descriptor:', cls_attr,
+                      file=sys.stderr)
             return _invoke_desc(self, cls_attr, interp_state=interp_state,
                                 interp_callback=interp_callback)
 
@@ -537,7 +552,7 @@ class GuestClass(GuestPyObject):
             v = self.dict_[name]
             if isinstance(v, GuestPyObject) and v.hasattr('__get__'):
                 f_result = v.getattr('__get__', interp_state=interp_state,
-                                            interp_callback=interp_callback)
+                                     interp_callback=interp_callback)
                 if f_result.is_exception():
                     return Result(f_result.get_exception())
                 return f_result.get_value().invoke(
@@ -560,11 +575,10 @@ class GuestClass(GuestPyObject):
             if base.hasattr(name):
                 return base.getattr(name, interp_state=interp_state,
                                     interp_callback=interp_callback)
-        if self.metaclass:
-            if self.metaclass.hasattr(name):
-                return self.metaclass.getattr(
-                    name, interp_state=interp_state,
-                    interp_callback=interp_callback)
+        if self.metaclass and self.metaclass.hasattr(name):
+            return self.metaclass.getattr(
+                name, interp_state=interp_state,
+                interp_callback=interp_callback)
         return Result(ExceptionData(
             None,
             f'Class {self.name} does not have attribute {name!r}',
@@ -585,10 +599,11 @@ class GuestFunctionType(GuestPyObject):
     def hasattr(self, name: Text) -> bool:
         return name in ('__code__', '__globals__', '__get__')
 
-    def _get_desc(self, args, *,
-             interp_callback: Callable,
-             interp_state: InterpreterState,
-             ) -> Result[Any]:
+    def _get_desc(
+            self, args, *,
+            interp_callback: Callable,
+            interp_state: InterpreterState,
+            ) -> Result[Any]:
         self, obj, objtype = args
         if obj is None:
             return Result(self)
@@ -709,7 +724,7 @@ def _do_issubclass(
         if scc.is_exception():
             return Result(scc.get_exception())
         scc = scc.get_value()
-        result = call(scc, args=(args[0],), globals_=scc.globals_)
+        result = call(scc, args=(args[1], args[0]), globals_=scc.globals_)
         return result
 
     if isinstance(args[0], GuestClass) and isinstance(args[1], GuestClass):
@@ -878,7 +893,6 @@ def _do_type(args: Tuple[Any, ...]) -> Result[Any]:
         del ns['__classcell__']
 
     return Result(cls)
-
 
 
 @check_result
@@ -1233,7 +1247,6 @@ class GuestProperty(GuestPyObject):
     def _get(self, args: Tuple[Any, ...], *,
              interp_state: InterpreterState,
              interp_callback: Callable) -> Result[Any]:
-        #print('GuestProperty.__get__ args:', args)
         _self, obj, objtype = args
         assert _self is self
         return self.fget.invoke(args=(obj,), interp_callback=interp_callback,
@@ -1285,7 +1298,6 @@ class GuestClassMethod(GuestPyObject):
                 interp_callback: Optional[Callable] = None,
                 ) -> Result[Any]:
         if name == '__get__':
-            #print('eclassmethod.__get__', file=sys.stderr)
             return Result(GuestMethod(NativeFunction(
                 self._get, 'eclassmethod.__get__'), bound_self=self))
         if name == '__func__':

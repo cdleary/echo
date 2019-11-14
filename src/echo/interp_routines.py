@@ -1,3 +1,4 @@
+import functools
 import operator
 import os
 import sys
@@ -201,7 +202,8 @@ def compare(opname: Text, lhs, rhs, interp_callback: Callable,
     if isinstance(lhs, GuestClass) and isinstance(rhs, GuestClass):
         return Result(lhs is rhs)
 
-    if (opname == '==' and isinstance(lhs, GuestClass) and not isinstance(rhs, GuestClass)
+    if (opname == '==' and isinstance(lhs, GuestClass)
+            and not isinstance(rhs, GuestClass)
             and not lhs.hasattr('__eq__')):
         return Result(False)
 
@@ -209,13 +211,35 @@ def compare(opname: Text, lhs, rhs, interp_callback: Callable,
             and not isinstance(rhs, GuestPyObject)):
         return Result(COMPARE_OPS[opname](lhs, rhs))
 
-    if opname == '!=' and isinstance(lhs, GuestMethod) and not isinstance(rhs, GuestPyObject):
+    if (opname == '!=' and isinstance(lhs, GuestMethod)
+            and not isinstance(rhs, GuestPyObject)):
         return Result(True)
 
     raise NotImplementedError(opname, lhs, rhs, type(rhs))
 
 
-def method_requires_self(obj: Any, value: Any) -> bool:
+def debugged(f):
+    @functools.wraps(f)
+    def wrapper(*args, **kwargs):
+        result = f(*args, **kwargs)
+        print(f.__name__, 'args:', args, 'kwargs:', kwargs, '=>', result)
+        return result
+    return wrapper
+
+
+def _name_is_from_metaclass(cls: GuestClass, name: Text):
+    for c in cls.get_mro():
+        if not isinstance(c, GuestClass):
+            continue
+        if name in c.dict_:
+            return False
+        if c.metaclass and c.metaclass.hasattr(name):
+            return True
+    return False
+
+
+@debugged
+def method_requires_self(obj: Any, name: Text, value: Any) -> bool:
     obj_is_module = isinstance(obj, GuestModule)
     if isinstance(value, GuestBuiltin) and value.bound_self is None:
         return not obj_is_module
@@ -223,7 +247,7 @@ def method_requires_self(obj: Any, value: Any) -> bool:
         return False
     if isinstance(value, GuestFunction):
         if isinstance(obj, GuestClass):
-            return False
+            return _name_is_from_metaclass(obj, name)
         if isinstance(obj, GuestInstance):
             return value not in obj.dict_.values()
         return not obj_is_module

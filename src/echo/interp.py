@@ -232,7 +232,8 @@ def do_call(f, args: Tuple[Any, ...],
         return Result((exc, p, t))
     if f is globals:
         return Result(globals_)
-    elif isinstance(f, (GuestFunction, GuestMethod, GuestClassMethod, NativeFunction)):
+    elif isinstance(f, (GuestFunction, GuestMethod, GuestClassMethod,
+                        NativeFunction)):
         return f.invoke(args=args, kwargs=kwargs, locals_dict=locals_dict,
                         interp_state=interp_state,
                         interp_callback=interp_callback)
@@ -267,7 +268,9 @@ def do_call(f, args: Tuple[Any, ...],
             type_name = f.get_type().name
         else:
             type_name = type(f).__name__
-        return Result(ExceptionData(None, None, TypeError("'{}' object is not callable".format(type_name))))
+        return Result(ExceptionData(
+            None, None,
+            TypeError("'{}' object is not callable".format(type_name))))
 
 
 def run_function(f: types.FunctionType, *args: Tuple[Any, ...],

@@ -45,7 +45,6 @@ class Result(Generic[T]):
         return self.value
 
 
-
 def check_result(f):
     """Helper decorator that checks a function returns a Result."""
     @functools.wraps(f)
@@ -54,5 +53,3 @@ def check_result(f):
         assert isinstance(result, Result), (f, args, kwargs, result)
         return result
     return checker
-
-
