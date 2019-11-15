@@ -6,6 +6,7 @@ import types
 from typing import Text, Any, Union, Dict, Callable
 import weakref
 
+from echo.interp_context import ICtx
 from echo.interp_result import Result, check_result
 from echo.interpreter_state import InterpreterState
 from echo.guest_objects import (
@@ -84,8 +85,7 @@ _BINARY_OPS = {
 
 
 @check_result
-def run_binop(opname: Text, lhs: Any, rhs: Any, interp_callback: Callable,
-              interp_state: InterpreterState) -> Result[Any]:
+def run_binop(opname: Text, lhs: Any, rhs: Any, ictx: ICtx) -> Result[Any]:
     if (opname in ('BINARY_TRUE_DIVIDE', 'BINARY_MODULO') and type(rhs) is int
             and rhs == 0):
         raise NotImplementedError(opname, lhs, rhs)
@@ -99,14 +99,10 @@ def run_binop(opname: Text, lhs: Any, rhs: Any, interp_callback: Callable,
         return Result(op(lhs, rhs))
 
     if opname in OPNAME_TO_SPECIAL and isinstance(lhs, GuestInstance):
-        special_f = lhs.getattr(
-            OPNAME_TO_SPECIAL[opname], interp_state=interp_state,
-            interp_callback=interp_callback)
+        special_f = lhs.getattr(OPNAME_TO_SPECIAL[opname], ictx)
         if special_f.is_exception():
             raise NotImplementedError(special_f)
-        return special_f.get_value().invoke(
-            args=(rhs,), kwargs=None, interp_callback=interp_callback,
-            interp_state=interp_state)
+        return special_f.get_value().invoke((rhs,), {}, {}, ictx)
 
     raise NotImplementedError(opname, lhs, rhs)
 
@@ -134,8 +130,7 @@ def exception_match(lhs, rhs) -> bool:
 
 
 @check_result
-def compare(opname: Text, lhs, rhs, interp_callback: Callable,
-            interp_state: InterpreterState) -> Result[bool]:
+def compare(opname: Text, lhs, rhs, ictx: ICtx) -> Result[bool]:
     if (isinstance(lhs, BUILTIN_VALUE_TYPES_TUP)
             and isinstance(rhs, BUILTIN_VALUE_TYPES_TUP)):
         return Result(COMPARE_OPS[opname](lhs, rhs))
@@ -148,7 +143,7 @@ def compare(opname: Text, lhs, rhs, interp_callback: Callable,
         if len(lhs) != len(rhs):
             return Result(False)
         for e, f in zip(lhs, rhs):
-            e_result = compare(opname, e, f, interp_callback, interp_state)
+            e_result = compare(opname, e, f, ictx)
             if e_result.is_exception():
                 return e_result
             if not e_result.get_value():
@@ -161,8 +156,7 @@ def compare(opname: Text, lhs, rhs, interp_callback: Callable,
         for k in set(lhs.keys()) | set(rhs.keys()):
             if k not in lhs or k not in rhs:
                 return Result(False)
-            e_result = compare(opname, lhs[k], rhs[k], interp_callback,
-                               interp_state)
+            e_result = compare(opname, lhs[k], rhs[k], ictx)
             if e_result.is_exception():
                 return e_result
             if not e_result.get_value():
@@ -170,9 +164,10 @@ def compare(opname: Text, lhs, rhs, interp_callback: Callable,
         return Result(True)
 
     if opname in ('in', 'not in') and type(rhs) in (
-            tuple, list, dict, set, type(os.environ), weakref.WeakSet):
+            tuple, list, dict, set, frozenset, type(os.environ),
+            weakref.WeakSet):
         for e in rhs:
-            e_result = compare('==', lhs, e, interp_callback, interp_state)
+            e_result = compare('==', lhs, e, ictx)
             if e_result.is_exception():
                 return e_result
             if e_result.get_value():
@@ -184,14 +179,10 @@ def compare(opname: Text, lhs, rhs, interp_callback: Callable,
         return Result(op(lhs, rhs))
 
     if opname in COMPARE_TO_SPECIAL and isinstance(lhs, GuestInstance):
-        special_f = lhs.getattr(
-            COMPARE_TO_SPECIAL[opname], interp_state=interp_state,
-            interp_callback=interp_callback)
+        special_f = lhs.getattr(COMPARE_TO_SPECIAL[opname], ictx)
         if special_f.is_exception():
             return Result(special_f.get_exception())
-        return special_f.get_value().invoke(
-            args=(rhs,), kwargs=None, interp_callback=interp_callback,
-            interp_state=interp_state)
+        return special_f.get_value().invoke((rhs,), {}, {}, ictx)
 
     def is_set_of_strings(x: Any) -> bool:
         return isinstance(x, set) and all(isinstance(e, str) for e in x)
@@ -205,6 +196,10 @@ def compare(opname: Text, lhs, rhs, interp_callback: Callable,
     if (opname == '==' and isinstance(lhs, GuestClass)
             and not isinstance(rhs, GuestClass)
             and not lhs.hasattr('__eq__')):
+        return Result(False)
+
+    if (opname == '==' and not isinstance(rhs, GuestClass)
+            and isinstance(lhs, GuestClass)):
         return Result(False)
 
     if (not isinstance(lhs, GuestPyObject)

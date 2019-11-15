@@ -10,6 +10,7 @@ from typing import (
 )
 from enum import Enum
 
+from echo.interp_context import ICtx
 from echo import import_routines
 from echo.guest_objects import (
     GuestCell, ReturnKind, GuestBuiltin, GuestFunction, GuestPyObject,
@@ -24,6 +25,7 @@ from echo.value import Value
 
 
 DEBUG_PRINT_BYTECODE = bool(os.getenv('DEBUG_PRINT_BYTECODE', False))
+DEBUG_PRINT_BYTECODE_LINE = bool(os.getenv('DEBUG_PRINT_BYTECODE_LINE', False))
 GUEST_BUILTINS = {
     list: {'append', 'remove', 'insert'},
     dict: {'keys', 'values', 'items', 'update'},
@@ -72,7 +74,7 @@ def wrap_with_push(frame: 'StatefulFrame', state: InterpreterState,
         prior = state.last_frame
         state.last_frame = frame
         try:
-            return f(*args, **kwargs)
+            return f(*args, **kwargs, ictx=frame.ictx)
         finally:
             state.last_frame = prior
 
@@ -96,10 +98,8 @@ class StatefulFrame:
                  locals_dict: Dict[Text, Any],
                  globals_: Dict[Text, Any],
                  cellvars: Tuple[GuestCell, ...],
-                 interp_state: InterpreterState,
                  in_function: bool,
-                 interp_callback: Callable,
-                 do_call_callback: Callable):
+                 ictx: ICtx):
         self.code = code
         self.pc = 0
         self.stack = []
@@ -114,7 +114,7 @@ class StatefulFrame:
         self.cellvars = cellvars
         self.consts = code.co_consts
         self.names = code.co_names
-        self.interp_state = interp_state
+        self.ictx = ictx
         self.in_function = in_function
 
         # TODO(cdleary, 2019-01-21): Investigate why this "builtins" ref is
@@ -122,9 +122,13 @@ class StatefulFrame:
         self.builtins = sys.modules['builtins']  # globals_['__builtins__']
 
         self.interp_callback = wrap_with_push(
-            self, interp_state, interp_callback)
+            self, ictx.interp_state, ictx.interp_callback)
         self.do_call_callback = wrap_with_push(
-            self, interp_state, do_call_callback)
+            self, ictx.interp_state, ictx.do_call_callback)
+
+    @property
+    def interp_state(self):
+        return self.ictx.interp_state
 
     def _handle_exception(self):
         """Returns whether the exception was handled in this function."""
@@ -432,7 +436,7 @@ class StatefulFrame:
         if DEBUG_PRINT_BYTECODE:
             print('[fo:cf] f:', f, 'args:', args, file=sys.stderr)
         result = self.do_call_callback(
-            f, args, interp_state=self.interp_state, kwargs=kwargs,
+            f, args, kwargs, locals_dict=self.locals_dict,
             globals_=self.globals_, get_exception_data=self.get_exception_data)
         assert isinstance(result, Result), (result, f)
         return result
@@ -457,8 +461,7 @@ class StatefulFrame:
             print('[bc:sa] obj {!r} attr {!r} val {!r}'.format(
                 obj, argval, value), file=sys.stderr)
         if isinstance(obj, GuestPyObject):
-            res = obj.setattr(argval, value, interp_state=self.interp_state,
-                              interp_callback=self.interp_callback)
+            res = obj.setattr(argval, value, ictx=self.ictx)
             if res.is_exception():
                 return res
             return Result(NoStackPushSentinel)
@@ -493,7 +496,7 @@ class StatefulFrame:
         level = self._pop()
         return import_routines.run_IMPORT_NAME(
             self.code.co_filename, level, fromlist, argval, self.globals_,
-            self.interp_callback, self.interp_state)
+            self.ictx)
 
     def _run_IMPORT_FROM(self, arg, argval):
         module = self._peek()
@@ -501,7 +504,7 @@ class StatefulFrame:
             return Result(getattr(module, argval))
         elif isinstance(module, GuestModule):
             return import_routines.getattr_or_subimport(
-                module, argval, self.interp_callback, self.interp_state)
+                module, argval, self.ictx)
         else:
             raise NotImplementedError(module)
 
@@ -538,11 +541,9 @@ class StatefulFrame:
                 and argval == '__dict__'):
             return Result(type.__dict__)
         elif isinstance(obj, GuestInstance):
-            return obj.getattr(argval, interp_callback=self.interp_callback,
-                               interp_state=self.interp_state)
+            return obj.getattr(argval, self.ictx)
         elif isinstance(obj, GuestPyObject):
-            return obj.getattr(argval, interp_state=self.interp_state,
-                               interp_callback=self.interp_callback)
+            return obj.getattr(argval, self.ictx)
         elif obj is sys and argval == 'path':
             return Result(self.interp_state.paths)
         elif obj is sys and argval == 'modules':
@@ -560,7 +561,7 @@ class StatefulFrame:
             return Result(interp_routines.exception_match(lhs, rhs))
         else:
             return interp_routines.compare(
-                argval, lhs, rhs, self.interp_callback, self.interp_state)
+                argval, lhs, rhs, self.ictx)
 
     def _run_END_FINALLY(self, arg, argval):
         # From the Python docs: "The interpreter recalls whether the
@@ -580,7 +581,7 @@ class StatefulFrame:
         rhs = self._pop()
         lhs = self._pop()
         return interp_routines.run_binop(
-            opname, lhs, rhs, self.interp_callback, self.interp_state)
+            opname, lhs, rhs, self.ictx)
 
     def _run_BINARY_ADD(self, arg, argval):
         return self._run_binary('BINARY_ADD')
@@ -615,8 +616,7 @@ class StatefulFrame:
         if ({type(lhs), type(rhs)} <=
                 interp_routines.BUILTIN_VALUE_TYPES | {list}):
             return interp_routines.run_binop(
-                'BINARY_ADD', lhs, rhs, self.interp_callback,
-                self.interp_state)
+                'BINARY_ADD', lhs, rhs, self.ictx)
         else:
             raise NotImplementedError(lhs, rhs)
 
@@ -641,11 +641,8 @@ class StatefulFrame:
         rest = args-len(kwargs)
         args = self._pop_n(rest, tos_is_0=False)
         to_call = self._pop()
-        if DEBUG_PRINT_BYTECODE:
-            print('[bc:cfkw]', to_call, 'args:', args, 'kwargs:', kwargs,
-                  'callback:', self.do_call_callback)
         return self.do_call_callback(
-            to_call, args, interp_state=self.interp_state, kwargs=kwargs,
+            to_call, args, kwargs, self.locals_dict,
             globals_=self.globals_, get_exception_data=self.get_exception_data)
 
     def _run_SETUP_LOOP(self, arg, argval):
@@ -699,8 +696,8 @@ class StatefulFrame:
             print(f'[bc:cm] args: {args}', file=sys.stderr)
             print(f'[bc:cm] self_value: {self_value}', file=sys.stderr)
         return self.do_call_callback(
-            method, args, globals_=self.globals_,
-            interp_state=self.interp_state,
+            method, args, {}, self.locals_dict,
+            globals_=self.globals_,
             get_exception_data=self.get_exception_data)
 
     def _run_CALL_FUNCTION_EX(self, arg, argval):
@@ -710,11 +707,8 @@ class StatefulFrame:
             kwargs = None
         callargs = self._pop()
         func = self._pop()
-        if DEBUG_PRINT_BYTECODE:
-            print('[fo:cfex] f:', func, 'args:', callargs, file=sys.stderr)
         return self.do_call_callback(
-            func, callargs, kwargs=kwargs, globals_=self.globals_,
-            interp_state=self.interp_state,
+            func, callargs, kwargs, self.locals_dict, globals_=self.globals_,
             get_exception_data=self.get_exception_data)
 
     def _run_PRINT_EXPR(self, arg, argval):
@@ -724,10 +718,7 @@ class StatefulFrame:
 
     def _run_IMPORT_STAR(self, arg, argval):
         module = self._peek()
-        import_routines.import_star(
-            module, self.globals_,
-            interp_state=self.interp_state,
-            interp_callback=self.interp_callback)
+        import_routines.import_star(module, self.globals_, self.ictx)
         self._pop()  # Docs say 'module is popped after loading all names'.
 
     def _run_UNPACK_SEQUENCE(self, arg, argval):
@@ -746,6 +737,9 @@ class StatefulFrame:
     def _run_one_bytecode(self) -> Optional[Result[Tuple[Value, ReturnKind]]]:
         instruction = self.pc_to_instruction[self.pc]
         assert instruction is not None
+
+        if DEBUG_PRINT_BYTECODE_LINE and instruction.starts_line:
+            print('[bc:line]', self.code.co_filename, instruction.starts_line)
 
         if DEBUG_PRINT_BYTECODE:
             print('[bc]', instruction, file=sys.stderr)

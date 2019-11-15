@@ -7,6 +7,7 @@ from typing import Tuple, Any, Text
 import pytest
 
 from echo import interp
+from echo import interp_context
 
 
 SAMPLE_DIR = 'py_samples'
@@ -51,8 +52,11 @@ def test_echo_on_sample(path: Text):
     fully_qualified_name = '__main__'
     state = interp.InterpreterState(os.path.dirname(fullpath))
     state.paths += sys.path[1:]
+
+    ictx = interp_context.ICtx(state, interp.interp, interp.do_call)
+
     result = interp.import_path(path, fully_qualified_name,
-                                fully_qualified_name, state)
+                                fully_qualified_name, ictx)
     if result.is_exception():
         print(result.get_exception().exception)
         pprint.pprint(result.get_exception().traceback, width=120)
