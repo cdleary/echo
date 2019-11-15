@@ -9,6 +9,7 @@ import typing
 
 
 from echo import interp
+from echo import interp_context
 
 
 def main():
@@ -19,13 +20,18 @@ def main():
     globals_ = dict(globals())
     state = interp.InterpreterState(os.getcwd())
     state.paths = sys.path[1:] + state.paths
+    ictx = interp_context.ICtx(state, interp.interp, interp.do_call)
 
     while True:
-        line = input('>>> ')
+        try:
+            line = input('>>> ')
+        except EOFError:
+            sys.stdout.write('\n')
+            break
         code = compile(line, '<stdin>', 'single')
         code = typing.cast(types.CodeType, code)
-        result = interp.interp(code, globals_=globals_, state=state,
-                               in_function=False)
+        result = interp.interp(code, globals_=globals_, ictx=ictx,
+                               in_function=False, name='__main__')
         if result.is_exception():
             print('exception!', result.get_exception())
 

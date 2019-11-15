@@ -279,6 +279,8 @@ def _invoke_desc(self, cls_attr, ictx: ICtx) -> Result[Any]:
         return Result(objtype_result.get_exception())
     objtype = objtype_result.get_value()
 
+    ictx.desc_count += 1
+
     return f.invoke((self, objtype), {}, {}, ictx)
 
 
@@ -832,6 +834,14 @@ def _do_object_eq(
 
 
 @check_result
+def _do_object_new(
+        args: Tuple[Any, ...],
+        kwargs: Dict[Text, Any],
+        ictx: ICtx) -> Result[Any]:
+    raise NotImplementedError(args, kwargs)
+
+
+@check_result
 def _do_object_ne(
         args: Tuple[Any, ...],
         kwargs: Dict[Text, Any],
@@ -841,6 +851,27 @@ def _do_object_ne(
     return Result(lhs is not rhs)
 
 
+@check_result
+def _do_classmethod(
+        args: Tuple[Any, ...],
+        kwargs: Dict[Text, Any],
+        ictx: ICtx) -> Result[Any]:
+    assert len(args) == 1, args
+    assert isinstance(args[0], GuestFunction), args[0]
+    return Result(GuestClassMethod(args[0]))
+
+
+@check_result
+def _do_staticmethod(
+        args: Tuple[Any, ...],
+        kwargs: Dict[Text, Any],
+        ictx: ICtx) -> Result[Any]:
+    assert len(args) == 1, args
+    assert isinstance(args[0], GuestFunction), args[0]
+    return Result(GuestStaticMethod(args[0]))
+
+
+@check_result
 def _do_dir(args: Tuple[Any, ...],
             kwargs: Dict[Text, Any],
             ictx: ICtx) -> Result[Any]:
@@ -877,7 +908,9 @@ def _do_type(args: Tuple[Any, ...]) -> Result[Any]:
         if isinstance(args[0], GuestCoroutine):
             return Result(GuestCoroutineType())
         if isinstance(args[0], GuestClassMethod):
-            return Result(classmethod)
+            return Result(get_guest_builtin('classmethod'))
+        if isinstance(args[0], GuestStaticMethod):
+            return Result(get_guest_builtin('staticmethod'))
         if _is_type_builtin(args[0]):
             return Result(args[0])
         res = type(args[0])
@@ -1133,10 +1166,16 @@ class GuestBuiltin(GuestPyObject):
             return _do_type_subclasses(args, kwargs, ictx)
         if self.name == 'object.__subclasshook__':
             return _do_object_subclasshook(args, kwargs, ictx)
+        if self.name == 'object.__new__':
+            return _do_object_new(args, kwargs, ictx)
         if self.name == 'object.__eq__':
             return _do_object_eq(args, kwargs, ictx)
         if self.name == 'object.__ne__':
             return _do_object_ne(args, kwargs, ictx)
+        if self.name == 'classmethod':
+            return _do_classmethod(args, kwargs, ictx)
+        if self.name == 'staticmethod':
+            return _do_staticmethod(args, kwargs, ictx)
         if self.name == 'super':
             return _do_super(args, ictx)
         if self.name == 'iter':
@@ -1173,6 +1212,8 @@ class GuestBuiltin(GuestPyObject):
             if name == '__new__':
                 return Result(get_guest_builtin('dict.__new__'))
         if self.name == 'object':
+            if name == '__new__':
+                return Result(get_guest_builtin('object.__new__'))
             if name == '__init__':
                 return Result(get_guest_builtin('object.__init__'))
             if name == '__str__':
@@ -1292,6 +1333,41 @@ class GuestClassMethod(GuestPyObject):
         if name == '__get__':
             return Result(GuestMethod(NativeFunction(
                 self._get, 'eclassmethod.__get__'), bound_self=self))
+        if name == '__func__':
+            return Result(self.f)
+        raise NotImplementedError(name)
+
+    def setattr(self, name: Text, value: Any) -> Result[None]:
+        raise NotImplementedError(name, value)
+
+
+class GuestStaticMethod(GuestPyObject):
+    def __init__(self, f: GuestFunction):
+        self.f = f
+        self.dict_ = {}
+
+    def __repr__(self) -> Text:
+        return '<estaticmethod object at {:#x}>'.format(id(self))
+
+    def invoke(self, *args, **kwargs) -> Result[Any]:
+        return self.f.invoke(*args, **kwargs)
+
+    def hasattr(self, name: Text) -> bool:
+        return name in self.dict_ or name == '__get__'
+
+    @check_result
+    def _get(self,
+             args: Tuple[Any, ...],
+             kwargs: Dict[Text, Any],
+             locals_dict: Dict[Text, Any],
+             ictx: ICtx) -> Result[Any]:
+        return Result(self.f)
+
+    @check_result
+    def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
+        if name == '__get__':
+            return Result(NativeFunction(
+                self._get, 'estaticmethod.__get__'))
         if name == '__func__':
             return Result(self.f)
         raise NotImplementedError(name)

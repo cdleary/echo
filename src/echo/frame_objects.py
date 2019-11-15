@@ -368,6 +368,15 @@ class StatefulFrame:
             return False
 
     @sets_pc
+    def _run_JUMP_IF_TRUE_OR_POP(self, arg, argval):
+        if self._peek_value().is_truthy():
+            pc = arg
+            return True
+        else:
+            self._pop()
+            return False
+
+    @sets_pc
     def _run_FOR_ITER(self, arg, argval):
         try:
             x = self._peek().__next__()
@@ -669,14 +678,16 @@ class StatefulFrame:
         #
         # https://docs.python.org/3.7/library/dis.html#opcode-LOAD_METHOD
         obj = self._peek()
+        desc_count_before = self.ictx.desc_count
         attr_result = self._run_LOAD_ATTR(arg, argval)
         if attr_result.is_exception():
             return attr_result
         if DEBUG_PRINT_BYTECODE:
             print('[bc:lm] LOAD_ATTR ', attr_result, file=sys.stderr)
         self._push(attr_result.get_value())
-        if interp_routines.method_requires_self(
-                obj, argval, attr_result.get_value()):
+        if (desc_count_before == self.ictx.desc_count
+                and interp_routines.method_requires_self(
+                    obj, argval, attr_result.get_value())):
             self._push(obj)
         else:
             self._push(UnboundLocalSentinel)
@@ -714,7 +725,14 @@ class StatefulFrame:
     def _run_PRINT_EXPR(self, arg, argval):
         value = self._pop()
         if value is not None:
-            print(value)
+            if isinstance(value, GuestPyObject):
+                r = value.getattr('__repr__', self.ictx)
+                s = self.do_call_callback(
+                    r, (), {}, self.locals_dict, globals_=r.globals_,
+                    get_exception_data=self.get_exception_data)
+                print(s)
+            else:
+                print(repr(value))
 
     def _run_IMPORT_STAR(self, arg, argval):
         module = self._peek()
@@ -787,7 +805,7 @@ class StatefulFrame:
                 # This op causes the stack_effect call to error.
                 'EXTENDED_ARG',
                 # These ops may or may not pop the stack.
-                'JUMP_IF_FALSE_OR_POP', 'FOR_ITER',
+                'JUMP_IF_FALSE_OR_POP', 'JUMP_IF_TRUE_OR_POP', 'FOR_ITER',
                 ):
             stack_effect = dis.stack_effect(instruction.opcode,
                                             instruction.arg)

@@ -29,7 +29,7 @@ COMPARE_TO_SPECIAL = {
 }
 GUEST_BUILTIN_NAMES = (
     'isinstance', 'issubclass', 'super', 'iter', 'type', 'zip', 'reversed',
-    'next', 'hasattr', 'repr', 'dir', 'object',
+    'next', 'hasattr', 'repr', 'dir', 'object', 'classmethod', 'staticmethod',
 )
 BUILTIN_EXCEPTION_TYPES = (
     AssertionError,
