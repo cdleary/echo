@@ -15,6 +15,7 @@ from echo import import_routines
 from echo.guest_objects import (
     GuestCell, ReturnKind, GuestBuiltin, GuestFunction, GuestPyObject,
     GuestModule, GuestCoroutine, GuestInstance, get_guest_builtin,
+    do_getitem, do_setitem,
 )
 from echo.code_attributes import CodeAttributes
 from echo.interpreter_state import InterpreterState
@@ -453,10 +454,10 @@ class StatefulFrame:
     def _run_STORE_NAME(self, arg, argval):
         if self.in_function:
             if self.locals_dict is not None:
-                assert isinstance(self.locals_dict, dict)
-                # Work around pytype error.
-                ld = cast(dict, self.locals_dict)
-                ld[argval] = self._pop()
+                value = self._pop()
+                res = do_setitem((self.locals_dict, argval, value), self.ictx)
+                if res.is_exception():
+                    raise NotImplementedError
             else:
                 self.locals_[arg] = self._pop()
         else:
@@ -526,7 +527,7 @@ class StatefulFrame:
         if self.in_function:
             if self.locals_dict is not None:
                 try:
-                    return Result(self.locals_dict[argval])
+                    return do_getitem((self.locals_dict, argval), self.ictx)
                 except KeyError:
                     pass
             else:

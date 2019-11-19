@@ -732,6 +732,34 @@ def _do_getattr(args: Tuple[Any, ...], ictx: ICtx) -> Result[Any]:
 
 
 @check_result
+def do_getitem(args: Tuple[Any, ...], ictx: ICtx) -> Result[Any]:
+    assert len(args) == 2, args
+    o, name = args
+    if not isinstance(o, GuestPyObject):
+        return Result(o[name])
+    if o.hasattr('__getitem__'):
+        f = o.getattr('__getitem__', ictx).get_value()
+        return ictx.call(f, (args[1],), {}, {}, globals_=f.globals_)
+    raise NotImplementedError(o, name)
+
+
+@check_result
+def do_setitem(args: Tuple[Any, ...], ictx: ICtx) -> Result[None]:
+    assert len(args) == 3, args
+    o, name, value = args
+    if not isinstance(o, GuestPyObject):
+        o[name] = value
+        return Result(None)
+    if o.hasattr('__setitem__'):
+        f = o.getattr('__setitem__', ictx).get_value()
+        res = ictx.call(f, (args[1], args[2]), {}, {}, globals_=f.globals_)
+        if res.is_exception():
+            return res
+        return Result(None)
+    raise NotImplementedError(o, name)
+
+
+@check_result
 def _do_repr(args: Tuple[Any, ...], ictx: ICtx) -> Result[Any]:
     assert len(args) == 1, args
     o = args[0]
@@ -940,15 +968,29 @@ def _do___build_class__(
         print('[go:bc]', args)
     func, name, *bases = args
     bases = tuple(bases)
-    ns = {}  # Namespace for the class.
+    metaclass = kwargs.pop('metaclass', None) if kwargs else None
+    if metaclass and metaclass.hasattr('__prepare__'):
+        prep_f = metaclass.getattr('__prepare__', ictx)
+        if prep_f.is_exception():
+            return Result(prep_f.get_exception())
+        prep_f = prep_f.get_value()
+        ns = ictx.call(prep_f,
+                       (name, bases), kwargs, {}, globals_=prep_f.globals_)
+        if ns.is_exception():
+            return Result(ns.get_exception())
+        ns = ns.get_value()
+        print('ns is', ns)
+    else:
+        ns = {}  # Namespace for the class.
     class_eval_result = ictx.call(
         func, (), {}, locals_dict=ns, globals_=func.globals_)
     if class_eval_result.is_exception():
         return Result(class_eval_result.get_exception())
     cell = class_eval_result.get_value()
-    metaclass = kwargs.pop('metaclass', None) if kwargs else None
     if cell is None:
-        ns['__module__'] = func.globals_['__name__']
+        res = do_setitem((ns, '__module__', func.globals_['__name__']), ictx)
+        if res.is_exception():
+            return res
         if metaclass and metaclass.hasattr('__new__'):
             new_f = metaclass.getattr('__new__', ictx).get_value()
             return ictx.call(
