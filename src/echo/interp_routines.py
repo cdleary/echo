@@ -6,8 +6,9 @@ import types
 from typing import Text, Any, Union, Dict, Callable
 import weakref
 
+from echo.elog import log
 from echo.interp_context import ICtx
-from echo.interp_result import Result, check_result
+from echo.interp_result import Result, check_result, ExceptionData
 from echo.interpreter_state import InterpreterState
 from echo.guest_objects import (
     GuestInstance, GuestBuiltin, GuestModule, GuestFunction, GuestClass,
@@ -28,8 +29,21 @@ COMPARE_TO_SPECIAL = {
     '>': '__gt__',
 }
 GUEST_BUILTIN_NAMES = (
-    'isinstance', 'issubclass', 'super', 'iter', 'type', 'zip', 'reversed',
-    'next', 'hasattr', 'repr', 'dir', 'object', 'classmethod', 'staticmethod',
+    'classmethod',
+    'dict',
+    'dir',
+    'hasattr',
+    'isinstance',
+    'issubclass',
+    'iter',
+    'next',
+    'object',
+    'repr',
+    'reversed',
+    'staticmethod',
+    'super',
+    'type',
+    'zip',
 )
 BUILTIN_EXCEPTION_TYPES = (
     AssertionError,
@@ -71,6 +85,16 @@ CODE_ATTRS = [
     'co_varnames',
 ]
 BUILTIN_VALUE_TYPES_TUP = tuple(BUILTIN_VALUE_TYPES)
+
+
+def _egetitem(x, y):
+    log('ir:getitem', f'x: {x} y: {y}')
+    if isinstance(x, dict):
+        if y not in x:
+            return ExceptionData(None, None, KeyError(y))
+    return operator.getitem(x, y)
+
+
 _BINARY_OPS = {
     'BINARY_LSHIFT': operator.lshift,
     'BINARY_RSHIFT': operator.rshift,
@@ -78,7 +102,7 @@ _BINARY_OPS = {
     'BINARY_MODULO': operator.mod,
     'BINARY_MULTIPLY': operator.mul,
     'BINARY_SUBTRACT': operator.sub,
-    'BINARY_SUBSCR': operator.getitem,
+    'BINARY_SUBSCR': _egetitem,
     'BINARY_TRUE_DIVIDE': operator.truediv,
     'BINARY_FLOOR_DIVIDE': operator.floordiv,
 }
@@ -89,6 +113,7 @@ def run_binop(opname: Text, lhs: Any, rhs: Any, ictx: ICtx) -> Result[Any]:
     if (opname in ('BINARY_TRUE_DIVIDE', 'BINARY_MODULO') and type(rhs) is int
             and rhs == 0):
         raise NotImplementedError(opname, lhs, rhs)
+
     if {type(lhs), type(rhs)} <= BUILTIN_VALUE_TYPES or (
             type(lhs) in (list, dict, types.MappingProxyType)
             and opname == 'BINARY_SUBSCR') or (

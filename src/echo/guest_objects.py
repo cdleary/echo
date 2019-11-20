@@ -11,15 +11,13 @@ from typing import (
 from enum import Enum
 import weakref
 
+from echo.elog import log
 from echo.interpreter_state import InterpreterState
 from echo.interp_context import ICtx
 from echo.code_attributes import CodeAttributes
 from echo.interp_result import Result, ExceptionData, check_result
 from echo.value import Value
 from echo.common import memoize
-
-
-DEBUG_PRINT_BYTECODE = bool(os.getenv('DEBUG_PRINT_BYTECODE', False))
 
 
 class ReturnKind(Enum):
@@ -322,16 +320,12 @@ class GuestInstance(GuestPyObject):
     def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
         cls_attr = self._search_mro_for(name, ictx)
 
-        if DEBUG_PRINT_BYTECODE:
-            print('[go:gi:ga] self:', self, 'name:', name, 'cls_attr:',
-                  cls_attr, file=sys.stderr)
+        log('gi:ga', f'self: {self} name: {name} cls_attr: {cls_attr}')
 
         if (isinstance(cls_attr, GuestInstance)
                 and cls_attr.hasattr('__get__')
                 and cls_attr.hasattr('__set__')):
-            if DEBUG_PRINT_BYTECODE:
-                print('[go:gi:ga] overriding descriptor:', cls_attr,
-                      file=sys.stderr)
+            log('gi:ga', f'overriding descriptor: {cls_attr}')
             # Overriding descriptor.
             return _invoke_desc(self, cls_attr, ictx)
 
@@ -344,9 +338,7 @@ class GuestInstance(GuestPyObject):
                 return Result(self.dict_)
 
         if isinstance(cls_attr, GuestPyObject) and cls_attr.hasattr('__get__'):
-            if DEBUG_PRINT_BYTECODE:
-                print('[go:gi:ga] non-overriding descriptor:', cls_attr,
-                      file=sys.stderr)
+            log('gi:ga', f'non-overriding descriptor: {cls_attr}')
             return _invoke_desc(self, cls_attr, ictx)
 
         if cls_attr is not None:
@@ -378,9 +370,10 @@ GuestClassOrBuiltin = Union['GuestClass', 'GuestBuiltin']
 
 
 def get_bases(c: GuestClassOrBuiltin) -> Tuple[GuestPyObject, ...]:
+    assert isinstance(c, (GuestClass, GuestBuiltin)), c
     if isinstance(c, GuestClass):
         return c.bases
-    if _is_type_builtin(c):
+    if _is_type_builtin(c) or _is_dict_builtin(c):
         return (get_guest_builtin('object'),)
     if _is_object_builtin(c):
         return ()
@@ -410,7 +403,10 @@ class GuestClass(GuestPyObject):
         self.subclasses.add(derived)
 
     def __repr__(self) -> Text:
-        return '<eclass \'{}.{}\'>'.format(self.dict_['__module__'], self.name)
+        if '__module__' in self.dict_:
+            return '<eclass \'{}.{}\'>'.format(
+                self.dict_['__module__'], self.name)
+        return '<eclass \'{}\">'.format(self.name)
 
     def get_type(self) -> 'GuestClass':
         return self.metaclass or get_guest_builtin('type')
@@ -445,7 +441,10 @@ class GuestClass(GuestPyObject):
                 if is_ready(b):
                     ready.appendleft(b)
 
-        order.append(get_guest_builtin('object'))
+        eobject = get_guest_builtin('object')
+
+        if eobject not in order:
+            order.append(eobject)
         return tuple(order)
 
     def is_subtype_of(self, other: 'GuestClass') -> bool:
@@ -463,14 +462,11 @@ class GuestClass(GuestPyObject):
                     kwargs: Dict[Text, Any],
                     globals_: Dict[Text, Any],
                     ictx: ICtx) -> Result[GuestInstance]:
-        if DEBUG_PRINT_BYTECODE:
-            print(f'[go:gc] instantiate args: {args} kwargs: {kwargs}',
-                  file=sys.stderr)
+        log('go:gc', f'instantiate self: {self} args: {args} kwargs: {kwargs}')
         guest_instance = None
         if self.hasattr('__new__'):
             new_f = self.getattr('__new__', ictx).get_value()
-            if DEBUG_PRINT_BYTECODE:
-                print(f'[go:gc:new] new_f {new_f}', file=sys.stderr)
+            log('gc:new', f'new_f {new_f}')
             result = ictx.call(new_f, (self,) + args, kwargs, locals_dict={},
                                globals_=globals_)
             if result.is_exception():
@@ -526,9 +522,7 @@ class GuestClass(GuestPyObject):
             return Result(self.bases)
         if name == '__subclasses__':
             return Result(get_guest_builtin('type.__subclasses__'))
-        if DEBUG_PRINT_BYTECODE:
-            print('[go:ga] bases:', self.bases, 'metaclass:',
-                  self.metaclass, file=sys.stderr)
+        log('ga', f'bases: {self.bases} metaclass: {self.metaclass}')
 
         for base in self.bases:
             if _do_hasattr((base, name)).get_value():
@@ -599,6 +593,10 @@ def _is_type_builtin(x) -> bool:
     return isinstance(x, GuestBuiltin) and x.name == 'type'
 
 
+def _is_dict_builtin(x) -> bool:
+    return isinstance(x, GuestBuiltin) and x.name == 'dict'
+
+
 def _is_object_builtin(x) -> bool:
     return isinstance(x, GuestBuiltin) and x.name == 'object'
 
@@ -642,6 +640,9 @@ def _do_isinstance(
     if _is_str_builtin(args[1]):
         return Result(isinstance(args[0], str))
 
+    if _is_dict_builtin(args[1]):
+        return Result(isinstance(args[0], dict))
+
     if args[0] is None:
         return Result(args[1] is type(None))  # noqa
 
@@ -662,9 +663,8 @@ def _do_issubclass(
         args: Tuple[Any, ...],
         ictx: ICtx) -> Result[bool]:
     assert len(args) == 2, args
-    if DEBUG_PRINT_BYTECODE:
-        print('[go:issubclass] arg0:', args[0], file=sys.stderr)
-        print('[go:issubclass] arg1:', args[1], file=sys.stderr)
+    log('go:issubclass', 'arg0: {args[0]}')
+    log('go:issubclass', 'arg1: {args[1]}')
 
     if (isinstance(args[1], GuestPyObject) and
             args[1].hasattr('__subclasscheck__')):
@@ -676,6 +676,9 @@ def _do_issubclass(
                            globals_=scc.globals_)
         return result
 
+    if isinstance(args[0], GuestClass) and isinstance(args[1], GuestBuiltin):
+        return Result(args[0].is_subtype_of(args[1]))
+
     if isinstance(args[0], GuestClass) and isinstance(args[1], GuestClass):
         return Result(args[0].is_subtype_of(args[1]))
 
@@ -684,6 +687,7 @@ def _do_issubclass(
 
     if _is_object_builtin(args[0]) and _is_type_builtin(args[1]):
         return Result(False)
+
     if _is_object_builtin(args[1]):
         return Result(True)
 
@@ -691,7 +695,7 @@ def _do_issubclass(
         return Result(False)
 
     if not isinstance(args[1], type):
-        raise NotImplementedError(args)
+        raise NotImplementedError('args[1] is not a type:', args)
 
     if isinstance(args[0], GuestClass):
         return Result(args[1] in args[0].get_mro())
@@ -746,6 +750,7 @@ def do_getitem(args: Tuple[Any, ...], ictx: ICtx) -> Result[Any]:
 @check_result
 def do_setitem(args: Tuple[Any, ...], ictx: ICtx) -> Result[None]:
     assert len(args) == 3, args
+    log('go:do_setitem()', f'args: {args}')
     o, name, value = args
     if not isinstance(o, GuestPyObject):
         o[name] = value
@@ -765,12 +770,14 @@ def _do_repr(args: Tuple[Any, ...], ictx: ICtx) -> Result[Any]:
     o = args[0]
     if not isinstance(o, GuestPyObject):
         return Result(repr(o))
-    frepr = o.getattr('__repr__')
+    frepr = o.getattr('__repr__', ictx)
     if frepr.is_exception():
         return frepr
     frepr = frepr.get_value()
+    log('go:do_repr()', f'o: {o} frepr: {frepr}')
     globals_ = frepr.globals_
-    return ictx.call(frepr, args=(), globals_=globals_)
+    return ictx.call(frepr, args=(), kwargs={}, locals_dict={},
+                     globals_=globals_)
 
 
 @check_result
@@ -816,15 +823,43 @@ def _do_type_new(
 def _do_dict_new(
         args: Tuple[Any, ...],
         kwargs: Dict[Text, Any],
-        ictx: ICtx) -> Result[GuestClass]:
-    return Result({})
+        ictx: ICtx) -> Result[Any]:
+    assert len(args) == 1 and not kwargs, (args, kwargs)
+    if isinstance(args[0], GuestClass):
+        return Result(GuestInstance(args[0]))
+    if _is_dict_builtin(args[0]):
+        return Result({})
+    raise NotImplementedError(args, kwargs)
+
+
+@check_result
+def _do_dict_call(
+        args: Tuple[Any, ...],
+        kwargs: Dict[Text, Any],
+        ictx: ICtx) -> Result[Any]:
+    d = dict(*args, **kwargs)
+    log('go:dict()', f'dict(*{args}, **{kwargs}) => {d}')
+    return Result(d)
+
+
+@check_result
+def _do_dict_update(
+        args: Tuple[Any, ...],
+        kwargs: Dict[Text, Any],
+        ictx: ICtx) -> Result[None]:
+    assert isinstance(args[0], dict), args
+    log('go:dict.update',
+        f'd: {args[0]} args[1:]: {args[1:]}, kwargs: {kwargs}')
+    args[0].update(*args[1:], **kwargs)
+    log('go:dict.update', f'd after: {args[0]}')
+    return Result(None)
 
 
 @check_result
 def _do_dict_instancecheck(
         args: Tuple[Any, ...],
         kwargs: Dict[Text, Any],
-        ictx: ICtx) -> Result[GuestClass]:
+        ictx: ICtx) -> Result[Any]:
     if isinstance(args[0], dict):
         return Result(True)
     if isinstance(args[0], GuestInstance):
@@ -867,6 +902,15 @@ def _do_object_new(
         kwargs: Dict[Text, Any],
         ictx: ICtx) -> Result[Any]:
     raise NotImplementedError(args, kwargs)
+
+
+@check_result
+def _do_object_repr(
+        args: Tuple[Any, ...],
+        kwargs: Dict[Text, Any],
+        ictx: ICtx) -> Result[Any]:
+    assert len(args) == 1 and not kwargs, (args, kwargs)
+    raise NotImplementedError(args[0])
 
 
 @check_result
@@ -924,9 +968,8 @@ def _do_dir(args: Tuple[Any, ...],
 
 
 def _do_type(args: Tuple[Any, ...]) -> Result[Any]:
+    log('go:type()', f'args: {args}')
     if len(args) == 1:
-        if DEBUG_PRINT_BYTECODE:
-            print('[go:type]', args, file=sys.stderr)
         if isinstance(args[0], (GuestInstance, GuestSuper)):
             return Result(args[0].get_type())
         if isinstance(args[0], GuestClass):
@@ -964,8 +1007,7 @@ def _do___build_class__(
         args: Tuple[Any, ...],
         kwargs: Dict[Text, Any],
         ictx: ICtx) -> Result[GuestClass]:
-    if DEBUG_PRINT_BYTECODE:
-        print('[go:bc]', args)
+    log('go:build_class', f'args: {args}')
     func, name, *bases = args
     bases = tuple(bases)
     metaclass = kwargs.pop('metaclass', None) if kwargs else None
@@ -979,20 +1021,24 @@ def _do___build_class__(
         if ns.is_exception():
             return Result(ns.get_exception())
         ns = ns.get_value()
-        print('ns is', ns)
+        log('bc',
+            f'prepared ns via metaclass {metaclass} prep_f {prep_f}: {ns}')
     else:
         ns = {}  # Namespace for the class.
+
+    res = do_setitem((ns, '__module__', func.globals_['__name__']), ictx)
+    if res.is_exception():
+        return res
+
     class_eval_result = ictx.call(
         func, (), {}, locals_dict=ns, globals_=func.globals_)
     if class_eval_result.is_exception():
         return Result(class_eval_result.get_exception())
     cell = class_eval_result.get_value()
     if cell is None:
-        res = do_setitem((ns, '__module__', func.globals_['__name__']), ictx)
-        if res.is_exception():
-            return res
         if metaclass and metaclass.hasattr('__new__'):
             new_f = metaclass.getattr('__new__', ictx).get_value()
+            log('bc', f'invoking metaclass new: {new_f} ns: {ns}')
             return ictx.call(
                 new_f, (metaclass, name, bases, ns), kwargs, {},
                 globals_=new_f.globals_)
@@ -1093,8 +1139,7 @@ def _do_super(args: Tuple[Any, ...],
         assert len(args) == 2, args
         type_, obj_or_type = args
 
-    if DEBUG_PRINT_BYTECODE:
-        print(f'[go:super] type_: {type_} obj: {obj_or_type}', file=sys.stderr)
+    log('super', f'type_: {type_} obj: {obj_or_type}')
 
     def supercheck():
         if isinstance(obj_or_type, GuestClass):
@@ -1169,8 +1214,6 @@ class GuestBuiltin(GuestPyObject):
         if self.name == 'dict.items':
             assert not args, args
             return Result(self.bound_self.items())
-        if self.name == 'dict.update':
-            return Result(self.bound_self.update(args[0]))
         if self.name == 'str.format':
             return Result(self.bound_self.format(*args))
         if self.name == 'str.join':
@@ -1196,10 +1239,18 @@ class GuestBuiltin(GuestPyObject):
         if self.name == 'issubclass':
             return _do_issubclass(args, ictx)
         if self.name == '__build_class__':
-            return _do___build_class__(
+            r = _do___build_class__(
                 args, kwargs, ictx)
+            log('go:build_class', f'result: {r}')
+            return r
         if self.name == 'type.__new__':
             return _do_type_new(args, kwargs, ictx)
+        if self.name == 'dict':
+            return _do_dict_call(args, kwargs, ictx)
+        if self.name == 'dict.update':
+            if self.bound_self is not None:
+                args = (self.bound_self,) + args
+            return _do_dict_update(args, kwargs, ictx)
         if self.name == 'dict.__new__':
             return _do_dict_new(args, kwargs, ictx)
         if self.name == 'dict.__instancecheck__':
@@ -1210,6 +1261,10 @@ class GuestBuiltin(GuestPyObject):
             return _do_object_subclasshook(args, kwargs, ictx)
         if self.name == 'object.__new__':
             return _do_object_new(args, kwargs, ictx)
+        if self.name == 'object.__repr__':
+            if self.bound_self is not None:
+                args = (self.bound_self,) + args
+            return _do_object_repr(args, kwargs, ictx)
         if self.name == 'object.__eq__':
             return _do_object_eq(args, kwargs, ictx)
         if self.name == 'object.__ne__':
@@ -1240,8 +1295,10 @@ class GuestBuiltin(GuestPyObject):
 
     def hasattr(self, name: Text) -> bool:
         if (self.name in ('object', 'type', 'dict')
-                and name in ('__subclasshook__', '__str__', '__eq__',
-                             '__ne__')):
+                and name in ('__subclasshook__', '__str__', '__repr__',
+                             '__eq__', '__ne__', '__new__', '__name__')):
+            return True
+        if self.name == 'dict' and name in ('update',):
             return True
         return name in self.dict
 
@@ -1253,6 +1310,12 @@ class GuestBuiltin(GuestPyObject):
         if self.name == 'dict':
             if name == '__new__':
                 return Result(get_guest_builtin('dict.__new__'))
+            if name == 'update':
+                return Result(get_guest_builtin('dict.update'))
+            if name == '__dict__':
+                return Result({
+                    'fromkeys': get_guest_builtin('dict.fromkeys'),
+                })
         if self.name == 'object':
             if name == '__new__':
                 return Result(get_guest_builtin('object.__new__'))
@@ -1260,11 +1323,15 @@ class GuestBuiltin(GuestPyObject):
                 return Result(get_guest_builtin('object.__init__'))
             if name == '__str__':
                 return Result(get_guest_builtin('object.__str__'))
+            if name == '__repr__':
+                return Result(get_guest_builtin('object.__repr__'))
             if name == '__bases__':
                 return Result(())
         if self.name == 'type':
             if name == '__new__':
                 return Result(get_guest_builtin('type.__new__'))
+            if name == '__name__':
+                return Result(get_guest_builtin('type.__name__'))
             if name == '__subclasshook__':
                 return Result(get_guest_builtin('object.__subclasshook__'))
             if name == '__subclasses__':

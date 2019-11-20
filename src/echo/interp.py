@@ -19,6 +19,7 @@ from typing import (
 )
 
 from echo.common import dis_to_str, get_code
+from echo.elog import log, ECHO_DEBUG
 from echo.interp_result import Result, ExceptionData, check_result
 from echo.interp_context import ICtx
 from echo import import_routines
@@ -34,9 +35,6 @@ from echo.guest_objects import (
 from echo import interp_routines
 from echo.frame_objects import StatefulFrame, UnboundLocalSentinel
 from echo.value import Value
-
-
-DEBUG_PRINT_BYTECODE = bool(os.getenv('DEBUG_PRINT_BYTECODE', False))
 
 
 @check_result
@@ -74,8 +72,7 @@ def interp(code: types.CodeType,
     TODO(cdleary): 2019-01-21 Use dis.stack_effect to cross-check stack depth
         change.
     """
-    if DEBUG_PRINT_BYTECODE:
-        print('[interp] kwargs:', kwargs)
+    log('interp', f'args: {args} kwargs: {kwargs}')
 
     closure = closure or ()
 
@@ -109,9 +106,10 @@ def interp(code: types.CodeType,
             local_value = locals_[index]
             cellvars[i].set(local_value)
 
-    if DEBUG_PRINT_BYTECODE:
-        print(dis.code_info(code), file=sys.stderr)
-        dis.dis(code, file=sys.stderr)
+    if ECHO_DEBUG:
+        log('interp:ci', dis.code_info(code))
+        # TODO(cdleary): 2019-11-20 Re-enable this in a logging channel.
+        # dis.dis(code, file=sys.stderr)
 
     instructions = tuple(dis.get_instructions(code))
     pc_to_instruction = [None] * (instructions[-1].offset+1)
@@ -180,8 +178,7 @@ def _do_call_getattr(
         ictx: ICtx,
         ) -> Result[Any]:
     assert len(args) in (2, 3), args
-    if DEBUG_PRINT_BYTECODE:
-        print(f'[interp:dcga] args: {args} kwargs: {kwargs}', file=sys.stderr)
+    log('interp:dcga', f'args: {args} kwargs: {kwargs}')
 
     if not isinstance(args[0], GuestPyObject):
         return Result(getattr(*args))
@@ -208,8 +205,7 @@ def do_call(f,
                 Callable[[], Optional[ExceptionData]]] = None,
             in_function: bool = True
             ) -> Result[Any]:
-    if DEBUG_PRINT_BYTECODE:
-        print('[interp:do_call] f:', f, 'kwargs:', kwargs)
+    log('interp:do_call', f'f: {f} kwargs: {kwargs}')
 
     assert in_function
 

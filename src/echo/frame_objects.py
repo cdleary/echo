@@ -10,6 +10,7 @@ from typing import (
 )
 from enum import Enum
 
+from echo.elog import log
 from echo.interp_context import ICtx
 from echo import import_routines
 from echo.guest_objects import (
@@ -25,7 +26,6 @@ from echo import bytecode_trace
 from echo.value import Value
 
 
-DEBUG_PRINT_BYTECODE = bool(os.getenv('DEBUG_PRINT_BYTECODE', False))
 DEBUG_PRINT_BYTECODE_LINE = bool(os.getenv('DEBUG_PRINT_BYTECODE_LINE', False))
 GUEST_BUILTINS = {
     list: {'append', 'remove', 'insert'},
@@ -170,6 +170,7 @@ class StatefulFrame:
         assert x is not isinstance
         assert not isinstance(x, Value), x
         assert x is not GuestCoroutine
+        log('fo:push()', repr(x))
         self.stack.append(x)
 
     def _push_value(self, x: Value) -> None:
@@ -443,8 +444,7 @@ class StatefulFrame:
         kwargs = dict(zip(kwarg_stack[::2], kwarg_stack[1::2]))
         args = self._pop_n(argc, tos_is_0=False)
         f = self._pop()
-        if DEBUG_PRINT_BYTECODE:
-            print('[fo:cf] f:', f, 'args:', args, file=sys.stderr)
+        log('fo:cf', f'f: {f} args: {args}')
         result = self.do_call_callback(
             f, args, kwargs, locals_dict=self.locals_dict,
             globals_=self.globals_, get_exception_data=self.get_exception_data)
@@ -467,9 +467,7 @@ class StatefulFrame:
     def _run_STORE_ATTR(self, arg, argval):
         obj = self._pop()
         value = self._pop()
-        if DEBUG_PRINT_BYTECODE:
-            print('[bc:sa] obj {!r} attr {!r} val {!r}'.format(
-                obj, argval, value), file=sys.stderr)
+        log('bc:sa', f'obj {obj!r} attr {argval!r} val {value!r}')
         if isinstance(obj, GuestPyObject):
             res = obj.setattr(argval, value, ictx=self.ictx)
             if res.is_exception():
@@ -541,8 +539,7 @@ class StatefulFrame:
 
     def _run_LOAD_ATTR(self, arg, argval):
         obj = self._pop()
-        if DEBUG_PRINT_BYTECODE:
-            print('[bc:la] obj', repr(obj), 'attr', argval, file=sys.stderr)
+        log('bc:la', f'obj {obj!r} attr {argval}')
         for type_, methods in GUEST_BUILTINS.items():
             if isinstance(obj, type_) and argval in methods:
                 return Result(GuestBuiltin(
@@ -635,10 +632,11 @@ class StatefulFrame:
             BlockKind.SETUP_EXCEPT, arg+self.pc+self.pc_to_bc_width[self.pc],
             len(self.stack)))
 
-    def _run_STORE_SUBSCR(self, arg, argval):
+    def _run_STORE_SUBSCR(self, arg, argval) -> None:
         tos = self._pop()
         tos1 = self._pop()
         tos2 = self._pop()
+        log('bc:store_subscr', f'd: {tos1} k: {tos} v: {tos2}')
         operator.setitem(tos1, tos, tos2)
 
     def _run_CALL_FUNCTION_KW(self, arg, argval):
@@ -683,8 +681,7 @@ class StatefulFrame:
         attr_result = self._run_LOAD_ATTR(arg, argval)
         if attr_result.is_exception():
             return attr_result
-        if DEBUG_PRINT_BYTECODE:
-            print('[bc:lm] LOAD_ATTR ', attr_result, file=sys.stderr)
+        log('bc:lm', f'LOAD_ATTR {attr_result}')
         self._push(attr_result.get_value())
         if (desc_count_before == self.ictx.desc_count
                 and interp_routines.method_requires_self(
@@ -703,10 +700,9 @@ class StatefulFrame:
         method = self._pop()
         if self_value is not UnboundLocalSentinel:
             args = (self_value,) + args
-        if DEBUG_PRINT_BYTECODE:
-            print(f'[bc:cm] method: {method}', file=sys.stderr)
-            print(f'[bc:cm] args: {args}', file=sys.stderr)
-            print(f'[bc:cm] self_value: {self_value}', file=sys.stderr)
+        log('bc:cm', f'method: {method}')
+        log('bc:cm', f'args: {args}')
+        log('bc:cm', f'self_value: {self_value}')
         return self.do_call_callback(
             method, args, {}, self.locals_dict,
             globals_=self.globals_,
@@ -757,19 +753,18 @@ class StatefulFrame:
         instruction = self.pc_to_instruction[self.pc]
         assert instruction is not None
 
-        if DEBUG_PRINT_BYTECODE_LINE and instruction.starts_line:
-            print('[bc:line]', self.code.co_filename, instruction.starts_line)
+        if instruction.starts_line:
+            log('bc:line',
+                f'{self.code.co_filename}:{instruction.starts_line}')
 
-        if DEBUG_PRINT_BYTECODE:
-            print('[bc]', instruction, file=sys.stderr)
+        log('bc', instruction)
 
         if instruction.starts_line is not None:
             self.line = instruction.starts_line
 
         if instruction.opname == 'RETURN_VALUE':
             v = self._pop_value()
-            if DEBUG_PRINT_BYTECODE:
-                print('[bc:rv]', v, file=sys.stderr)
+            log('bc:rv', repr(v))
             return Result((v, ReturnKind.RETURN))
 
         if instruction.opname == 'YIELD_VALUE':

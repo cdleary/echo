@@ -78,7 +78,6 @@ def main():
         cprint(str(result), color='red', file=sys.stderr)
         error = True
     else:
-        print(result, file=sys.stderr)
         error = False
 
     sys.exit(-1 if error else 0)
