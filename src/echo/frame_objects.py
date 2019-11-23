@@ -15,9 +15,10 @@ from echo.interp_context import ICtx
 from echo import import_routines
 from echo.guest_objects import (
     GuestCell, ReturnKind, GuestBuiltin, GuestFunction, GuestPyObject,
-    GuestModule, GuestCoroutine, GuestInstance, get_guest_builtin,
+    GuestCoroutine, GuestInstance, get_guest_builtin,
     do_getitem, do_setitem,
 )
+from echo.guest_module import GuestModule
 from echo.code_attributes import CodeAttributes
 from echo.interpreter_state import InterpreterState
 from echo.interp_result import Result, ExceptionData

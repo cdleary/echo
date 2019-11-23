@@ -11,6 +11,7 @@ from typing import (
 from enum import Enum
 import weakref
 
+from echo.guest_py_object import GuestPyObject
 from echo.elog import log
 from echo.interpreter_state import InterpreterState
 from echo.interp_context import ICtx
@@ -23,53 +24,6 @@ from echo.common import memoize
 class ReturnKind(Enum):
     RETURN = 'return'
     YIELD = 'yield'
-
-
-class GuestPyObject(metaclass=abc.ABCMeta):
-
-    @abc.abstractmethod
-    def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
-        raise NotImplementedError(self, name)
-
-    @abc.abstractmethod
-    def setattr(self, name: Text, value: Any) -> Any:
-        raise NotImplementedError(self, name, value)
-
-    def hasattr(self, name: Text) -> bool:
-        raise NotImplementedError(self, name)
-
-    # @abc.abstractmethod
-    def delattr(self, name: Text, value: Any) -> Any:
-        raise NotImplementedError(self, name, value)
-
-
-class GuestModule(GuestPyObject):
-    def __init__(self, fully_qualified_name: Text, *, filename: Text,
-                 globals_: Dict[Text, Any]):
-        self.fully_qualified_name = fully_qualified_name
-        self.filename = filename
-        self.globals_ = globals_
-
-    def __repr__(self):
-        return ('GuestModule(fully_qualified_name={!r}, '
-                'filename={!r}, ...)'.format(
-                    self.fully_qualified_name, self.filename))
-
-    def keys(self) -> Iterable[Text]:
-        return self.globals_.keys()
-
-    def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
-        if name == '__dict__':
-            return Result(self.globals_)
-        try:
-            return Result(self.globals_[name])
-        except KeyError:
-            return Result(ExceptionData(None, name, AttributeError))
-
-    def setattr(self, name: Text, value: Any, ictx: ICtx) -> Result[None]:
-        assert not isinstance(value, Result), value
-        self.globals_[name] = value
-        return Result(None)
 
 
 class GuestFunction(GuestPyObject):

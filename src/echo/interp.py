@@ -27,11 +27,12 @@ from echo.arg_resolver import resolve_args
 from echo import code_attributes
 from echo.interpreter_state import InterpreterState
 from echo.guest_objects import (
-    GuestModule, GuestFunction, GuestInstance, GuestBuiltin, GuestPyObject,
+    GuestFunction, GuestInstance, GuestBuiltin, GuestPyObject,
     GuestPartial, GuestClass, GuestCell, GuestMethod, GuestGenerator,
     GuestAsyncGenerator, ReturnKind, GuestTraceback, GuestProperty,
     GuestClassMethod, NativeFunction
 )
+from echo.guest_module import GuestModule
 from echo import interp_routines
 from echo.frame_objects import StatefulFrame, UnboundLocalSentinel
 from echo.value import Value

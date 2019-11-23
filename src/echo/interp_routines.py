@@ -11,9 +11,10 @@ from echo.interp_context import ICtx
 from echo.interp_result import Result, check_result, ExceptionData
 from echo.interpreter_state import InterpreterState
 from echo.guest_objects import (
-    GuestInstance, GuestBuiltin, GuestModule, GuestFunction, GuestClass,
+    GuestInstance, GuestBuiltin, GuestFunction, GuestClass,
     get_guest_builtin, GuestPyObject, GuestClassMethod, GuestMethod
 )
+from echo.guest_module import GuestModule
 from echo.value import Value
 
 import termcolor
