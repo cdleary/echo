@@ -3,6 +3,7 @@ import imp
 import itertools
 import os
 import pprint
+import subprocess as subp
 import sys
 from typing import Tuple, Any, Text
 
@@ -41,9 +42,7 @@ def test_echo_on_sample(path: Text, vm: Text):
     dirpath = os.path.dirname(fullpath)
 
     if vm == 'cpy':
-        if dirpath not in sys.path:
-            sys.path.append(dirpath)
-        imp.load_source('__main__', path)
+        subp.check_call(['python', path])
         return
 
     if basename.startswith('knownf_'):
