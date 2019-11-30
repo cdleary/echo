@@ -1,5 +1,4 @@
 import functools
-import imp
 import itertools
 import os
 import pprint
