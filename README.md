@@ -70,3 +70,9 @@ command line utility:
 ```
 pytype --config=pytype.cfg --python-version=3.6
 ```
+
+### CPython bytecode tracing
+
+```
+python bin/cpython_tracer.py py_samples/simple_binops.py
+```

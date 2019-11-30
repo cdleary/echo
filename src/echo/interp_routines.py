@@ -11,8 +11,8 @@ from echo.interp_context import ICtx
 from echo.interp_result import Result, check_result, ExceptionData
 from echo.interpreter_state import InterpreterState
 from echo.guest_objects import (
-    GuestInstance, GuestBuiltin, GuestFunction, GuestClass,
-    get_guest_builtin, GuestPyObject, GuestClassMethod, GuestMethod
+    EInstance, GuestBuiltin, EFunction, GuestClass,
+    get_guest_builtin, EPyObject, GuestClassMethod, GuestMethod
 )
 from echo.guest_module import GuestModule
 from echo.value import Value
@@ -124,7 +124,7 @@ def run_binop(opname: Text, lhs: Any, rhs: Any, ictx: ICtx) -> Result[Any]:
         op = _BINARY_OPS[opname]
         return Result(op(lhs, rhs))
 
-    if opname in OPNAME_TO_SPECIAL and isinstance(lhs, GuestInstance):
+    if opname in OPNAME_TO_SPECIAL and isinstance(lhs, EInstance):
         special_f = lhs.getattr(OPNAME_TO_SPECIAL[opname], ictx)
         if special_f.is_exception():
             raise NotImplementedError(special_f)
@@ -204,7 +204,7 @@ def compare(opname: Text, lhs, rhs, ictx: ICtx) -> Result[bool]:
         op = COMPARE_OPS[opname]
         return Result(op(lhs, rhs))
 
-    if opname in COMPARE_TO_SPECIAL and isinstance(lhs, GuestInstance):
+    if opname in COMPARE_TO_SPECIAL and isinstance(lhs, EInstance):
         special_f = lhs.getattr(COMPARE_TO_SPECIAL[opname], ictx)
         if special_f.is_exception():
             return Result(special_f.get_exception())
@@ -228,12 +228,12 @@ def compare(opname: Text, lhs, rhs, ictx: ICtx) -> Result[bool]:
             and isinstance(lhs, GuestClass)):
         return Result(False)
 
-    if (not isinstance(lhs, GuestPyObject)
-            and not isinstance(rhs, GuestPyObject)):
+    if (not isinstance(lhs, EPyObject)
+            and not isinstance(rhs, EPyObject)):
         return Result(COMPARE_OPS[opname](lhs, rhs))
 
     if (opname == '!=' and isinstance(lhs, GuestMethod)
-            and not isinstance(rhs, GuestPyObject)):
+            and not isinstance(rhs, EPyObject)):
         return Result(True)
 
     raise NotImplementedError(opname, lhs, rhs, type(rhs))
@@ -265,10 +265,10 @@ def method_requires_self(obj: Any, name: Text, value: Any) -> bool:
         return not obj_is_module
     if isinstance(value, types.MethodType):
         return False
-    if isinstance(value, GuestFunction):
+    if isinstance(value, EFunction):
         if isinstance(obj, GuestClass):
             return _name_is_from_metaclass(obj, name)
-        if isinstance(obj, GuestInstance):
+        if isinstance(obj, EInstance):
             return value not in obj.dict_.values()
         return not obj_is_module
     return False

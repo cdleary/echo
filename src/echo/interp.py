@@ -27,8 +27,8 @@ from echo.arg_resolver import resolve_args
 from echo import code_attributes
 from echo.interpreter_state import InterpreterState
 from echo.guest_objects import (
-    GuestFunction, GuestInstance, GuestBuiltin, GuestPyObject,
-    GuestPartial, GuestClass, GuestCell, GuestMethod, GuestGenerator,
+    EFunction, GuestBuiltin, EPyObject,
+    GuestPartial, GuestClass, ECell, GuestMethod, GuestGenerator,
     GuestAsyncGenerator, ReturnKind, GuestTraceback, GuestProperty,
     GuestClassMethod, NativeFunction
 )
@@ -49,7 +49,7 @@ def interp(code: types.CodeType,
            kwargs: Optional[Dict[Text, Any]] = None,
            defaults: Optional[Tuple[Any, ...]] = None,
            kwarg_defaults: Optional[Dict[Text, Any]] = None,
-           closure: Optional[Tuple[GuestCell, ...]] = None,
+           closure: Optional[Tuple[ECell, ...]] = None,
            in_function: bool = True) -> Result[Any]:
     """Evaluates "code" using "globals_" after initializing locals with "args".
 
@@ -93,7 +93,7 @@ def interp(code: types.CodeType,
     arg_locals, additional_local_count = arg_result.get_value()
 
     locals_ = (arg_locals + [UnboundLocalSentinel] * additional_local_count)
-    cellvars = tuple(GuestCell(name) for name in code.co_cellvars) + closure
+    cellvars = tuple(ECell(name) for name in code.co_cellvars) + closure
 
     # Cellvars that match argument names get populated with the argument value,
     # and it seems as though locals_ for that value is never referenced in the
@@ -181,7 +181,7 @@ def _do_call_getattr(
     assert len(args) in (2, 3), args
     log('interp:dcga', f'args: {args} kwargs: {kwargs}')
 
-    if not isinstance(args[0], GuestPyObject):
+    if not isinstance(args[0], EPyObject):
         return Result(getattr(*args))
 
     if not args[0].hasattr(args[1]):
@@ -226,7 +226,7 @@ def do_call(f,
         return Result((exc, p, t))
     if f is globals:
         return Result(globals_)
-    elif isinstance(f, (GuestFunction, GuestMethod, GuestClassMethod,
+    elif isinstance(f, (EFunction, GuestMethod, GuestClassMethod,
                         NativeFunction)):
         return f.invoke(args, kwargs, locals_dict, ictx)
     elif isinstance(f, (types.MethodType, types.FunctionType)):
@@ -253,7 +253,7 @@ def do_call(f,
     elif callable(f):
         return Result(f(*args, **kwargs))
     else:
-        if isinstance(f, GuestPyObject):
+        if isinstance(f, EPyObject):
             type_name = f.get_type().name
         else:
             type_name = type(f).__name__

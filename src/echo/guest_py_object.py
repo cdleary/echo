@@ -5,7 +5,7 @@ from echo.interp_context import ICtx
 from echo.interp_result import Result
 
 
-class GuestPyObject(metaclass=abc.ABCMeta):
+class EPyObject(metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:

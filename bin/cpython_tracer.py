@@ -9,7 +9,7 @@ from typing import Any, cast
 
 from termcolor import cprint
 
-import bytecode_trace
+from echo import bytecode_trace
 
 
 TRACE_DUMPER = bytecode_trace.FakeTraceDumper()
@@ -166,7 +166,7 @@ class CtypeFrame:
                 print('  TOS%d: <null>' % i, file=sys.stderr)
             else:
                 obj = self._id2obj(stack_value)
-                print('  TOS%d: %r ::' % (i, type(obj)), repr(obj),
+                print('  TOS%d: %r ::' % (i, type(obj)), repr(obj), '::', id(obj),
                       file=sys.stderr)
                 if isinstance(obj, types.CodeType):
                     print('    co_varnames: {!r}'.format(obj.co_varnames))

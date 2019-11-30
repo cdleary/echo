@@ -14,9 +14,9 @@ from echo.elog import log
 from echo.interp_context import ICtx
 from echo import import_routines
 from echo.guest_objects import (
-    GuestCell, ReturnKind, GuestBuiltin, GuestFunction, GuestPyObject,
-    GuestCoroutine, GuestInstance, get_guest_builtin,
-    do_getitem, do_setitem,
+    ECell, ReturnKind, GuestBuiltin, EFunction, EPyObject,
+    GuestCoroutine, EInstance, get_guest_builtin,
+    do_getitem, do_setitem, do_type,
 )
 from echo.guest_module import GuestModule
 from echo.code_attributes import CodeAttributes
@@ -27,6 +27,7 @@ from echo import bytecode_trace
 from echo.value import Value
 
 
+ECHO_TRACE = bool(os.getenv('ECHO_TRACE', False))
 DEBUG_PRINT_BYTECODE_LINE = bool(os.getenv('DEBUG_PRINT_BYTECODE_LINE', False))
 GUEST_BUILTINS = {
     list: {'append', 'remove', 'insert'},
@@ -99,7 +100,7 @@ class StatefulFrame:
                  locals_: List[Any],
                  locals_dict: Dict[Text, Any],
                  globals_: Dict[Text, Any],
-                 cellvars: Tuple[GuestCell, ...],
+                 cellvars: Tuple[ECell, ...],
                  in_function: bool,
                  ictx: ICtx):
         self.code = code
@@ -225,7 +226,7 @@ class StatefulFrame:
         tos1 = self._pop()
         if isinstance(tos1, dict):
             del tos1[tos]
-        elif isinstance(tos1, GuestPyObject):
+        elif isinstance(tos1, EPyObject):
             tos1.delattr(tos)
         else:
             raise NotImplementedError(tos, tos1)
@@ -425,9 +426,10 @@ class StatefulFrame:
             positional_defaults = self._pop_n(default_argc, tos_is_0=False)
             freevar_cells = None
 
-        f = GuestFunction(code, self.globals_, qualified_name,
-                          defaults=positional_defaults,
-                          kwarg_defaults=kwarg_defaults, closure=freevar_cells)
+        f = EFunction(code, self.globals_, qualified_name,
+                      defaults=positional_defaults,
+                      kwarg_defaults=kwarg_defaults,
+                      closure=freevar_cells)
         return Result(f)
 
     def _run_CALL_FUNCTION(self, arg, argval):
@@ -469,7 +471,7 @@ class StatefulFrame:
         obj = self._pop()
         value = self._pop()
         log('bc:sa', f'obj {obj!r} attr {argval!r} val {value!r}')
-        if isinstance(obj, GuestPyObject):
+        if isinstance(obj, EPyObject):
             res = obj.setattr(argval, value, ictx=self.ictx)
             if res.is_exception():
                 return res
@@ -489,8 +491,8 @@ class StatefulFrame:
         code = self._pop()
         freevar_cells = self._pop()
         defaults = self._pop_n(arg)
-        f = GuestFunction(code, self.globals_, name, defaults=defaults,
-                          closure=freevar_cells)
+        f = EFunction(code, self.globals_, name, defaults=defaults,
+                      closure=freevar_cells)
         return Result(f)
 
     def _run_LOAD_FAST(self, arg, argval):
@@ -548,9 +550,9 @@ class StatefulFrame:
         if (isinstance(obj, GuestBuiltin) and obj.name == 'type'
                 and argval == '__dict__'):
             return Result(type.__dict__)
-        elif isinstance(obj, GuestInstance):
+        elif isinstance(obj, EInstance):
             return obj.getattr(argval, self.ictx)
-        elif isinstance(obj, GuestPyObject):
+        elif isinstance(obj, EPyObject):
             return obj.getattr(argval, self.ictx)
         elif obj is sys and argval == 'path':
             return Result(self.interp_state.paths)
@@ -723,7 +725,7 @@ class StatefulFrame:
     def _run_PRINT_EXPR(self, arg, argval):
         value = self._pop()
         if value is not None:
-            if isinstance(value, GuestPyObject):
+            if isinstance(value, EPyObject):
                 r = value.getattr('__repr__', self.ictx)
                 s = self.do_call_callback(
                     r, (), {}, self.locals_dict, globals_=r.globals_,
@@ -753,6 +755,14 @@ class StatefulFrame:
     def _run_one_bytecode(self) -> Optional[Result[Tuple[Value, ReturnKind]]]:
         instruction = self.pc_to_instruction[self.pc]
         assert instruction is not None
+
+        if ECHO_TRACE:
+            print('opcode about to execute...')
+            print(' instruction:', instruction)
+            print(' stack ({}):'.format(len(self.stack)))
+            for i, value in enumerate(reversed(self.stack)):
+                print('  TOS{}: {} :: {} :: {}'.format(
+                      i, do_type((value,)).get_value(), value, id(value)))
 
         if instruction.starts_line:
             log('bc:line',

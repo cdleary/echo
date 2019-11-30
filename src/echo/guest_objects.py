@@ -11,7 +11,7 @@ from typing import (
 from enum import Enum
 import weakref
 
-from echo.guest_py_object import GuestPyObject
+from echo.guest_py_object import EPyObject
 from echo.elog import log
 from echo.interpreter_state import InterpreterState
 from echo.interp_context import ICtx
@@ -26,7 +26,7 @@ class ReturnKind(Enum):
     YIELD = 'yield'
 
 
-class GuestFunction(GuestPyObject):
+class EFunction(EPyObject):
     def __init__(self,
                  code: types.CodeType,
                  globals_: Dict[Text, Any],
@@ -84,7 +84,7 @@ class GuestFunction(GuestPyObject):
 
     def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
         if name == '__class__':
-            return Result(GuestFunctionType.singleton)
+            return Result(EFunctionType.singleton)
         if name == '__get__':
             return Result(GuestMethod(NativeFunction(
                 self._get, 'efunction.__get__'), bound_self=self))
@@ -98,14 +98,14 @@ class GuestFunction(GuestPyObject):
         return Result(None)
 
 
-class GuestCoroutine(GuestPyObject):
-    def __init__(self, f: GuestFunction):
+class GuestCoroutine(EPyObject):
+    def __init__(self, f: EFunction):
         self.f = f
 
     def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
         if name == 'close':
             def fake(x): pass
-            guest_f = GuestFunction(
+            guest_f = EFunction(
                 getattr(fake, '__code__'), {}, 'coroutine.close')
             guest_m = GuestMethod(guest_f, self)
             return Result(guest_m)
@@ -115,7 +115,7 @@ class GuestCoroutine(GuestPyObject):
         raise NotImplementedError
 
 
-class GuestAsyncGenerator(GuestPyObject):
+class GuestAsyncGenerator(EPyObject):
     def __init__(self, f):
         self.f = f
 
@@ -126,7 +126,7 @@ class GuestAsyncGenerator(GuestPyObject):
         raise NotImplementedError
 
 
-class GuestTraceback(GuestPyObject):
+class GuestTraceback(EPyObject):
     def __init__(self, data: Tuple[Text, ...]):
         self.data = data
 
@@ -139,7 +139,7 @@ class GuestTraceback(GuestPyObject):
         raise NotImplementedError
 
 
-class GuestGenerator(GuestPyObject):
+class GuestGenerator(EPyObject):
     def __init__(self, f):
         self.f = f
 
@@ -163,9 +163,9 @@ class GuestGenerator(GuestPyObject):
         return Result(ExceptionData(None, None, StopIteration))
 
 
-class GuestMethod(GuestPyObject):
+class GuestMethod(EPyObject):
 
-    def __init__(self, f: Union[GuestFunction, 'NativeFunction'], bound_self):
+    def __init__(self, f: Union[EFunction, 'NativeFunction'], bound_self):
         self.f = f
         self.bound_self = bound_self
 
@@ -226,7 +226,7 @@ def _invoke_desc(self, cls_attr, ictx: ICtx) -> Result[Any]:
     f = f_result.get_value()
 
     # Determine the type of obj.
-    objtype_result = _do_type(args=(cls_attr,))
+    objtype_result = do_type(args=(cls_attr,))
     if objtype_result.is_exception():
         return Result(objtype_result.get_exception())
     objtype = objtype_result.get_value()
@@ -236,7 +236,7 @@ def _invoke_desc(self, cls_attr, ictx: ICtx) -> Result[Any]:
     return f.invoke((self, objtype), {}, {}, ictx)
 
 
-class GuestInstance(GuestPyObject):
+class EInstance(EPyObject):
 
     def __init__(self, cls: Union['GuestClass', 'GuestBuiltin']):
         assert isinstance(cls, (GuestClass, GuestBuiltin)), cls
@@ -276,7 +276,7 @@ class GuestInstance(GuestPyObject):
 
         log('gi:ga', f'self: {self} name: {name} cls_attr: {cls_attr}')
 
-        if (isinstance(cls_attr, GuestInstance)
+        if (isinstance(cls_attr, EInstance)
                 and cls_attr.hasattr('__get__')
                 and cls_attr.hasattr('__set__')):
             log('gi:ga', f'overriding descriptor: {cls_attr}')
@@ -291,7 +291,7 @@ class GuestInstance(GuestPyObject):
             if name == '__dict__':
                 return Result(self.dict_)
 
-        if isinstance(cls_attr, GuestPyObject) and cls_attr.hasattr('__get__'):
+        if isinstance(cls_attr, EPyObject) and cls_attr.hasattr('__get__'):
             log('gi:ga', f'non-overriding descriptor: {cls_attr}')
             return _invoke_desc(self, cls_attr, ictx)
 
@@ -309,7 +309,7 @@ class GuestInstance(GuestPyObject):
         if name in self.cls.dict_:
             cls_attr = self.cls.dict_[name]
 
-        if (isinstance(cls_attr, GuestInstance)
+        if (isinstance(cls_attr, EInstance)
                 and cls_attr.hasattr('__set__')):
             f_result = cls_attr.getattr('__set__', ictx)
             if f_result.is_exception():
@@ -323,7 +323,7 @@ class GuestInstance(GuestPyObject):
 GuestClassOrBuiltin = Union['GuestClass', 'GuestBuiltin']
 
 
-def get_bases(c: GuestClassOrBuiltin) -> Tuple[GuestPyObject, ...]:
+def get_bases(c: GuestClassOrBuiltin) -> Tuple[EPyObject, ...]:
     assert isinstance(c, (GuestClass, GuestBuiltin)), c
     if isinstance(c, GuestClass):
         return c.bases
@@ -334,7 +334,7 @@ def get_bases(c: GuestClassOrBuiltin) -> Tuple[GuestPyObject, ...]:
     raise NotImplementedError(c)
 
 
-class GuestClass(GuestPyObject):
+class GuestClass(EPyObject):
     bases: Tuple[GuestClassOrBuiltin, ...]
     metaclass: Optional[GuestClassOrBuiltin]
     subclasses: Set['GuestClass']
@@ -365,7 +365,7 @@ class GuestClass(GuestPyObject):
     def get_type(self) -> 'GuestClass':
         return self.metaclass or get_guest_builtin('type')
 
-    def get_mro(self) -> Tuple['GuestPyObject', ...]:
+    def get_mro(self) -> Tuple['EPyObject', ...]:
         """The MRO is a preorder DFS of the 'derives from' relation."""
         derives_from = []  # (cls, base)
         frontier = collections.deque([self])
@@ -415,7 +415,7 @@ class GuestClass(GuestPyObject):
                     args: Tuple[Any, ...],
                     kwargs: Dict[Text, Any],
                     globals_: Dict[Text, Any],
-                    ictx: ICtx) -> Result[GuestInstance]:
+                    ictx: ICtx) -> Result[EInstance]:
         log('go:gc', f'instantiate self: {self} args: {args} kwargs: {kwargs}')
         guest_instance = None
         if self.hasattr('__new__'):
@@ -428,12 +428,12 @@ class GuestClass(GuestPyObject):
             guest_instance = result.get_value()
             if not _do_isinstance((guest_instance, self), ictx).get_value():
                 return Result(guest_instance)
-        guest_instance = guest_instance or GuestInstance(self)
+        guest_instance = guest_instance or EInstance(self)
         if self.hasattr('__init__'):
             init_f = self.getattr('__init__', ictx).get_value()
             # TODO(cdleary, 2019-01-26) What does Python do when you return
             # something non-None from initializer? Ignore?
-            assert isinstance(guest_instance, GuestPyObject), guest_instance
+            assert isinstance(guest_instance, EPyObject), guest_instance
             result = ictx.call(init_f,
                                (guest_instance,) + args,
                                kwargs,
@@ -461,7 +461,7 @@ class GuestClass(GuestPyObject):
 
         if name in self.dict_:
             v = self.dict_[name]
-            if isinstance(v, GuestPyObject) and v.hasattr('__get__'):
+            if isinstance(v, EPyObject) and v.hasattr('__get__'):
                 f_result = v.getattr('__get__', ictx)
                 if f_result.is_exception():
                     return Result(f_result.get_exception())
@@ -495,7 +495,7 @@ class GuestClass(GuestPyObject):
         return Result(None)
 
 
-class GuestFunctionType(GuestPyObject):
+class EFunctionType(EPyObject):
     name = 'efunction'
 
     def hasattr(self, name: Text) -> bool:
@@ -521,10 +521,10 @@ class GuestFunctionType(GuestPyObject):
         raise NotImplementedError
 
 
-GuestFunctionType.singleton = GuestFunctionType()
+EFunctionType.singleton = EFunctionType()
 
 
-class GuestCoroutineType(GuestPyObject):
+class GuestCoroutineType(EPyObject):
 
     def __init__(self):
         self.dict_ = {}
@@ -588,7 +588,7 @@ def _do_isinstance(
     if _is_type_builtin(args[1]):
         if _is_type_builtin(args[0]) or _is_object_builtin(args[0]):
             return Result(True)
-        type_types = (type, GuestClass, GuestFunctionType, GuestCoroutineType)
+        type_types = (type, GuestClass, EFunctionType, GuestCoroutineType)
         return Result(isinstance(args[0], type_types))
 
     if _is_str_builtin(args[1]):
@@ -603,11 +603,11 @@ def _do_isinstance(
     if _is_object_builtin(args[1]):
         return Result(True)  # Everything is an object.
 
-    if (not isinstance(args[0], GuestPyObject)
+    if (not isinstance(args[0], EPyObject)
             and isinstance(args[1], GuestClass)):
         return Result(type(args[0]) in args[1].get_mro())
 
-    if isinstance(args[0], GuestPyObject) and isinstance(args[1], GuestClass):
+    if isinstance(args[0], EPyObject) and isinstance(args[1], GuestClass):
         return Result(args[0].get_type() in args[1].get_mro())
 
     raise NotImplementedError(args)
@@ -620,7 +620,7 @@ def _do_issubclass(
     log('go:issubclass', 'arg0: {args[0]}')
     log('go:issubclass', 'arg1: {args[1]}')
 
-    if (isinstance(args[1], GuestPyObject) and
+    if (isinstance(args[1], EPyObject) and
             args[1].hasattr('__subclasscheck__')):
         scc = args[1].getattr('__subclasscheck__', ictx)
         if scc.is_exception():
@@ -667,7 +667,7 @@ def _do_next(args: Tuple[Any, ...]) -> Result[Any]:
 def _do_hasattr(args: Tuple[Any, ...]) -> Result[Any]:
     assert len(args) == 2, args
     o, attr = args
-    if not isinstance(o, GuestPyObject):
+    if not isinstance(o, EPyObject):
         return Result(hasattr(o, attr))
     assert isinstance(attr, str), attr
     b = o.hasattr(attr)
@@ -679,7 +679,7 @@ def _do_hasattr(args: Tuple[Any, ...]) -> Result[Any]:
 def _do_getattr(args: Tuple[Any, ...], ictx: ICtx) -> Result[Any]:
     assert len(args) == 2, args
     o, attr = args
-    if not isinstance(o, GuestPyObject):
+    if not isinstance(o, EPyObject):
         if o is dict:
             if attr == '__new__':
                 return Result(get_guest_builtin('dict.__new__'))
@@ -693,7 +693,7 @@ def _do_getattr(args: Tuple[Any, ...], ictx: ICtx) -> Result[Any]:
 def do_getitem(args: Tuple[Any, ...], ictx: ICtx) -> Result[Any]:
     assert len(args) == 2, args
     o, name = args
-    if not isinstance(o, GuestPyObject):
+    if not isinstance(o, EPyObject):
         return Result(o[name])
     if o.hasattr('__getitem__'):
         f = o.getattr('__getitem__', ictx).get_value()
@@ -706,7 +706,7 @@ def do_setitem(args: Tuple[Any, ...], ictx: ICtx) -> Result[None]:
     assert len(args) == 3, args
     log('go:do_setitem()', f'args: {args}')
     o, name, value = args
-    if not isinstance(o, GuestPyObject):
+    if not isinstance(o, EPyObject):
         o[name] = value
         return Result(None)
     if o.hasattr('__setitem__'):
@@ -722,7 +722,7 @@ def do_setitem(args: Tuple[Any, ...], ictx: ICtx) -> Result[None]:
 def _do_repr(args: Tuple[Any, ...], ictx: ICtx) -> Result[Any]:
     assert len(args) == 1, args
     o = args[0]
-    if not isinstance(o, GuestPyObject):
+    if not isinstance(o, EPyObject):
         return Result(repr(o))
     frepr = o.getattr('__repr__', ictx)
     if frepr.is_exception():
@@ -738,7 +738,7 @@ def _do_repr(args: Tuple[Any, ...], ictx: ICtx) -> Result[Any]:
 def _do_str(args: Tuple[Any, ...], ictx: ICtx) -> Result[Any]:
     assert len(args) == 1, args
     o = args[0]
-    if not isinstance(o, GuestPyObject):
+    if not isinstance(o, EPyObject):
         return Result(repr(o))
     frepr = o.getattr('__str__')
     if frepr.is_exception():
@@ -751,7 +751,7 @@ def _do_str(args: Tuple[Any, ...], ictx: ICtx) -> Result[Any]:
 @check_result
 def _do_object(args: Tuple[Any, ...]) -> Result[Any]:
     assert len(args) == 0, args
-    return Result(GuestInstance(cls=get_guest_builtin('object')))
+    return Result(EInstance(cls=get_guest_builtin('object')))
 
 
 @check_result
@@ -780,7 +780,7 @@ def _do_dict_new(
         ictx: ICtx) -> Result[Any]:
     assert len(args) == 1 and not kwargs, (args, kwargs)
     if isinstance(args[0], GuestClass):
-        return Result(GuestInstance(args[0]))
+        return Result(EInstance(args[0]))
     if _is_dict_builtin(args[0]):
         return Result({})
     raise NotImplementedError(args, kwargs)
@@ -816,7 +816,7 @@ def _do_dict_instancecheck(
         ictx: ICtx) -> Result[Any]:
     if isinstance(args[0], dict):
         return Result(True)
-    if isinstance(args[0], GuestInstance):
+    if isinstance(args[0], EInstance):
         return Result(get_guest_builtin('dict') in args[0].get_mro())
     return Result(False)
 
@@ -883,7 +883,7 @@ def _do_classmethod(
         kwargs: Dict[Text, Any],
         ictx: ICtx) -> Result[Any]:
     assert len(args) == 1, args
-    assert isinstance(args[0], GuestFunction), args[0]
+    assert isinstance(args[0], EFunction), args[0]
     return Result(GuestClassMethod(args[0]))
 
 
@@ -893,7 +893,7 @@ def _do_staticmethod(
         kwargs: Dict[Text, Any],
         ictx: ICtx) -> Result[Any]:
     assert len(args) == 1, args
-    assert isinstance(args[0], GuestFunction), args[0]
+    assert isinstance(args[0], EFunction), args[0]
     return Result(GuestStaticMethod(args[0]))
 
 
@@ -903,7 +903,7 @@ def _do_dir(args: Tuple[Any, ...],
             ictx: ICtx) -> Result[Any]:
     assert len(args) == 1, args
     o = args[0]
-    if isinstance(o, GuestPyObject):
+    if isinstance(o, EPyObject):
         d = o.getattr('__dict__', ictx)
         if d.is_exception():
             return d.get_exception()
@@ -911,7 +911,7 @@ def _do_dir(args: Tuple[Any, ...],
         keys = set(d.keys())
         keys.add('__class__')
         keys.add('__dict__')
-        if isinstance(o, GuestInstance):
+        if isinstance(o, EInstance):
             result = _do_dir((o.cls,), kwargs, ictx)
             if result.is_exception():
                 return Result(result.get_exception())
@@ -921,15 +921,16 @@ def _do_dir(args: Tuple[Any, ...],
     return Result(dir(o))
 
 
-def _do_type(args: Tuple[Any, ...]) -> Result[Any]:
+@check_result
+def do_type(args: Tuple[Any, ...]) -> Result[Any]:
     log('go:type()', f'args: {args}')
     if len(args) == 1:
-        if isinstance(args[0], (GuestInstance, GuestSuper)):
+        if isinstance(args[0], (EInstance, GuestSuper)):
             return Result(args[0].get_type())
         if isinstance(args[0], GuestClass):
             return Result(args[0].metaclass or get_guest_builtin('type'))
-        if isinstance(args[0], GuestFunction):
-            return Result(GuestFunctionType.singleton)
+        if isinstance(args[0], EFunction):
+            return Result(EFunctionType.singleton)
         if isinstance(args[0], GuestCoroutine):
             return Result(GuestCoroutineType())
         if isinstance(args[0], GuestClassMethod):
@@ -1002,7 +1003,7 @@ def _do___build_class__(
         raise NotImplementedError(metaclass, cell)
 
     # Now we call the metaclass with the evaluated namespace.
-    cls_result = _do_type(args=(name, bases, ns))
+    cls_result = do_type(args=(name, bases, ns))
     if cls_result.is_exception():
         return Result(cls_result.get_exception())
 
@@ -1012,20 +1013,20 @@ def _do___build_class__(
     return cls_result
 
 
-def get_mro(o: GuestPyObject) -> Tuple[GuestPyObject, ...]:
+def get_mro(o: EPyObject) -> Tuple[EPyObject, ...]:
     if isinstance(o, GuestBuiltin):
         return o.get_mro()
     assert isinstance(o, GuestClass), o
     return o.get_mro()
 
 
-class GuestSuper(GuestPyObject):
+class GuestSuper(EPyObject):
     def __init__(self, type_, obj_or_type, obj_or_type_type):
         self.type_ = type_
         self.obj_or_type = obj_or_type
         self.obj_or_type_type = obj_or_type_type
 
-    def get_type(self) -> 'GuestPyObject':
+    def get_type(self) -> 'EPyObject':
         return get_guest_builtin('super')
 
     def __repr__(self) -> Text:
@@ -1098,7 +1099,7 @@ def _do_super(args: Tuple[Any, ...],
     def supercheck():
         if isinstance(obj_or_type, GuestClass):
             return obj_or_type
-        assert isinstance(obj_or_type, GuestInstance)
+        assert isinstance(obj_or_type, EInstance)
         return obj_or_type.get_type()
 
     obj_type = supercheck()
@@ -1120,7 +1121,7 @@ def _do_iter(args: Tuple[Any, ...]) -> Result[Any]:
     raise NotImplementedError(args)
 
 
-class GuestBuiltin(GuestPyObject):
+class GuestBuiltin(EPyObject):
     """A builtin function in the echo VM."""
 
     def __init__(self, name: Text, bound_self: Any, singleton_ok: bool = True):
@@ -1139,7 +1140,7 @@ class GuestBuiltin(GuestPyObject):
         return 'GuestBuiltin(name={!r}, bound_self={!r}, ...)'.format(
             self.name, self.bound_self)
 
-    def get_mro(self) -> Tuple['GuestPyObject', ...]:
+    def get_mro(self) -> Tuple['EPyObject', ...]:
         if self.name == 'object':
             return (get_guest_builtin('object'),)
         elif self.name == 'type':
@@ -1232,7 +1233,7 @@ class GuestBuiltin(GuestPyObject):
         if self.name == 'iter':
             return _do_iter(args)
         if self.name == 'type':
-            return _do_type(args)
+            return do_type(args)
         if self.name == 'next':
             return _do_next(args)
         if self.name == 'hasattr':
@@ -1302,8 +1303,8 @@ def get_guest_builtin(name: Text) -> GuestBuiltin:
 
 
 class GuestPartial:
-    def __init__(self, f: GuestFunction, args: Tuple[Any, ...]):
-        assert isinstance(f, GuestFunction), f
+    def __init__(self, f: EFunction, args: Tuple[Any, ...]):
+        assert isinstance(f, EFunction), f
         self.f = f
         self.args = args
 
@@ -1317,14 +1318,14 @@ class GuestPartial:
             self.args + args, kwargs, locals_dict, ictx)
 
 
-class NativeFunction(GuestPyObject):
+class NativeFunction(EPyObject):
 
     def __init__(self, f: Callable, name: Text):
         self.f = f
         self.name = name
 
-    def get_type(self) -> GuestPyObject:
-        return GuestFunctionType.singleton
+    def get_type(self) -> EPyObject:
+        return EFunctionType.singleton
 
     def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
         raise NotImplementedError
@@ -1337,8 +1338,8 @@ class NativeFunction(GuestPyObject):
         return self.f(*args, **kwargs)
 
 
-class GuestProperty(GuestPyObject):
-    def __init__(self, fget: GuestFunction):
+class GuestProperty(EPyObject):
+    def __init__(self, fget: EFunction):
         self.fget = fget
 
     def hasattr(self, name: Text):
@@ -1365,8 +1366,8 @@ class GuestProperty(GuestPyObject):
         raise NotImplementedError
 
 
-class GuestClassMethod(GuestPyObject):
-    def __init__(self, f: GuestFunction):
+class GuestClassMethod(EPyObject):
+    def __init__(self, f: EFunction):
         self.f = f
         self.dict_ = {}
 
@@ -1388,7 +1389,7 @@ class GuestClassMethod(GuestPyObject):
         _self, obj, objtype = args
         assert _self is self
         if obj is not None:
-            objtype = _do_type(args=(obj,))
+            objtype = do_type(args=(obj,))
         return Result(GuestMethod(self.f, bound_self=objtype))
 
     @check_result
@@ -1404,8 +1405,8 @@ class GuestClassMethod(GuestPyObject):
         raise NotImplementedError(name, value)
 
 
-class GuestStaticMethod(GuestPyObject):
-    def __init__(self, f: GuestFunction):
+class GuestStaticMethod(EPyObject):
+    def __init__(self, f: EFunction):
         self.f = f
         self.dict_ = {}
 
@@ -1439,22 +1440,22 @@ class GuestStaticMethod(GuestPyObject):
         raise NotImplementedError(name, value)
 
 
-class GuestCell:
+class ECell:
     def __init__(self, name: Text):
         self._name = name
-        self._storage = GuestCell
+        self._storage = ECell
 
     def __repr__(self):
-        return 'GuestCell(_name={!r}, _storage={})'.format(
+        return 'ECell(_name={!r}, _storage={})'.format(
             self._name,
-            '<empty>' if self._storage is GuestCell else repr(self._storage))
+            '<empty>' if self._storage is ECell else repr(self._storage))
 
     def initialized(self) -> bool:
-        return self._storage is not GuestCell
+        return self._storage is not ECell
 
     def get(self) -> Any:
-        assert self._storage is not GuestCell, (
-            'GuestCell %r is uninitialized' % self._name)
+        assert self._storage is not ECell, (
+            'ECell %r is uninitialized' % self._name)
         return self._storage
 
     def set(self, value: Any):
