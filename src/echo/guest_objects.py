@@ -11,7 +11,7 @@ from typing import (
 from enum import Enum
 import weakref
 
-from echo.guest_py_object import EPyObject
+from echo.epy_object import EPyObject
 from echo.elog import log
 from echo.interpreter_state import InterpreterState
 from echo.interp_context import ICtx
@@ -335,6 +335,8 @@ def get_bases(c: EClassOrBuiltin) -> Tuple[EPyObject, ...]:
 
 
 class EClass(EPyObject):
+    """Represents a user-defined class."""
+
     bases: Tuple[EClassOrBuiltin, ...]
     metaclass: Optional[EClassOrBuiltin]
     subclasses: Set['EClass']
@@ -416,6 +418,7 @@ class EClass(EPyObject):
                     kwargs: Dict[Text, Any],
                     globals_: Dict[Text, Any],
                     ictx: ICtx) -> Result[EInstance]:
+        """Creates an instance of this user-defined class."""
         log('go:gc', f'instantiate self: {self} args: {args} kwargs: {kwargs}')
         guest_instance = None
         if self.hasattr('__new__'):
@@ -847,7 +850,7 @@ def _do_object_eq(
         ictx: ICtx) -> Result[Any]:
     assert not kwargs
     lhs, rhs = args
-    return Result(lhs is rhs)
+    return Result(NotImplemented)
 
 
 @check_result
@@ -874,7 +877,7 @@ def _do_object_ne(
         ictx: ICtx) -> Result[Any]:
     assert not kwargs
     lhs, rhs = args
-    return Result(lhs is not rhs)
+    return Result(NotImplemented)
 
 
 @check_result
@@ -925,7 +928,7 @@ def _do_dir(args: Tuple[Any, ...],
 def do_type(args: Tuple[Any, ...]) -> Result[Any]:
     log('go:type()', f'args: {args}')
     if len(args) == 1:
-        if isinstance(args[0], (EInstance, GuestSuper)):
+        if isinstance(args[0], (EInstance, ESuper)):
             return Result(args[0].get_type())
         if isinstance(args[0], EClass):
             return Result(args[0].metaclass or get_guest_builtin('type'))
@@ -1020,7 +1023,7 @@ def get_mro(o: EPyObject) -> Tuple[EPyObject, ...]:
     return o.get_mro()
 
 
-class GuestSuper(EPyObject):
+class ESuper(EPyObject):
     def __init__(self, type_, obj_or_type, obj_or_type_type):
         self.type_ = type_
         self.obj_or_type = obj_or_type
@@ -1103,7 +1106,7 @@ def _do_super(args: Tuple[Any, ...],
         return obj_or_type.get_type()
 
     obj_type = supercheck()
-    return Result(GuestSuper(type_, obj_or_type, obj_type))
+    return Result(ESuper(type_, obj_or_type, obj_type))
 
 
 _ITER_BUILTIN_TYPES = (

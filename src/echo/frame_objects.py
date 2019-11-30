@@ -621,8 +621,8 @@ class StatefulFrame:
         return self._run_binary('BINARY_FLOOR_DIVIDE')
 
     def _run_INPLACE_ADD(self, arg, argval):
-        lhs = self._pop()
         rhs = self._pop()
+        lhs = self._pop()
         if ({type(lhs), type(rhs)} <=
                 interp_routines.BUILTIN_VALUE_TYPES | {list}):
             return interp_routines.run_binop(

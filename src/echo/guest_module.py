@@ -1,7 +1,7 @@
 from typing import Text, Iterable, Dict, Any
 
 from echo.interp_context import ICtx
-from echo.guest_py_object import EPyObject
+from echo.epy_object import EPyObject
 from echo.interp_result import Result, ExceptionData
 
 

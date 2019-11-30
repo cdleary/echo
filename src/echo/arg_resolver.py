@@ -7,6 +7,7 @@ from typing import Text, Dict, Optional, Tuple, Any, List, Sequence
 
 from echo.interp_result import Result, ExceptionData, check_result
 from echo import code_attributes
+from echo.elog import log
 
 from termcolor import cprint
 
@@ -19,6 +20,10 @@ def _arg_join(arg_names: Sequence[Text]) -> Text:
         pieces.append("'{}'".format(name))
     s = ', '.join(pieces[:-1])
     return s + ', and ' + pieces[-1]
+
+
+class _Sentinel:
+    """Used to ensure we fill in all argument slots."""
 
 
 @check_result
@@ -34,12 +39,26 @@ def resolve_args(attrs: code_attributes.CodeAttributes,
     defaults = defaults or ()
     kwarg_defaults = kwarg_defaults or {}
 
-    class Sentinel:
-        """Used to ensure we fill in all argument slots."""
+    # The relevant information provided by attrs is:
+    #   argcount        required positional argument count
+    #   total_argcount  total number of argument slots (sans *kwargs)
+    #                   (if there are *args it is total_argcount-1 in the
+    #                    arg_slots)
+    #   starargs        i.e. *args
+    #   starkwargs      i.e. **kwargs
+    #   varnames        names of the arguments as in their definition signature
+    #   kwonlyargcount  number of names after the '*' position
+
+    log('ar:attrs', f'argcount:       {attrs.argcount}')
+    log('ar:attrs', f'total_argcount: {attrs.total_argcount}')
+    log('ar:attrs', f'kwonlyargcount: {attrs.kwonlyargcount}')
+    log('ar:attrs', f'starargs:       {attrs.starargs}')
+    log('ar:attrs', f'starkwargs:     {attrs.starkwargs}')
+    log('ar:attrs', f'varnames:       {attrs.varnames}')
 
     # The functionality of this method is to populate these arg slots
     # appropriately.
-    arg_slots = [Sentinel] * (attrs.total_argcount + attrs.starkwargs)
+    arg_slots = [_Sentinel] * (attrs.total_argcount + attrs.starkwargs)
 
     if attrs.starargs:
         # Note: somewhat surprisingly, the arg slot for the varargs doesn't
@@ -49,10 +68,13 @@ def resolve_args(attrs: code_attributes.CodeAttributes,
         arg_slots[stararg_index] = ()
     else:
         stararg_index = None
-        if len(args) > attrs.total_argcount:
+        permitted_args = attrs.total_argcount - attrs.kwonlyargcount
+        log('ar', f'given args: {len(args)} permitted: {permitted_args}')
+        if len(args) > permitted_args:
             msg = '{}() takes {} positional arguments but {} {} given'.format(
-                    attrs.name, attrs.total_argcount, len(args),
+                    attrs.name, permitted_args, len(args),
                     'was' if len(args) == 1 else 'were')
+            log('ar', 'emsg: ' + msg)
             return Result(ExceptionData(
                 traceback=None,
                 parameter=msg,
@@ -63,6 +85,27 @@ def resolve_args(attrs: code_attributes.CodeAttributes,
         arg_slots[starkwarg_index] = {}
     else:
         starkwarg_index = None
+
+    # Check for keyword-only arguments that were not provided.
+    if attrs.kwonlyargcount:
+        start, limit = -attrs.kwonlyargcount, len(attrs.varnames)
+        if attrs.starargs:
+            start -= 1
+            limit -= 1
+        kwonly_names = attrs.varnames[start:limit]
+        missing = []
+        for name in kwonly_names:
+            if name not in kwargs and name not in kwarg_defaults:
+                missing.append(name)
+        if missing:
+            msg = 'missing {} required keyword-only argument{}: {}'.format(
+                len(missing), 's' if len(missing) != 1 else '',
+                _arg_join(missing))
+            log('ar', 'emsg: ' + msg)
+            return Result(ExceptionData(
+                traceback=None,
+                parameter=msg,
+                exception=TypeError(msg)))
 
     # Note the name of each slot.
     arg_names = attrs.varnames[:len(arg_slots)]
@@ -86,14 +129,13 @@ def resolve_args(attrs: code_attributes.CodeAttributes,
         default_required[-len(defaults):] = list(range(len(defaults)))
 
     def in_stararg_position(argno: int) -> Tuple[bool, int]:
+        # Determines whether the positional argument 'argno' provided by the
+        # caller should populate the starargs value or just fill in a normal
+        # argument slot.
         if attrs.starargs:
-            needed_at_end = attrs.kwonlyargcount
             needed_at_start = attrs.argcount
             if argno < needed_at_start:
                 return (False, argno)
-            if argno >= len(args)-needed_at_end:
-                delta_from_end = len(args)-argno
-                return (False, len(arg_slots)-delta_from_end-1)
             assert stararg_index is not None
             return (True, stararg_index)
         return (False, argno)
@@ -117,7 +159,9 @@ def resolve_args(attrs: code_attributes.CodeAttributes,
 
     # Populate the keyword arguments.
     all_kwargs = dict(kwarg_defaults)
+    log('ar', f'kwarg defaults: {all_kwargs}')
     all_kwargs.update(kwargs)
+    log('ar', f'all kwargs:     {all_kwargs}')
     for kw, arg in all_kwargs.items():
         # Resolve the keyword to an index.
         try:
@@ -133,20 +177,21 @@ def resolve_args(attrs: code_attributes.CodeAttributes,
             print('all_kwargs:', all_kwargs, file=sys.stderr)
             print('varnames:', attrs.varnames, file=sys.stderr)
             raise
-        populate_positional(index, arg)
+        log('ar', f'updating arg slot at index {index} kw {kw} arg {arg}')
+        arg_slots[index] = arg
 
     # Add defaults from any slots that still require them.
     for argno, note in enumerate(default_required):
-        if note is None:
+        if note is None or arg_slots[argno] is not _Sentinel:
             continue
         assert isinstance(note, int), note
         arg_slots[argno] = defaults[note]
 
     for arg in arg_slots:
-        if arg == Sentinel:
-            missing_count = sum(1 for arg in arg_slots if arg == Sentinel)
+        if arg == _Sentinel:
+            missing_count = sum(1 for arg in arg_slots if arg == _Sentinel)
             missing_names = [name for i, name in enumerate(arg_names)
-                             if arg_slots[i] == Sentinel]
+                             if arg_slots[i] == _Sentinel]
             missing = _arg_join(missing_names)
             msg = '{}() missing {} required positional argument{}: {}'.format(
                     attrs.name, missing_count,

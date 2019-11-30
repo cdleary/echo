@@ -14,5 +14,6 @@ def foo(bar, baz=True):
     return (bar, baz)
 
 
-assert foo(baz=False, bar=42) == (42, False)
-assert saw_invocation
+r = foo(baz=False, bar=42)
+assert r == (42, False), r
+assert saw_invocation, 'Did not see invocation'

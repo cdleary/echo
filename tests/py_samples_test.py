@@ -1,4 +1,6 @@
 import functools
+import imp
+import itertools
 import os
 import pprint
 import sys
@@ -19,7 +21,7 @@ def _version_to_tuple(s: Text) -> Tuple[int, ...]:
     return tuple(int(x) for x in s.split('.'))
 
 
-def test_version_to_tuple():
+def test_version_to_tuple() -> None:
     assert _version_to_tuple('3.7') == (3, 7)
 
 
@@ -27,17 +29,29 @@ def _is_prefix_of(xs: Tuple[Any, ...], ys: Tuple[Any, ...]) -> bool:
     return all(x == y for x, y in zip(xs, ys))
 
 
-def test_is_prefix_of():
+def test_is_prefix_of() -> None:
     assert _is_prefix_of((3, 7), (3, 7, 2))
 
 
-@pytest.mark.parametrize('path', SAMPLE_FILES)
-def test_echo_on_sample(path: Text):
+@pytest.mark.parametrize(
+        'vm,path', itertools.product(('evm', 'cpy'), SAMPLE_FILES))
+def test_echo_on_sample(path: Text, vm: Text):
     basename = os.path.basename(path)
+    fullpath = os.path.realpath(path)
+    dirpath = os.path.dirname(fullpath)
+
+    if vm == 'cpy':
+        if dirpath not in sys.path:
+            sys.path.append(dirpath)
+        imp.load_source('__main__', path)
+        return
+
     if basename.startswith('knownf_'):
         pytest.xfail('Known-failing sample.')
+
     with open(path) as f:
         contents = f.read()
+
     leader = '# knownf: '
     if contents.startswith(leader):
         line0 = contents.splitlines()[0]
@@ -46,11 +60,11 @@ def test_echo_on_sample(path: Text):
         for version in versions:
             if _is_prefix_of(version, sys.version_info):
                 pytest.xfail('Version marked as known-failing.')
+
     globals_ = dict(globals())
-    fullpath = os.path.realpath(path)
     globals_['__file__'] = fullpath
     fully_qualified_name = '__main__'
-    state = interp.InterpreterState(os.path.dirname(fullpath))
+    state = interp.InterpreterState(dirpath)
     state.paths += sys.path[1:]
 
     ictx = interp_context.ICtx(state, interp.interp, interp.do_call)
