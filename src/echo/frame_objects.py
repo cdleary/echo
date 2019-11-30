@@ -14,7 +14,7 @@ from echo.elog import log
 from echo.interp_context import ICtx
 from echo import import_routines
 from echo.guest_objects import (
-    ECell, ReturnKind, GuestBuiltin, EFunction, EPyObject,
+    ECell, ReturnKind, EBuiltin, EFunction, EPyObject,
     GuestCoroutine, EInstance, get_guest_builtin,
     do_getitem, do_setitem, do_type,
 )
@@ -545,9 +545,9 @@ class StatefulFrame:
         log('bc:la', f'obj {obj!r} attr {argval}')
         for type_, methods in GUEST_BUILTINS.items():
             if isinstance(obj, type_) and argval in methods:
-                return Result(GuestBuiltin(
+                return Result(EBuiltin(
                     '{}.{}'.format(type_.__name__, argval), bound_self=obj))
-        if (isinstance(obj, GuestBuiltin) and obj.name == 'type'
+        if (isinstance(obj, EBuiltin) and obj.name == 'type'
                 and argval == '__dict__'):
             return Result(type.__dict__)
         elif isinstance(obj, EInstance):

@@ -27,10 +27,10 @@ from echo.arg_resolver import resolve_args
 from echo import code_attributes
 from echo.interpreter_state import InterpreterState
 from echo.guest_objects import (
-    EFunction, GuestBuiltin, EPyObject,
-    GuestPartial, GuestClass, ECell, GuestMethod, GuestGenerator,
+    EFunction, EBuiltin, EPyObject,
+    GuestPartial, EClass, ECell, GuestMethod, GuestGenerator,
     GuestAsyncGenerator, ReturnKind, GuestTraceback, GuestProperty,
-    GuestClassMethod, NativeFunction
+    EClassMethod, NativeFunction
 )
 from echo.guest_module import GuestModule
 from echo import interp_routines
@@ -169,7 +169,7 @@ def _do_call_classmethod(
         kwargs: Optional[Dict[Text, Any]]) -> Result[Any]:
     if len(args) != 1 or kwargs:
         raise NotImplementedError(args, kwargs)
-    return Result(GuestClassMethod(args[0]))
+    return Result(EClassMethod(args[0]))
 
 
 @check_result
@@ -226,7 +226,7 @@ def do_call(f,
         return Result((exc, p, t))
     if f is globals:
         return Result(globals_)
-    elif isinstance(f, (EFunction, GuestMethod, GuestClassMethod,
+    elif isinstance(f, (EFunction, GuestMethod, EClassMethod,
                         NativeFunction)):
         return f.invoke(args, kwargs, locals_dict, ictx)
     elif isinstance(f, (types.MethodType, types.FunctionType)):
@@ -246,9 +246,9 @@ def do_call(f,
             args=args, kwargs=kwargs, ictx=ictx)
     elif isinstance(f, GuestPartial):
         return f.invoke(args, kwargs, locals_dict, ictx)
-    elif isinstance(f, GuestBuiltin):
+    elif isinstance(f, EBuiltin):
         return f.invoke(args, kwargs, locals_dict, ictx)
-    elif isinstance(f, GuestClass):
+    elif isinstance(f, EClass):
         return f.instantiate(args, kwargs, globals_=globals_, ictx=ictx)
     elif callable(f):
         return Result(f(*args, **kwargs))

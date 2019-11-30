@@ -238,15 +238,15 @@ def _invoke_desc(self, cls_attr, ictx: ICtx) -> Result[Any]:
 
 class EInstance(EPyObject):
 
-    def __init__(self, cls: Union['GuestClass', 'GuestBuiltin']):
-        assert isinstance(cls, (GuestClass, GuestBuiltin)), cls
+    def __init__(self, cls: Union['EClass', 'EBuiltin']):
+        assert isinstance(cls, (EClass, EBuiltin)), cls
         self.cls = cls
         self.dict_ = {}
 
     def __repr__(self) -> Text:
         return '<{} eobject>'.format(self.cls.name)
 
-    def get_type(self) -> Union['GuestClass', 'GuestBuiltin']:
+    def get_type(self) -> Union['EClass', 'EBuiltin']:
         return self.cls
 
     def hasattr(self, name: Text) -> bool:
@@ -261,11 +261,11 @@ class EInstance(EPyObject):
 
     def _search_mro_for(self, name: Text, ictx: ICtx) -> Optional[Any]:
         for cls in self.cls.get_mro():
-            if isinstance(cls, GuestBuiltin):
+            if isinstance(cls, EBuiltin):
                 if cls.hasattr(name):
                     return cls.getattr(name, ictx).get_value()
                 continue
-            if not isinstance(cls, GuestClass):
+            if not isinstance(cls, EClass):
                 raise NotImplementedError(cls)
             if name in cls.dict_:
                 return cls.dict_[name]
@@ -320,12 +320,12 @@ class EInstance(EPyObject):
         return Result(None)
 
 
-GuestClassOrBuiltin = Union['GuestClass', 'GuestBuiltin']
+EClassOrBuiltin = Union['EClass', 'EBuiltin']
 
 
-def get_bases(c: GuestClassOrBuiltin) -> Tuple[EPyObject, ...]:
-    assert isinstance(c, (GuestClass, GuestBuiltin)), c
-    if isinstance(c, GuestClass):
+def get_bases(c: EClassOrBuiltin) -> Tuple[EPyObject, ...]:
+    assert isinstance(c, (EClass, EBuiltin)), c
+    if isinstance(c, EClass):
         return c.bases
     if _is_type_builtin(c) or _is_dict_builtin(c):
         return (get_guest_builtin('object'),)
@@ -334,13 +334,13 @@ def get_bases(c: GuestClassOrBuiltin) -> Tuple[EPyObject, ...]:
     raise NotImplementedError(c)
 
 
-class GuestClass(EPyObject):
-    bases: Tuple[GuestClassOrBuiltin, ...]
-    metaclass: Optional[GuestClassOrBuiltin]
-    subclasses: Set['GuestClass']
+class EClass(EPyObject):
+    bases: Tuple[EClassOrBuiltin, ...]
+    metaclass: Optional[EClassOrBuiltin]
+    subclasses: Set['EClass']
 
     def __init__(self, name: Text, dict_: Dict[Text, Any], *,
-                 bases: Optional[Tuple[GuestClassOrBuiltin]] = None,
+                 bases: Optional[Tuple[EClassOrBuiltin]] = None,
                  metaclass=None, kwargs=None):
         self.name = name
         self.dict_ = dict_
@@ -350,10 +350,10 @@ class GuestClass(EPyObject):
         self.subclasses = weakref.WeakSet()
 
         for base in self.bases:
-            if isinstance(base, (GuestBuiltin, GuestClass)):
+            if isinstance(base, (EBuiltin, EClass)):
                 base.note_subclass(self)
 
-    def note_subclass(self, derived: 'GuestClass') -> None:
+    def note_subclass(self, derived: 'EClass') -> None:
         self.subclasses.add(derived)
 
     def __repr__(self) -> Text:
@@ -362,7 +362,7 @@ class GuestClass(EPyObject):
                 self.dict_['__module__'], self.name)
         return '<eclass \'{}\">'.format(self.name)
 
-    def get_type(self) -> 'GuestClass':
+    def get_type(self) -> 'EClass':
         return self.metaclass or get_guest_builtin('type')
 
     def get_mro(self) -> Tuple['EPyObject', ...]:
@@ -401,12 +401,12 @@ class GuestClass(EPyObject):
             order.append(eobject)
         return tuple(order)
 
-    def is_subtype_of(self, other: 'GuestClass') -> bool:
+    def is_subtype_of(self, other: 'EClass') -> bool:
         if self is other:
             return True
         return other in self.get_mro()
 
-    def is_strict_subtype_of(self, other: 'GuestClass') -> bool:
+    def is_strict_subtype_of(self, other: 'EClass') -> bool:
         if self is other:
             return False
         return self.is_subtype_of(other)
@@ -544,19 +544,19 @@ class GuestCoroutineType(EPyObject):
 
 
 def _is_type_builtin(x) -> bool:
-    return isinstance(x, GuestBuiltin) and x.name == 'type'
+    return isinstance(x, EBuiltin) and x.name == 'type'
 
 
 def _is_dict_builtin(x) -> bool:
-    return isinstance(x, GuestBuiltin) and x.name == 'dict'
+    return isinstance(x, EBuiltin) and x.name == 'dict'
 
 
 def _is_object_builtin(x) -> bool:
-    return isinstance(x, GuestBuiltin) and x.name == 'object'
+    return isinstance(x, EBuiltin) and x.name == 'object'
 
 
 def _is_str_builtin(x) -> bool:
-    return isinstance(x, GuestBuiltin) and x.name == 'str'
+    return isinstance(x, EBuiltin) and x.name == 'str'
 
 
 def _do_isinstance(
@@ -564,7 +564,7 @@ def _do_isinstance(
         ictx: ICtx) -> Result[bool]:
     assert len(args) == 2, args
 
-    if (isinstance(args[1], GuestClass) and
+    if (isinstance(args[1], EClass) and
             args[1].hasattr('__instancecheck__')):
         ic = args[1].getattr('__instancecheck__', ictx)
         if ic.is_exception():
@@ -579,7 +579,7 @@ def _do_isinstance(
             return Result(isinstance(args[0], t))
 
     if args[1] is type:
-        return Result(isinstance(args[0], (type, GuestClass)))
+        return Result(isinstance(args[0], (type, EClass)))
 
     if isinstance(args[1], type) and issubclass(args[1], Exception):
         # TODO(leary) How does the real type builtin make it here?
@@ -588,7 +588,7 @@ def _do_isinstance(
     if _is_type_builtin(args[1]):
         if _is_type_builtin(args[0]) or _is_object_builtin(args[0]):
             return Result(True)
-        type_types = (type, GuestClass, EFunctionType, GuestCoroutineType)
+        type_types = (type, EClass, EFunctionType, GuestCoroutineType)
         return Result(isinstance(args[0], type_types))
 
     if _is_str_builtin(args[1]):
@@ -604,10 +604,10 @@ def _do_isinstance(
         return Result(True)  # Everything is an object.
 
     if (not isinstance(args[0], EPyObject)
-            and isinstance(args[1], GuestClass)):
+            and isinstance(args[1], EClass)):
         return Result(type(args[0]) in args[1].get_mro())
 
-    if isinstance(args[0], EPyObject) and isinstance(args[1], GuestClass):
+    if isinstance(args[0], EPyObject) and isinstance(args[1], EClass):
         return Result(args[0].get_type() in args[1].get_mro())
 
     raise NotImplementedError(args)
@@ -630,10 +630,10 @@ def _do_issubclass(
                            globals_=scc.globals_)
         return result
 
-    if isinstance(args[0], GuestClass) and isinstance(args[1], GuestBuiltin):
+    if isinstance(args[0], EClass) and isinstance(args[1], EBuiltin):
         return Result(args[0].is_subtype_of(args[1]))
 
-    if isinstance(args[0], GuestClass) and isinstance(args[1], GuestClass):
+    if isinstance(args[0], EClass) and isinstance(args[1], EClass):
         return Result(args[0].is_subtype_of(args[1]))
 
     if isinstance(args[0], GuestCoroutineType):
@@ -651,7 +651,7 @@ def _do_issubclass(
     if not isinstance(args[1], type):
         raise NotImplementedError('args[1] is not a type:', args)
 
-    if isinstance(args[0], GuestClass):
+    if isinstance(args[0], EClass):
         return Result(args[1] in args[0].get_mro())
 
     return Result(issubclass(args[0], args[1]))
@@ -758,7 +758,7 @@ def _do_object(args: Tuple[Any, ...]) -> Result[Any]:
 def _do_type_new(
         args: Tuple[Any, ...],
         kwargs: Dict[Text, Any],
-        ictx: ICtx) -> Result[GuestClass]:
+        ictx: ICtx) -> Result[EClass]:
     if kwargs:
         kwarg_metaclass = kwargs.pop('metaclass', args[0])
         assert kwarg_metaclass is args[0]
@@ -769,7 +769,7 @@ def _do_type_new(
             None, None,
             TypeError(msg)))
     metaclass, name, bases, ns = args
-    cls = GuestClass(name, dict_=ns, bases=bases, metaclass=metaclass)
+    cls = EClass(name, dict_=ns, bases=bases, metaclass=metaclass)
     return Result(cls)
 
 
@@ -779,7 +779,7 @@ def _do_dict_new(
         kwargs: Dict[Text, Any],
         ictx: ICtx) -> Result[Any]:
     assert len(args) == 1 and not kwargs, (args, kwargs)
-    if isinstance(args[0], GuestClass):
+    if isinstance(args[0], EClass):
         return Result(EInstance(args[0]))
     if _is_dict_builtin(args[0]):
         return Result({})
@@ -828,7 +828,7 @@ def _do_type_subclasses(
         ictx: ICtx) -> Result[Any]:
     assert len(args) == 1, args
     c = args[0]
-    assert isinstance(c, GuestClass), c
+    assert isinstance(c, EClass), c
     return Result(sorted(list(c.subclasses)))
 
 
@@ -884,7 +884,7 @@ def _do_classmethod(
         ictx: ICtx) -> Result[Any]:
     assert len(args) == 1, args
     assert isinstance(args[0], EFunction), args[0]
-    return Result(GuestClassMethod(args[0]))
+    return Result(EClassMethod(args[0]))
 
 
 @check_result
@@ -927,13 +927,13 @@ def do_type(args: Tuple[Any, ...]) -> Result[Any]:
     if len(args) == 1:
         if isinstance(args[0], (EInstance, GuestSuper)):
             return Result(args[0].get_type())
-        if isinstance(args[0], GuestClass):
+        if isinstance(args[0], EClass):
             return Result(args[0].metaclass or get_guest_builtin('type'))
         if isinstance(args[0], EFunction):
             return Result(EFunctionType.singleton)
         if isinstance(args[0], GuestCoroutine):
             return Result(GuestCoroutineType())
-        if isinstance(args[0], GuestClassMethod):
+        if isinstance(args[0], EClassMethod):
             return Result(get_guest_builtin('classmethod'))
         if isinstance(args[0], GuestStaticMethod):
             return Result(get_guest_builtin('staticmethod'))
@@ -948,7 +948,7 @@ def do_type(args: Tuple[Any, ...]) -> Result[Any]:
     assert len(args) == 3, args
     name, bases, ns = args
 
-    cls = GuestClass(name, ns, bases=bases)
+    cls = EClass(name, ns, bases=bases)
 
     if '__classcell__' in ns:
         ns['__classcell__'].set(cls)
@@ -961,7 +961,7 @@ def do_type(args: Tuple[Any, ...]) -> Result[Any]:
 def _do___build_class__(
         args: Tuple[Any, ...],
         kwargs: Dict[Text, Any],
-        ictx: ICtx) -> Result[GuestClass]:
+        ictx: ICtx) -> Result[EClass]:
     log('go:build_class', f'args: {args}')
     func, name, *bases = args
     bases = tuple(bases)
@@ -997,7 +997,7 @@ def _do___build_class__(
             return ictx.call(
                 new_f, (metaclass, name, bases, ns), kwargs, {},
                 globals_=new_f.globals_)
-        return Result(GuestClass(name, ns, bases=bases, metaclass=metaclass))
+        return Result(EClass(name, ns, bases=bases, metaclass=metaclass))
 
     if metaclass:
         raise NotImplementedError(metaclass, cell)
@@ -1014,9 +1014,9 @@ def _do___build_class__(
 
 
 def get_mro(o: EPyObject) -> Tuple[EPyObject, ...]:
-    if isinstance(o, GuestBuiltin):
+    if isinstance(o, EBuiltin):
         return o.get_mro()
-    assert isinstance(o, GuestClass), o
+    assert isinstance(o, EClass), o
     return o.get_mro()
 
 
@@ -1056,14 +1056,14 @@ class GuestSuper(EPyObject):
                 continue
             if _is_object_builtin(t):
                 continue
-            assert isinstance(t, GuestClass), t
+            assert isinstance(t, EClass), t
             if name not in t.dict_:
                 continue
             cls_attr = t.getattr(name, ictx)
             if cls_attr.is_exception():
                 return cls_attr.get_exception()
             cls_attr = cls_attr.get_value()
-            if (not isinstance(self.obj_or_type, GuestClass)
+            if (not isinstance(self.obj_or_type, EClass)
                     and cls_attr.hasattr('__get__')):
                 return _invoke_desc(self.obj_or_type, cls_attr, ictx)
             return Result(cls_attr)
@@ -1087,7 +1087,7 @@ def _do_super(args: Tuple[Any, ...],
         cell = next(cell for cell in frame.cellvars
                     if cell._name == '__class__')
         type_ = cell._storage
-        if not isinstance(type_, GuestClass):
+        if not isinstance(type_, EClass):
             raise NotImplementedError
         obj_or_type = frame.locals_[0]
     else:
@@ -1097,7 +1097,7 @@ def _do_super(args: Tuple[Any, ...],
     log('super', f'type_: {type_} obj: {obj_or_type}')
 
     def supercheck():
-        if isinstance(obj_or_type, GuestClass):
+        if isinstance(obj_or_type, EClass):
             return obj_or_type
         assert isinstance(obj_or_type, EInstance)
         return obj_or_type.get_type()
@@ -1121,7 +1121,7 @@ def _do_iter(args: Tuple[Any, ...]) -> Result[Any]:
     raise NotImplementedError(args)
 
 
-class GuestBuiltin(EPyObject):
+class EBuiltin(EPyObject):
     """A builtin function in the echo VM."""
 
     def __init__(self, name: Text, bound_self: Any, singleton_ok: bool = True):
@@ -1137,7 +1137,7 @@ class GuestBuiltin(EPyObject):
             return "<eclass 'type'>"
         if self.name == 'super':
             return "<eclass 'super'>"
-        return 'GuestBuiltin(name={!r}, bound_self={!r}, ...)'.format(
+        return 'EBuiltin(name={!r}, bound_self={!r}, ...)'.format(
             self.name, self.bound_self)
 
     def get_mro(self) -> Tuple['EPyObject', ...]:
@@ -1148,10 +1148,10 @@ class GuestBuiltin(EPyObject):
         else:
             raise NotImplementedError(self)
 
-    def note_subclass(self, cls: 'GuestClass') -> None:
+    def note_subclass(self, cls: 'EClass') -> None:
         pass
 
-    def is_subtype_of(self, other: 'GuestClass') -> bool:
+    def is_subtype_of(self, other: 'EClass') -> bool:
         return False
 
     @check_result
@@ -1298,8 +1298,8 @@ class GuestBuiltin(EPyObject):
 
 
 @memoize
-def get_guest_builtin(name: Text) -> GuestBuiltin:
-    return GuestBuiltin(name, None)
+def get_guest_builtin(name: Text) -> EBuiltin:
+    return EBuiltin(name, None)
 
 
 class GuestPartial:
@@ -1366,7 +1366,7 @@ class GuestProperty(EPyObject):
         raise NotImplementedError
 
 
-class GuestClassMethod(EPyObject):
+class EClassMethod(EPyObject):
     def __init__(self, f: EFunction):
         self.f = f
         self.dict_ = {}
@@ -1445,7 +1445,7 @@ class ECell:
         self._name = name
         self._storage = ECell
 
-    def __repr__(self):
+    def __repr__(self) -> Text:
         return 'ECell(_name={!r}, _storage={})'.format(
             self._name,
             '<empty>' if self._storage is ECell else repr(self._storage))
@@ -1458,5 +1458,5 @@ class ECell:
             'ECell %r is uninitialized' % self._name)
         return self._storage
 
-    def set(self, value: Any):
+    def set(self, value: Any) -> None:
         self._storage = value

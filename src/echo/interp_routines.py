@@ -11,8 +11,8 @@ from echo.interp_context import ICtx
 from echo.interp_result import Result, check_result, ExceptionData
 from echo.interpreter_state import InterpreterState
 from echo.guest_objects import (
-    EInstance, GuestBuiltin, EFunction, GuestClass,
-    get_guest_builtin, EPyObject, GuestClassMethod, GuestMethod
+    EInstance, EBuiltin, EFunction, EClass,
+    get_guest_builtin, EPyObject, EClassMethod, GuestMethod
 )
 from echo.guest_module import GuestModule
 from echo.value import Value
@@ -216,16 +216,16 @@ def compare(opname: Text, lhs, rhs, ictx: ICtx) -> Result[bool]:
     if is_set_of_strings(lhs) and is_set_of_strings(rhs):
         return Result(lhs == rhs)
 
-    if isinstance(lhs, GuestClass) and isinstance(rhs, GuestClass):
+    if isinstance(lhs, EClass) and isinstance(rhs, EClass):
         return Result(lhs is rhs)
 
-    if (opname == '==' and isinstance(lhs, GuestClass)
-            and not isinstance(rhs, GuestClass)
+    if (opname == '==' and isinstance(lhs, EClass)
+            and not isinstance(rhs, EClass)
             and not lhs.hasattr('__eq__')):
         return Result(False)
 
-    if (opname == '==' and not isinstance(rhs, GuestClass)
-            and isinstance(lhs, GuestClass)):
+    if (opname == '==' and not isinstance(rhs, EClass)
+            and isinstance(lhs, EClass)):
         return Result(False)
 
     if (not isinstance(lhs, EPyObject)
@@ -248,9 +248,9 @@ def debugged(f):
     return wrapper
 
 
-def _name_is_from_metaclass(cls: GuestClass, name: Text):
+def _name_is_from_metaclass(cls: EClass, name: Text):
     for c in cls.get_mro():
-        if not isinstance(c, GuestClass):
+        if not isinstance(c, EClass):
             continue
         if name in c.dict_:
             return False
@@ -261,12 +261,12 @@ def _name_is_from_metaclass(cls: GuestClass, name: Text):
 
 def method_requires_self(obj: Any, name: Text, value: Any) -> bool:
     obj_is_module = isinstance(obj, GuestModule)
-    if isinstance(value, GuestBuiltin) and value.bound_self is None:
+    if isinstance(value, EBuiltin) and value.bound_self is None:
         return not obj_is_module
     if isinstance(value, types.MethodType):
         return False
     if isinstance(value, EFunction):
-        if isinstance(obj, GuestClass):
+        if isinstance(obj, EClass):
             return _name_is_from_metaclass(obj, name)
         if isinstance(obj, EInstance):
             return value not in obj.dict_.values()
