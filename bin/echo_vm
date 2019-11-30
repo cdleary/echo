@@ -17,46 +17,57 @@ import os
 import pdb
 import sys
 import types
+from typing import Any
 
 from echo import interp
 from echo import interp_context
 from echo import import_routines
 from echo import bytecode_trace
+from echo.interp_result import Result
 
 from termcolor import cprint
 
 
-def main():
+def _handle_result(result: Result[Any]) -> int:
+    if result.is_exception():
+        cprint(str(result), color='red', file=sys.stderr)
+        error = True
+    else:
+        error = False
+
+    return -1 if error else 0
+
+
+def main() -> int:
     parser = optparse.OptionParser(__doc__)
     parser.add_option('--log_level', choices=['DEBUG', 'INFO', 'WARNING'],
                       help='Log level to use.')
     parser.add_option('--pdb', action='store_true', default=False,
                       help='Drop into PDB on error.')
-    parser.add_option('--ctrace', action='store_true', default=False,
-                      help='Color trace for guest interpreter.')
-    parser.add_option('--ctrace-mod', action='store_true', default=False,
-                      help='Color trace for module imports.')
-    parser.add_option('--ctrace-stack', action='store_true', default=False,
-                      help='Color trace stack push/pops.')
+    parser.add_option('-c', default=None,
+                      help='Literal text to execute.')
     parser.add_option('--dump_trace', help='Path to dump bytecode trace to.')
     opts, args = parser.parse_args()
-
-    # Path.
-    if len(args) != 1:
-        parser.error('A single file argument is required')
-    fullpath = os.path.realpath(args[0])
 
     # Options.
     if opts.log_level:
         logging.basicConfig(level=getattr(logging, opts.log_level))
 
-    interp.COLOR_TRACE = opts.ctrace
-    interp.COLOR_TRACE_FUNC = opts.ctrace
-    interp.COLOR_TRACE_STACK = opts.ctrace_stack
-    if opts.ctrace or opts.ctrace_mod:
-        import_routines.COLOR_TRACE_LEVEL = 1
-
     globals_ = dict(globals())
+
+    if opts.c:
+        state = interp.InterpreterState(os.getcwd())
+        module_code = compile(opts.c, '<text>', 'exec')
+        ictx = interp_context.ICtx(state, interp.interp, interp.do_call)
+        result = ictx.interp_callback(module_code, globals_=globals_, in_function=False,
+                             name='__main__', ictx=ictx)
+        return _handle_result(result)
+
+    # Path.
+    if len(args) != 1:
+        parser.error('A single file argument is required')
+
+    fullpath = os.path.realpath(args[0])
     globals_['__file__'] = fullpath
 
     state = interp.InterpreterState(os.path.dirname(fullpath))
@@ -74,14 +85,8 @@ def main():
         else:
             raise
 
-    if result.is_exception():
-        cprint(str(result), color='red', file=sys.stderr)
-        error = True
-    else:
-        error = False
-
-    sys.exit(-1 if error else 0)
+    return _handle_result()
 
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main())

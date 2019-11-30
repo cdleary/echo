@@ -1287,6 +1287,8 @@ class EBuiltin(EPyObject):
                 return Result(get_guest_builtin('type.__new__'))
             if name == '__name__':
                 return Result(get_guest_builtin('type.__name__'))
+            if name == '__repr__':
+                return Result(get_guest_builtin('type.__repr__'))
             if name == '__subclasshook__':
                 return Result(get_guest_builtin('object.__subclasshook__'))
             if name == '__subclasses__':
