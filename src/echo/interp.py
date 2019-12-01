@@ -26,9 +26,10 @@ from echo import import_routines
 from echo.arg_resolver import resolve_args
 from echo import code_attributes
 from echo.interpreter_state import InterpreterState
+from echo.ecell import ECell
 from echo.guest_objects import (
     EFunction, EBuiltin, EPyObject,
-    EPartial, EClass, ECell, EMethod, GuestGenerator,
+    EPartial, EClass, EMethod, GuestGenerator,
     GuestAsyncGenerator, ReturnKind, GuestTraceback,
     EClassMethod, NativeFunction
 )

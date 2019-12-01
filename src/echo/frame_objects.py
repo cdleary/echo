@@ -14,10 +14,11 @@ from echo.elog import log
 from echo.interp_context import ICtx
 from echo import import_routines
 from echo.guest_objects import (
-    ECell, ReturnKind, EBuiltin, EFunction, EPyObject,
+    ReturnKind, EBuiltin, EFunction, EPyObject,
     GuestCoroutine, EInstance, get_guest_builtin,
     do_getitem, do_setitem, do_type,
 )
+from echo.ecell import ECell
 from echo.guest_module import EModule
 from echo.code_attributes import CodeAttributes
 from echo.interpreter_state import InterpreterState

@@ -616,6 +616,7 @@ def _do_isinstance(
     raise NotImplementedError(args)
 
 
+@check_result
 def _do_issubclass(
         args: Tuple[Any, ...],
         ictx: ICtx) -> Result[bool]:
@@ -660,6 +661,7 @@ def _do_issubclass(
     return Result(issubclass(args[0], args[1]))
 
 
+@check_result
 def _do_next(args: Tuple[Any, ...]) -> Result[Any]:
     assert len(args) == 1, args
     g = args[0]
@@ -667,6 +669,7 @@ def _do_next(args: Tuple[Any, ...]) -> Result[Any]:
     return g.next()
 
 
+@check_result
 def _do_hasattr(args: Tuple[Any, ...]) -> Result[Any]:
     assert len(args) == 2, args
     o, attr = args
@@ -1415,25 +1418,3 @@ class EStaticMethod(EPyObject):
 
     def setattr(self, name: Text, value: Any) -> Result[None]:
         raise NotImplementedError(name, value)
-
-
-class ECell:
-    def __init__(self, name: Text):
-        self._name = name
-        self._storage = ECell
-
-    def __repr__(self) -> Text:
-        return 'ECell(_name={!r}, _storage={})'.format(
-            self._name,
-            '<empty>' if self._storage is ECell else repr(self._storage))
-
-    def initialized(self) -> bool:
-        return self._storage is not ECell
-
-    def get(self) -> Any:
-        assert self._storage is not ECell, (
-            'ECell %r is uninitialized' % self._name)
-        return self._storage
-
-    def set(self, value: Any) -> None:
-        self._storage = value
