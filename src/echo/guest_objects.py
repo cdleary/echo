@@ -483,7 +483,7 @@ class EClass(EPyObject):
 
         for base in self.bases:
             if _do_hasattr((base, name)).get_value():
-                return _do_getattr((base, name), ictx)
+                return _do_getattr((base, name), {}, ictx)
 
         if self.metaclass and self.metaclass.hasattr(name):
             return self.metaclass.getattr(name, ictx)
@@ -682,16 +682,21 @@ def _do_hasattr(args: Tuple[Any, ...]) -> Result[Any]:
 
 
 @check_result
-def _do_getattr(args: Tuple[Any, ...], ictx: ICtx) -> Result[Any]:
-    assert len(args) == 2, args
-    o, attr = args
+def _do_getattr(args: Tuple[Any, ...],
+                kwargs: Dict[Text, Any],
+                ictx: ICtx) -> Result[Any]:
+    assert 2 <= len(args) <= 3, args
+    assert not kwargs, kwargs
+    o, attr, *default = args
     if not isinstance(o, EPyObject):
         if o is dict:
             if attr == '__new__':
                 return Result(get_guest_builtin('dict.__new__'))
             if attr == '__instancecheck__':
                 return Result(get_guest_builtin('dict.__instancecheck__'))
-        raise NotImplementedError(o, attr)
+        return Result(getattr(o, attr, *default))
+    if default and not o.hasattr(attr):
+        return Result(default[0])
     return o.getattr(attr, ictx)
 
 
@@ -1258,6 +1263,8 @@ class EBuiltin(EPyObject):
             return _do_object(args)
         if self.name == 'dir':
             return _do_dir(args, kwargs, ictx)
+        if self.name == 'getattr':
+            return _do_getattr(args, kwargs, ictx)
         if self.name in self._registry:
             return self._registry[self.name](args, kwargs, ictx)
         raise NotImplementedError(self.name)
@@ -1387,7 +1394,10 @@ class EClassMethod(EPyObject):
                 self._get, 'eclassmethod.__get__'), bound_self=self))
         if name == '__func__':
             return Result(self.f)
-        raise NotImplementedError(name)
+        if name in self.dict_:
+            return Result(self.dict_[name])
+        return Result(ExceptionData(
+            None, None, AttributeError(name)))
 
     def setattr(self, name: Text, value: Any) -> Result[None]:
         raise NotImplementedError(name, value)

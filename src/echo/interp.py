@@ -154,36 +154,6 @@ def _do_call_functools_partial(
     return Result(guest_partial)
 
 
-def _do_call_classmethod(
-        args: Tuple[Any, ...],
-        kwargs: Optional[Dict[Text, Any]]) -> Result[Any]:
-    if len(args) != 1 or kwargs:
-        raise NotImplementedError(args, kwargs)
-    return Result(EClassMethod(args[0]))
-
-
-@check_result
-def _do_call_getattr(
-        args: Tuple[Any, ...],
-        kwargs: Optional[Dict[Text, Any]],
-        ictx: ICtx,
-        ) -> Result[Any]:
-    assert len(args) in (2, 3), args
-    log('interp:dcga', f'args: {args} kwargs: {kwargs}')
-
-    if not isinstance(args[0], EPyObject):
-        return Result(getattr(*args))
-
-    if not args[0].hasattr(args[1]):
-        if len(args) == 3:
-            return Result(args[2])
-        return Result(ExceptionData(
-            None, None,
-            AttributeError(f"object has no attribute {args[1]!r}")))
-
-    return args[0].getattr(args[1], ictx)
-
-
 @check_result
 def do_call(f,
             args: Tuple[Any, ...],
@@ -228,11 +198,6 @@ def do_call(f,
     # don't need to consider it specially.
     elif f is functools.partial:
         return _do_call_functools_partial(args, kwargs)
-    elif f is classmethod:
-        return _do_call_classmethod(args, kwargs)
-    elif f is getattr:
-        return _do_call_getattr(
-            args=args, kwargs=kwargs, ictx=ictx)
     elif isinstance(f, EPartial):
         return f.invoke(args, kwargs, locals_dict, ictx)
     elif isinstance(f, EBuiltin):

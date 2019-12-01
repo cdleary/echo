@@ -33,6 +33,7 @@ GUEST_BUILTIN_NAMES = (
     'classmethod',
     'dict',
     'dir',
+    'getattr',
     'hasattr',
     'isinstance',
     'issubclass',
