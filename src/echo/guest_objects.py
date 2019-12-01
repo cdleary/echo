@@ -897,7 +897,7 @@ def _do_staticmethod(
         ictx: ICtx) -> Result[Any]:
     assert len(args) == 1, args
     assert isinstance(args[0], EFunction), args[0]
-    return Result(GuestStaticMethod(args[0]))
+    return Result(EStaticMethod(args[0]))
 
 
 @check_result
@@ -938,7 +938,7 @@ def do_type(args: Tuple[Any, ...]) -> Result[Any]:
             return Result(GuestCoroutineType())
         if isinstance(args[0], EClassMethod):
             return Result(get_guest_builtin('classmethod'))
-        if isinstance(args[0], GuestStaticMethod):
+        if isinstance(args[0], EStaticMethod):
             return Result(get_guest_builtin('staticmethod'))
         if _is_type_builtin(args[0]):
             return Result(args[0])
@@ -1307,7 +1307,7 @@ def get_guest_builtin(name: Text) -> EBuiltin:
     return EBuiltin(name, None)
 
 
-class GuestPartial:
+class EPartial:
     def __init__(self, f: EFunction, args: Tuple[Any, ...]):
         assert isinstance(f, EFunction), f
         self.f = f
@@ -1343,7 +1343,7 @@ class NativeFunction(EPyObject):
         return self.f(*args, **kwargs)
 
 
-class GuestProperty(EPyObject):
+class EProperty(EPyObject):
     def __init__(self, fget: EFunction):
         self.fget = fget
 
@@ -1410,7 +1410,7 @@ class EClassMethod(EPyObject):
         raise NotImplementedError(name, value)
 
 
-class GuestStaticMethod(EPyObject):
+class EStaticMethod(EPyObject):
     def __init__(self, f: EFunction):
         self.f = f
         self.dict_ = {}

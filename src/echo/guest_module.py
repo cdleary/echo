@@ -5,7 +5,7 @@ from echo.epy_object import EPyObject
 from echo.interp_result import Result, ExceptionData
 
 
-class GuestModule(EPyObject):
+class EModule(EPyObject):
     def __init__(self, fully_qualified_name: Text, *, filename: Text,
                  globals_: Dict[Text, Any]):
         self.fully_qualified_name = fully_qualified_name
@@ -13,7 +13,7 @@ class GuestModule(EPyObject):
         self.globals_ = globals_
 
     def __repr__(self) -> Text:
-        return ('GuestModule(fully_qualified_name={!r}, '
+        return ('EModule(fully_qualified_name={!r}, '
                 'filename={!r}, ...)'.format(
                     self.fully_qualified_name, self.filename))
 

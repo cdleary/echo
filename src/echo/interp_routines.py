@@ -14,7 +14,7 @@ from echo.guest_objects import (
     EInstance, EBuiltin, EFunction, EClass,
     get_guest_builtin, EPyObject, EClassMethod, EMethod,
 )
-from echo.guest_module import GuestModule
+from echo.guest_module import EModule
 from echo.value import Value
 
 import termcolor
@@ -260,7 +260,7 @@ def _name_is_from_metaclass(cls: EClass, name: Text):
 
 
 def method_requires_self(obj: Any, name: Text, value: Any) -> bool:
-    obj_is_module = isinstance(obj, GuestModule)
+    obj_is_module = isinstance(obj, EModule)
     if isinstance(value, EBuiltin) and value.bound_self is None:
         return not obj_is_module
     if isinstance(value, types.MethodType):

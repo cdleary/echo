@@ -18,7 +18,7 @@ from echo.guest_objects import (
     GuestCoroutine, EInstance, get_guest_builtin,
     do_getitem, do_setitem, do_type,
 )
-from echo.guest_module import GuestModule
+from echo.guest_module import EModule
 from echo.code_attributes import CodeAttributes
 from echo.interpreter_state import InterpreterState
 from echo.interp_result import Result, ExceptionData
@@ -513,7 +513,7 @@ class StatefulFrame:
         module = self._peek()
         if isinstance(module, types.ModuleType):
             return Result(getattr(module, argval))
-        elif isinstance(module, GuestModule):
+        elif isinstance(module, EModule):
             return import_routines.getattr_or_subimport(
                 module, argval, self.ictx)
         else:

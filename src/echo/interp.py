@@ -28,11 +28,11 @@ from echo import code_attributes
 from echo.interpreter_state import InterpreterState
 from echo.guest_objects import (
     EFunction, EBuiltin, EPyObject,
-    GuestPartial, EClass, ECell, EMethod, GuestGenerator,
-    GuestAsyncGenerator, ReturnKind, GuestTraceback, GuestProperty,
+    EPartial, EClass, ECell, EMethod, GuestGenerator,
+    GuestAsyncGenerator, ReturnKind, GuestTraceback, EProperty,
     EClassMethod, NativeFunction
 )
-from echo.guest_module import GuestModule
+from echo.guest_module import EModule
 from echo import interp_routines
 from echo.frame_objects import StatefulFrame, UnboundLocalSentinel
 from echo.value import Value
@@ -148,7 +148,7 @@ def _do_call_functools_partial(
     """Helper for calling `functools.partial`."""
     if kwargs:
         raise NotImplementedError(kwargs)
-    guest_partial = GuestPartial(args[0], args[1:])
+    guest_partial = EPartial(args[0], args[1:])
     return Result(guest_partial)
 
 
@@ -160,7 +160,7 @@ def _do_call_property(
         raise NotImplementedError(kwargs)
     if len(args) != 1:
         raise NotImplementedError(args)
-    guest_property = GuestProperty(args[0])
+    guest_property = EProperty(args[0])
     return Result(guest_property)
 
 
@@ -244,7 +244,7 @@ def do_call(f,
     elif f is getattr:
         return _do_call_getattr(
             args=args, kwargs=kwargs, ictx=ictx)
-    elif isinstance(f, GuestPartial):
+    elif isinstance(f, EPartial):
         return f.invoke(args, kwargs, locals_dict, ictx)
     elif isinstance(f, EBuiltin):
         return f.invoke(args, kwargs, locals_dict, ictx)

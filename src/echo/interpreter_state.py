@@ -1,7 +1,7 @@
 import types
 from typing import Dict, Text, Union, Optional, Any
 
-GuestModule = Any
+EModule = Any
 StatefulFrame = Any
 
 
@@ -11,7 +11,7 @@ class InterpreterState:
 
     def __init__(self, script_directory: Optional[Text]):
         self.sys_modules = {
-        }  # type: Dict[Text, Union[types.ModuleType, GuestModule]]
+        }  # type: Dict[Text, Union[types.ModuleType, EModule]]
 
         # sys.path: "module search path; path[0] is the script directory, else
         # ''"

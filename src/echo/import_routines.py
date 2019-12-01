@@ -10,7 +10,7 @@ from typing import (
 
 from echo.interp_context import ICtx
 from echo.interp_result import Result, ExceptionData
-from echo.guest_module import GuestModule
+from echo.guest_module import EModule
 
 from termcolor import cprint
 
@@ -22,7 +22,7 @@ SPECIAL_MODULES = (
 )
 
 
-ModuleT = Union[ModuleType, GuestModule]
+ModuleT = Union[ModuleType, EModule]
 
 
 def bump_import_depth(f):
@@ -50,7 +50,7 @@ def log(ictx: ICtx, s: Text) -> None:
 @bump_import_depth
 def _import_module_at_path(
         path: Text, fully_qualified_name: Text, *,
-        ictx: ICtx) -> Result[GuestModule]:
+        ictx: ICtx) -> Result[EModule]:
     """Imports a module at the given path and runs its code.
 
     * Reads in the file,
@@ -70,7 +70,7 @@ def _import_module_at_path(
     with open(path) as f:
         contents = f.read()
 
-    # Compile the module contents and wrap it up as a GuestModule.
+    # Compile the module contents and wrap it up as a EModule.
     module_code = compile(contents, path, 'exec')
     assert isinstance(module_code, CodeType), module_code
 
@@ -82,7 +82,7 @@ def _import_module_at_path(
     if path.endswith('__init__.py'):
         globals_['__path__'] = [os.path.dirname(path)]
 
-    module = GuestModule(
+    module = EModule(
         fully_qualified_name, globals_=globals_, filename=path)
 
     # Place the imported module into the module dictionary.
@@ -101,7 +101,7 @@ def _import_module_at_path(
 
 def _subimport_module_at_path(
         path: Text, fully_qualified_name: Text,
-        containing_package: GuestModule, ictx: ICtx) -> Result[GuestModule]:
+        containing_package: EModule, ictx: ICtx) -> Result[EModule]:
     log(ictx, f'path {path} fqn {fully_qualified_name} '
               f'containing_package {containing_package}')
 
@@ -415,7 +415,7 @@ def run_IMPORT_NAME(importing_path: Text,
     return Result(leaf)
 
 
-def import_star(module: GuestModule,
+def import_star(module: EModule,
                 globals_: Dict[Text, Any],
                 ictx: ICtx,
                 ) -> None:
