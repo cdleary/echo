@@ -119,6 +119,8 @@ def run_binop(opname: Text, lhs: Any, rhs: Any, ictx: ICtx) -> Result[Any]:
             type(lhs) in (list, dict, types.MappingProxyType)
             and opname == 'BINARY_SUBSCR') or (
             type(lhs) == type(rhs) == list and opname == 'BINARY_ADD') or (
+            type(lhs) == list and type(rhs) == int
+            and opname == 'BINARY_MULTIPLY') or (
             type(lhs) == type(rhs) == set and opname == 'BINARY_SUBTRACT') or (
             type(lhs) is str and opname == 'BINARY_MODULO'):
         op = _BINARY_OPS[opname]

@@ -206,7 +206,7 @@ def do_call(f,
                 Callable[[], Optional[ExceptionData]]] = None,
             in_function: bool = True
             ) -> Result[Any]:
-    log('interp:do_call', f'f: {f} kwargs: {kwargs}')
+    log('interp:do_call', f'f: {f} args: {args} kwargs: {kwargs}')
 
     assert in_function
 
@@ -214,7 +214,8 @@ def do_call(f,
     if f in (dict, chr, range, print, sorted, str, set, tuple, list, hasattr,
              bytearray, object, frozenset, weakref.WeakSet,
              weakref.ref) + interp_routines.BUILTIN_EXCEPTION_TYPES:
-        return Result(f(*args, **kwargs))
+        r = f(*args, **kwargs)
+        return Result(r)
 
     if f is sys.exc_info:
         exception_data = get_exception_data()
@@ -251,7 +252,10 @@ def do_call(f,
     elif isinstance(f, EClass):
         return f.instantiate(args, kwargs, globals_=globals_, ictx=ictx)
     elif callable(f):
-        return Result(f(*args, **kwargs))
+        try:
+            return Result(f(*args, **kwargs))
+        except Exception as e:
+            return Result(ExceptionData(None, None, e))
     else:
         if isinstance(f, EPyObject):
             type_name = f.get_type().name

@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import ctypes
 import dis
 import inspect
@@ -23,6 +25,10 @@ class _PyTryBlock(ctypes.Structure):
         ('b_level', ctypes.c_uint),
     ]
 # pytype: enable=base-class-error
+
+
+def print(*args, **kwargs): pass
+def cprint(*args, **kwargs): pass
 
 
 class CtypeFrame:
@@ -190,8 +196,11 @@ def note_trace(frame, event, arg):
         # print(' frame.f_locals:', frame.f_locals, file=sys.stderr)
 
     if event == 'call':
+        filename = frame.f_code.co_filename
+        print('CALLING:', filename)
         # Turn on opcode tracing for the frame we're entering.
-        frame.f_trace_opcodes = True
+        if not filename.startswith('<frozen'):
+            frame.f_trace_opcodes = True
     elif event == 'opcode':
         # From the docs:
         #     The interpreter is about to execute a new opcode (see dis for
@@ -217,8 +226,11 @@ def note_trace(frame, event, arg):
             if name in locals_:
                 del locals_[name]
         print(' frame.f_locals:', locals_, file=sys.stderr)
-        print(' stack effect:', dis.stack_effect(instruction.opcode,
-              instruction.arg), file=sys.stderr)
+        try:
+            print(' stack effect:', dis.stack_effect(instruction.opcode,
+                  instruction.arg), file=sys.stderr)
+        except ValueError:
+            pass
         ctf.print_stack()
     elif event == 'line':
         print('line!', file=sys.stderr)
@@ -244,6 +256,9 @@ def main():
         TRACE_DUMPER = bytecode_trace.BytecodeTraceDumper(opts.dump_trace)
 
     path = args[0]
+
+    sys.argv = args[1:]
+
     print('Reading path:', path, file=sys.stderr)
     with open(path) as f:
         contents = f.read()

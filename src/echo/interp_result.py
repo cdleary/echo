@@ -3,7 +3,7 @@
 import collections
 import functools
 from enum import Enum
-from typing import TypeVar, Union, Generic, Text
+from typing import TypeVar, Union, Generic, Text, Callable
 
 
 T = TypeVar('T')
@@ -45,10 +45,11 @@ class Result(Generic[T]):
         return self.value
 
 
-def check_result(f):
+def check_result(f: Callable[..., Result]) -> Callable[..., Result]:
     """Helper decorator that checks a function returns a Result."""
     @functools.wraps(f)
     def checker(*args, **kwargs):
+        assert callable(f), f
         result = f(*args, **kwargs)
         assert isinstance(result, Result), (f, args, kwargs, result)
         return result

@@ -64,8 +64,11 @@ def main() -> int:
         return _handle_result(result)
 
     # Path.
-    if len(args) != 1:
+    if len(args) < 1:
         parser.error('A single file argument is required')
+
+    path, *rest = args
+    sys.argv = rest
 
     fullpath = os.path.realpath(args[0])
     globals_['__file__'] = fullpath
@@ -85,7 +88,7 @@ def main() -> int:
         else:
             raise
 
-    return _handle_result()
+    return _handle_result(result)
 
 
 if __name__ == '__main__':
