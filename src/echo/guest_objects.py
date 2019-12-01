@@ -889,16 +889,6 @@ def _do_object_ne(
 
 
 @check_result
-def _do_staticmethod(
-        args: Tuple[Any, ...],
-        kwargs: Dict[Text, Any],
-        ictx: ICtx) -> Result[Any]:
-    assert len(args) == 1, args
-    assert isinstance(args[0], EFunction), args[0]
-    return Result(EStaticMethod(args[0]))
-
-
-@check_result
 def _do_dir(args: Tuple[Any, ...],
             kwargs: Dict[Text, Any],
             ictx: ICtx) -> Result[Any]:
@@ -937,7 +927,7 @@ def do_type(args: Tuple[Any, ...], kwargs: Dict[Text, Any]) -> Result[Any]:
             return Result(GuestCoroutineType())
         if isinstance(args[0], EBuiltin.get_type('classmethod')):
             return Result(get_guest_builtin('classmethod'))
-        if isinstance(args[0], EStaticMethod):
+        if isinstance(args[0], EBuiltin.get_type('staticmethod')):
             return Result(get_guest_builtin('staticmethod'))
         if _is_type_builtin(args[0]):
             return Result(args[0])
@@ -958,62 +948,6 @@ def do_type(args: Tuple[Any, ...], kwargs: Dict[Text, Any]) -> Result[Any]:
         del ns['__classcell__']
 
     return Result(cls)
-
-
-@check_result
-def _do___build_class__(
-        args: Tuple[Any, ...],
-        kwargs: Dict[Text, Any],
-        ictx: ICtx) -> Result[EClass]:
-    log('go:build_class', f'args: {args}')
-    func, name, *bases = args
-    bases = tuple(bases)
-    metaclass = kwargs.pop('metaclass', None) if kwargs else None
-    if metaclass and metaclass.hasattr('__prepare__'):
-        prep_f = metaclass.getattr('__prepare__', ictx)
-        if prep_f.is_exception():
-            return Result(prep_f.get_exception())
-        prep_f = prep_f.get_value()
-        ns = ictx.call(prep_f,
-                       (name, bases), kwargs, {}, globals_=prep_f.globals_)
-        if ns.is_exception():
-            return Result(ns.get_exception())
-        ns = ns.get_value()
-        log('bc',
-            f'prepared ns via metaclass {metaclass} prep_f {prep_f}: {ns}')
-    else:
-        ns = {}  # Namespace for the class.
-
-    res = do_setitem((ns, '__module__', func.globals_['__name__']), ictx)
-    if res.is_exception():
-        return res
-
-    class_eval_result = ictx.call(
-        func, (), {}, locals_dict=ns, globals_=func.globals_)
-    if class_eval_result.is_exception():
-        return Result(class_eval_result.get_exception())
-    cell = class_eval_result.get_value()
-    if cell is None:
-        if metaclass and metaclass.hasattr('__new__'):
-            new_f = metaclass.getattr('__new__', ictx).get_value()
-            log('bc', f'invoking metaclass new: {new_f} ns: {ns}')
-            return ictx.call(
-                new_f, (metaclass, name, bases, ns), kwargs, {},
-                globals_=new_f.globals_)
-        return Result(EClass(name, ns, bases=bases, metaclass=metaclass))
-
-    if metaclass:
-        raise NotImplementedError(metaclass, cell)
-
-    # Now we call the metaclass with the evaluated namespace.
-    cls_result = do_type((name, bases, ns), {})
-    if cls_result.is_exception():
-        return Result(cls_result.get_exception())
-
-    # TODO(cdleary, 2019-02-16): Various checks that cell's class matches class
-    # object.
-
-    return cls_result
 
 
 def get_mro(o: EPyObject) -> Tuple[EPyObject, ...]:
@@ -1208,11 +1142,6 @@ class EBuiltin(EPyObject):
             return _do_isinstance(args, ictx)
         if self.name == 'issubclass':
             return _do_issubclass(args, ictx)
-        if self.name == '__build_class__':
-            r = _do___build_class__(
-                args, kwargs, ictx)
-            log('go:build_class', f'result: {r}')
-            return r
         if self.name == 'type.__new__':
             return _do_type_new(args, kwargs, ictx)
         if self.name == 'dict':
@@ -1239,8 +1168,6 @@ class EBuiltin(EPyObject):
             return _do_object_eq(args, kwargs, ictx)
         if self.name == 'object.__ne__':
             return _do_object_ne(args, kwargs, ictx)
-        if self.name == 'staticmethod':
-            return _do_staticmethod(args, kwargs, ictx)
         if self.name == 'super':
             return _do_super(args, ictx)
         if self.name == 'iter':
@@ -1355,38 +1282,3 @@ class NativeFunction(EPyObject):
     @check_result
     def invoke(self, *args, **kwargs) -> Result[Any]:
         return self.f(*args, **kwargs)
-
-
-class EStaticMethod(EPyObject):
-    def __init__(self, f: EFunction):
-        self.f = f
-        self.dict_ = {}
-
-    def __repr__(self) -> Text:
-        return '<estaticmethod object at {:#x}>'.format(id(self))
-
-    def invoke(self, *args, **kwargs) -> Result[Any]:
-        return self.f.invoke(*args, **kwargs)
-
-    def hasattr(self, name: Text) -> bool:
-        return name in self.dict_ or name == '__get__'
-
-    @check_result
-    def _get(self,
-             args: Tuple[Any, ...],
-             kwargs: Dict[Text, Any],
-             locals_dict: Dict[Text, Any],
-             ictx: ICtx) -> Result[Any]:
-        return Result(self.f)
-
-    @check_result
-    def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
-        if name == '__get__':
-            return Result(NativeFunction(
-                self._get, 'estaticmethod.__get__'))
-        if name == '__func__':
-            return Result(self.f)
-        raise NotImplementedError(name)
-
-    def setattr(self, name: Text, value: Any) -> Result[None]:
-        raise NotImplementedError(name, value)

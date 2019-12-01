@@ -33,12 +33,16 @@ from echo.guest_objects import (
     GuestAsyncGenerator, ReturnKind, GuestTraceback,
     NativeFunction
 )
-import echo.eproperty
-from echo.eclassmethod import EClassMethod
-from echo.guest_module import EModule
 from echo import interp_routines
 from echo.frame_objects import StatefulFrame, UnboundLocalSentinel
 from echo.value import Value
+
+# These register builtins.
+from echo.estaticmethod import EStaticMethod
+from echo.eclassmethod import EClassMethod
+from echo.guest_module import EModule
+import echo.eproperty
+import echo.builtin_build_class
 
 
 @check_result
@@ -188,7 +192,7 @@ def do_call(f,
         return Result((exc, p, t))
     if f is globals:
         return Result(globals_)
-    elif isinstance(f, (EFunction, EMethod, EClassMethod,
+    elif isinstance(f, (EFunction, EMethod, EClassMethod, EStaticMethod,
                         NativeFunction)):
         return f.invoke(args, kwargs, locals_dict, ictx)
     elif isinstance(f, (types.MethodType, types.FunctionType)):
