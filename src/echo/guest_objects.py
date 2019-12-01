@@ -226,7 +226,7 @@ def _invoke_desc(self, cls_attr, ictx: ICtx) -> Result[Any]:
     f = f_result.get_value()
 
     # Determine the type of obj.
-    objtype_result = do_type(args=(cls_attr,))
+    objtype_result = do_type((cls_attr,), {})
     if objtype_result.is_exception():
         return Result(objtype_result.get_exception())
     objtype = objtype_result.get_value()
@@ -889,16 +889,6 @@ def _do_object_ne(
 
 
 @check_result
-def _do_classmethod(
-        args: Tuple[Any, ...],
-        kwargs: Dict[Text, Any],
-        ictx: ICtx) -> Result[Any]:
-    assert len(args) == 1, args
-    assert isinstance(args[0], EFunction), args[0]
-    return Result(EClassMethod(args[0]))
-
-
-@check_result
 def _do_staticmethod(
         args: Tuple[Any, ...],
         kwargs: Dict[Text, Any],
@@ -933,7 +923,8 @@ def _do_dir(args: Tuple[Any, ...],
 
 
 @check_result
-def do_type(args: Tuple[Any, ...]) -> Result[Any]:
+def do_type(args: Tuple[Any, ...], kwargs: Dict[Text, Any]) -> Result[Any]:
+    assert not kwargs, kwargs
     log('go:type()', f'args: {args}')
     if len(args) == 1:
         if isinstance(args[0], (EInstance, ESuper)):
@@ -944,7 +935,7 @@ def do_type(args: Tuple[Any, ...]) -> Result[Any]:
             return Result(EFunctionType.singleton)
         if isinstance(args[0], GuestCoroutine):
             return Result(GuestCoroutineType())
-        if isinstance(args[0], EClassMethod):
+        if isinstance(args[0], EBuiltin.get_type('classmethod')):
             return Result(get_guest_builtin('classmethod'))
         if isinstance(args[0], EStaticMethod):
             return Result(get_guest_builtin('staticmethod'))
@@ -956,6 +947,7 @@ def do_type(args: Tuple[Any, ...]) -> Result[Any]:
         if res is type:
             return Result(get_guest_builtin('type'))
         return Result(res)
+
     assert len(args) == 3, args
     name, bases, ns = args
 
@@ -1014,7 +1006,7 @@ def _do___build_class__(
         raise NotImplementedError(metaclass, cell)
 
     # Now we call the metaclass with the evaluated namespace.
-    cls_result = do_type(args=(name, bases, ns))
+    cls_result = do_type((name, bases, ns), {})
     if cls_result.is_exception():
         return Result(cls_result.get_exception())
 
@@ -1135,7 +1127,7 @@ def _do_iter(args: Tuple[Any, ...]) -> Result[Any]:
 class EBuiltin(EPyObject):
     """A builtin function in the echo VM."""
 
-    _registry: Dict[Text, Callable] = {}
+    _registry: Dict[Text, Tuple[Callable, Optional[type]]] = {}
 
     def __init__(self, name: Text, bound_self: Any, singleton_ok: bool = True):
         self.name = name
@@ -1144,8 +1136,14 @@ class EBuiltin(EPyObject):
         self.globals_ = {}
 
     @classmethod
-    def register(cls, name: Text, f: Callable) -> None:
-        cls._registry[name] = f
+    def get_type(cls, name: Text) -> type:
+        t = cls._registry[name][1]
+        assert t is not None
+        return t
+
+    @classmethod
+    def register(cls, name: Text, f: Callable, t: Optional[type]) -> None:
+        cls._registry[name] = (f, t)
 
     def __repr__(self):
         if self.name == 'object':
@@ -1241,8 +1239,6 @@ class EBuiltin(EPyObject):
             return _do_object_eq(args, kwargs, ictx)
         if self.name == 'object.__ne__':
             return _do_object_ne(args, kwargs, ictx)
-        if self.name == 'classmethod':
-            return _do_classmethod(args, kwargs, ictx)
         if self.name == 'staticmethod':
             return _do_staticmethod(args, kwargs, ictx)
         if self.name == 'super':
@@ -1250,7 +1246,7 @@ class EBuiltin(EPyObject):
         if self.name == 'iter':
             return _do_iter(args)
         if self.name == 'type':
-            return do_type(args)
+            return do_type(args, {})
         if self.name == 'next':
             return _do_next(args)
         if self.name == 'hasattr':
@@ -1266,7 +1262,7 @@ class EBuiltin(EPyObject):
         if self.name == 'getattr':
             return _do_getattr(args, kwargs, ictx)
         if self.name in self._registry:
-            return self._registry[self.name](args, kwargs, ictx)
+            return self._registry[self.name][0](args, kwargs, ictx)
         raise NotImplementedError(self.name)
 
     def hasattr(self, name: Text) -> bool:
@@ -1359,48 +1355,6 @@ class NativeFunction(EPyObject):
     @check_result
     def invoke(self, *args, **kwargs) -> Result[Any]:
         return self.f(*args, **kwargs)
-
-
-class EClassMethod(EPyObject):
-    def __init__(self, f: EFunction):
-        self.f = f
-        self.dict_ = {}
-
-    def __repr__(self) -> Text:
-        return '<eclassmethod object at {:#x}>'.format(id(self))
-
-    def invoke(self, *args, **kwargs) -> Result[Any]:
-        return self.f.invoke(*args, **kwargs)
-
-    def hasattr(self, name: Text) -> bool:
-        return name in self.dict_ or name == '__get__'
-
-    @check_result
-    def _get(self,
-             args: Tuple[Any, ...],
-             kwargs: Dict[Text, Any],
-             locals_dict: Dict[Text, Any],
-             ictx: ICtx) -> Result[Any]:
-        _self, obj, objtype = args
-        assert _self is self
-        if obj is not None:
-            objtype = do_type(args=(obj,))
-        return Result(EMethod(self.f, bound_self=objtype))
-
-    @check_result
-    def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
-        if name == '__get__':
-            return Result(EMethod(NativeFunction(
-                self._get, 'eclassmethod.__get__'), bound_self=self))
-        if name == '__func__':
-            return Result(self.f)
-        if name in self.dict_:
-            return Result(self.dict_[name])
-        return Result(ExceptionData(
-            None, None, AttributeError(name)))
-
-    def setattr(self, name: Text, value: Any) -> Result[None]:
-        raise NotImplementedError(name, value)
 
 
 class EStaticMethod(EPyObject):

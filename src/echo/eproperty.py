@@ -47,4 +47,4 @@ def _do_property(
     return Result(guest_property)
 
 
-EBuiltin.register('property', _do_property)
+EBuiltin.register('property', _do_property, EProperty)

@@ -31,9 +31,10 @@ from echo.guest_objects import (
     EFunction, EBuiltin, EPyObject,
     EPartial, EClass, EMethod, GuestGenerator,
     GuestAsyncGenerator, ReturnKind, GuestTraceback,
-    EClassMethod, NativeFunction
+    NativeFunction
 )
 import echo.eproperty
+from echo.eclassmethod import EClassMethod
 from echo.guest_module import EModule
 from echo import interp_routines
 from echo.frame_objects import StatefulFrame, UnboundLocalSentinel

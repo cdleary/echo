@@ -12,7 +12,7 @@ from echo.interp_result import Result, check_result, ExceptionData
 from echo.interpreter_state import InterpreterState
 from echo.guest_objects import (
     EInstance, EBuiltin, EFunction, EClass,
-    get_guest_builtin, EPyObject, EClassMethod, EMethod,
+    get_guest_builtin, EPyObject, EMethod,
 )
 from echo.guest_module import EModule
 from echo.value import Value
