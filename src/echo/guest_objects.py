@@ -1130,11 +1130,17 @@ def _do_iter(args: Tuple[Any, ...]) -> Result[Any]:
 class EBuiltin(EPyObject):
     """A builtin function in the echo VM."""
 
+    _registry: Dict[Text, Callable] = {}
+
     def __init__(self, name: Text, bound_self: Any, singleton_ok: bool = True):
         self.name = name
         self.bound_self = bound_self
         self.dict = {}
         self.globals_ = {}
+
+    @classmethod
+    def register(cls, name: Text, f: Callable) -> None:
+        cls._registry[name] = f
 
     def __repr__(self):
         if self.name == 'object':
@@ -1252,6 +1258,8 @@ class EBuiltin(EPyObject):
             return _do_object(args)
         if self.name == 'dir':
             return _do_dir(args, kwargs, ictx)
+        if self.name in self._registry:
+            return self._registry[self.name](args, kwargs, ictx)
         raise NotImplementedError(self.name)
 
     def hasattr(self, name: Text) -> bool:

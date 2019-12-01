@@ -39,6 +39,7 @@ GUEST_BUILTIN_NAMES = (
     'iter',
     'next',
     'object',
+    'property',
     'repr',
     'reversed',
     'staticmethod',

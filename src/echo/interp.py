@@ -33,7 +33,7 @@ from echo.guest_objects import (
     GuestAsyncGenerator, ReturnKind, GuestTraceback,
     EClassMethod, NativeFunction
 )
-from echo.eproperty import EProperty
+import echo.eproperty
 from echo.guest_module import EModule
 from echo import interp_routines
 from echo.frame_objects import StatefulFrame, UnboundLocalSentinel
@@ -154,18 +154,6 @@ def _do_call_functools_partial(
     return Result(guest_partial)
 
 
-@check_result
-def _do_call_property(
-        args: Tuple[Any, ...],
-        kwargs: Optional[Dict[Text, Any]]) -> Result[Any]:
-    if kwargs:
-        raise NotImplementedError(kwargs)
-    if len(args) != 1:
-        raise NotImplementedError(args)
-    guest_property = EProperty(args[0])
-    return Result(guest_property)
-
-
 def _do_call_classmethod(
         args: Tuple[Any, ...],
         kwargs: Optional[Dict[Text, Any]]) -> Result[Any]:
@@ -240,8 +228,6 @@ def do_call(f,
     # don't need to consider it specially.
     elif f is functools.partial:
         return _do_call_functools_partial(args, kwargs)
-    elif f is property:
-        return _do_call_property(args, kwargs)
     elif f is classmethod:
         return _do_call_classmethod(args, kwargs)
     elif f is getattr:

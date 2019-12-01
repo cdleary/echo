@@ -1,8 +1,8 @@
-from typing import Text, Tuple, Any, Dict
+from typing import Text, Tuple, Any, Dict, Optional
 
 from echo.epy_object import EPyObject
 from echo.interp_result import Result, ExceptionData, check_result
-from echo.guest_objects import EFunction, EMethod, NativeFunction
+from echo.guest_objects import EFunction, EMethod, NativeFunction, EBuiltin
 from echo.interp_context import ICtx
 
 
@@ -32,3 +32,19 @@ class EProperty(EPyObject):
 
     def setattr(self, name: Text, value: Any) -> Result[None]:
         raise NotImplementedError
+
+
+@check_result
+def _do_property(
+        args: Tuple[Any, ...],
+        kwargs: Optional[Dict[Text, Any]],
+        ictx: ICtx) -> Result[Any]:
+    if kwargs:
+        raise NotImplementedError(kwargs)
+    if len(args) != 1:
+        raise NotImplementedError(args)
+    guest_property = EProperty(args[0])
+    return Result(guest_property)
+
+
+EBuiltin.register('property', _do_property)
