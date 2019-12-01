@@ -1343,34 +1343,6 @@ class NativeFunction(EPyObject):
         return self.f(*args, **kwargs)
 
 
-class EProperty(EPyObject):
-    def __init__(self, fget: EFunction):
-        self.fget = fget
-
-    def hasattr(self, name: Text):
-        return name in ('__get__', '__set__')
-
-    @check_result
-    def _get(self,
-             args: Tuple[Any, ...],
-             kwargs: Dict[Text, Any],
-             locals_dict: Dict[Text, Any],
-             ictx: ICtx) -> Result[Any]:
-        _self, obj, objtype = args
-        assert _self is self
-        return self.fget.invoke((obj,), kwargs, locals_dict, ictx)
-
-    @check_result
-    def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
-        if name == '__get__':
-            return Result(EMethod(NativeFunction(
-                self._get, 'eproperty.__get__'), bound_self=self))
-        return Result(ExceptionData(None, name, AttributeError))
-
-    def setattr(self, name: Text, value: Any) -> Result[None]:
-        raise NotImplementedError
-
-
 class EClassMethod(EPyObject):
     def __init__(self, f: EFunction):
         self.f = f

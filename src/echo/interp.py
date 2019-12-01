@@ -29,9 +29,10 @@ from echo.interpreter_state import InterpreterState
 from echo.guest_objects import (
     EFunction, EBuiltin, EPyObject,
     EPartial, EClass, ECell, EMethod, GuestGenerator,
-    GuestAsyncGenerator, ReturnKind, GuestTraceback, EProperty,
+    GuestAsyncGenerator, ReturnKind, GuestTraceback,
     EClassMethod, NativeFunction
 )
+from echo.eproperty import EProperty
 from echo.guest_module import EModule
 from echo import interp_routines
 from echo.frame_objects import StatefulFrame, UnboundLocalSentinel

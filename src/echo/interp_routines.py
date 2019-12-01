@@ -241,7 +241,7 @@ def compare(opname: Text, lhs, rhs, ictx: ICtx) -> Result[bool]:
     raise NotImplementedError(opname, lhs, rhs, type(rhs))
 
 
-def debugged(f):
+def debugged(f: Callable) -> Callable:
     @functools.wraps(f)
     def wrapper(*args, **kwargs):
         result = f(*args, **kwargs)
@@ -250,7 +250,7 @@ def debugged(f):
     return wrapper
 
 
-def _name_is_from_metaclass(cls: EClass, name: Text):
+def _name_is_from_metaclass(cls: EClass, name: Text) -> bool:
     for c in cls.get_mro():
         if not isinstance(c, EClass):
             continue
