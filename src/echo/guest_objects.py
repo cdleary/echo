@@ -80,13 +80,13 @@ class EFunction(EPyObject):
         assert self is _self
         if obj is None:
             return Result(_self)
-        return Result(GuestMethod(f=_self, bound_self=obj))
+        return Result(EMethod(f=_self, bound_self=obj))
 
     def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
         if name == '__class__':
             return Result(EFunctionType.singleton)
         if name == '__get__':
-            return Result(GuestMethod(NativeFunction(
+            return Result(EMethod(NativeFunction(
                 self._get, 'efunction.__get__'), bound_self=self))
         try:
             return Result(self.dict_[name])
@@ -107,7 +107,7 @@ class GuestCoroutine(EPyObject):
             def fake(x): pass
             guest_f = EFunction(
                 getattr(fake, '__code__'), {}, 'coroutine.close')
-            guest_m = GuestMethod(guest_f, self)
+            guest_m = EMethod(guest_f, self)
             return Result(guest_m)
         raise NotImplementedError
 
@@ -163,7 +163,7 @@ class GuestGenerator(EPyObject):
         return Result(ExceptionData(None, None, StopIteration))
 
 
-class GuestMethod(EPyObject):
+class EMethod(EPyObject):
 
     def __init__(self, f: Union[EFunction, 'NativeFunction'], bound_self):
         self.f = f
@@ -509,7 +509,7 @@ class EFunctionType(EPyObject):
         self, obj, objtype = args
         if obj is None:
             return Result(self)
-        return Result(GuestMethod(self, bound_self=obj))
+        return Result(EMethod(self, bound_self=obj))
 
     def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
         if name in ('__code__', '__globals__'):
@@ -1363,7 +1363,7 @@ class GuestProperty(EPyObject):
     @check_result
     def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
         if name == '__get__':
-            return Result(GuestMethod(NativeFunction(
+            return Result(EMethod(NativeFunction(
                 self._get, 'eproperty.__get__'), bound_self=self))
         return Result(ExceptionData(None, name, AttributeError))
 
@@ -1395,12 +1395,12 @@ class EClassMethod(EPyObject):
         assert _self is self
         if obj is not None:
             objtype = do_type(args=(obj,))
-        return Result(GuestMethod(self.f, bound_self=objtype))
+        return Result(EMethod(self.f, bound_self=objtype))
 
     @check_result
     def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
         if name == '__get__':
-            return Result(GuestMethod(NativeFunction(
+            return Result(EMethod(NativeFunction(
                 self._get, 'eclassmethod.__get__'), bound_self=self))
         if name == '__func__':
             return Result(self.f)

@@ -12,7 +12,7 @@ from echo.interp_result import Result, check_result, ExceptionData
 from echo.interpreter_state import InterpreterState
 from echo.guest_objects import (
     EInstance, EBuiltin, EFunction, EClass,
-    get_guest_builtin, EPyObject, EClassMethod, GuestMethod
+    get_guest_builtin, EPyObject, EClassMethod, EMethod,
 )
 from echo.guest_module import GuestModule
 from echo.value import Value
@@ -232,7 +232,7 @@ def compare(opname: Text, lhs, rhs, ictx: ICtx) -> Result[bool]:
             and not isinstance(rhs, EPyObject)):
         return Result(COMPARE_OPS[opname](lhs, rhs))
 
-    if (opname == '!=' and isinstance(lhs, GuestMethod)
+    if (opname == '!=' and isinstance(lhs, EMethod)
             and not isinstance(rhs, EPyObject)):
         return Result(True)
 

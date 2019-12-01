@@ -28,7 +28,7 @@ from echo import code_attributes
 from echo.interpreter_state import InterpreterState
 from echo.guest_objects import (
     EFunction, EBuiltin, EPyObject,
-    GuestPartial, EClass, ECell, GuestMethod, GuestGenerator,
+    GuestPartial, EClass, ECell, EMethod, GuestGenerator,
     GuestAsyncGenerator, ReturnKind, GuestTraceback, GuestProperty,
     EClassMethod, NativeFunction
 )
@@ -226,7 +226,7 @@ def do_call(f,
         return Result((exc, p, t))
     if f is globals:
         return Result(globals_)
-    elif isinstance(f, (EFunction, GuestMethod, EClassMethod,
+    elif isinstance(f, (EFunction, EMethod, EClassMethod,
                         NativeFunction)):
         return f.invoke(args, kwargs, locals_dict, ictx)
     elif isinstance(f, (types.MethodType, types.FunctionType)):
