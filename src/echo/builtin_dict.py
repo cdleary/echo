@@ -3,7 +3,7 @@ from typing import Text, Tuple, Any, Dict, Optional
 from echo.elog import log
 from echo.epy_object import EPyObject
 from echo.interp_result import Result, ExceptionData, check_result
-from echo.guest_objects import (
+from echo.eobjects import (
     EFunction, EMethod, NativeFunction, EBuiltin, EClass, EInstance,
     register_builtin, _is_dict_builtin, get_guest_builtin,
 )

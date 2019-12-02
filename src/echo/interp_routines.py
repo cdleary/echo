@@ -11,7 +11,7 @@ from echo.interp_context import ICtx
 from echo.interp_result import Result, check_result, ExceptionData
 from echo.epy_object import AttrWhere
 from echo.interpreter_state import InterpreterState
-from echo.guest_objects import (
+from echo.eobjects import (
     EInstance, EBuiltin, EFunction, EClass,
     EPyObject, EMethod,
     get_guest_builtin,

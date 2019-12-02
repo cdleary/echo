@@ -13,7 +13,7 @@ from enum import Enum
 from echo.elog import log
 from echo.interp_context import ICtx
 from echo import import_routines
-from echo.guest_objects import (
+from echo.eobjects import (
     ReturnKind, EBuiltin, EFunction, EPyObject,
     GuestCoroutine, EInstance, get_guest_builtin,
     do_getitem, do_setitem, do_type, do_hasattr,

@@ -2,11 +2,11 @@ from typing import Text, Tuple, Any, Dict, Optional
 
 from echo.epy_object import EPyObject
 from echo.interp_result import Result, ExceptionData, check_result
-from echo.guest_objects import (
-    EFunction, EMethod, NativeFunction, EBuiltin, do_setitem, do_type,
+from echo.eobjects import (
+    EFunction, EClass, EMethod, NativeFunction, EBuiltin,
+    do_setitem, do_type,
 )
 from echo.interp_context import ICtx
-from echo.guest_objects import EClass
 from echo.elog import log
 
 

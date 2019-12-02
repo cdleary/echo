@@ -2,7 +2,7 @@ from typing import Text, Tuple, Any, Dict, Optional
 
 from echo.epy_object import EPyObject, AttrWhere
 from echo.interp_result import Result, ExceptionData, check_result
-from echo.guest_objects import EFunction, EMethod, NativeFunction, EBuiltin
+from echo.eobjects import EFunction, EMethod, NativeFunction, EBuiltin
 from echo.interp_context import ICtx
 
 

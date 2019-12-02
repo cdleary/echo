@@ -1,4 +1,4 @@
-from echo.guest_objects import EClass
+from echo.eobjects import EClass
 
 
 def test_subtype():
