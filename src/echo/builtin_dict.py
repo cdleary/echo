@@ -88,14 +88,25 @@ def _do_dict_update(
     return Result(None)
 
 
+@register_builtin('dict.__getitem__')
+@check_result
+def _do_dict_getitem(
+        args: Tuple[Any, ...],
+        kwargs: Dict[Text, Any],
+        ictx: ICtx) -> Result[None]:
+    lhs, rhs = args
+    d = _resolve(lhs)
+    return Result(d.__getitem__(rhs))
+
+
 @register_builtin('dict.setdefault')
 @check_result
 def _do_dict_setdefault(
         args: Tuple[Any, ...],
         kwargs: Dict[Text, Any],
         ictx: ICtx) -> Result[None]:
-    assert isinstance(args[0], dict), args
-    r = args[0].setdefault(*args[1:], **kwargs)
+    d = _resolve(args[0])
+    r = d.setdefault(*args[1:], **kwargs)
     return Result(r)
 
 

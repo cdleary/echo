@@ -1157,9 +1157,11 @@ class EBuiltin(EPyObject):
     def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
         if name in self.dict:
             return AttrWhere.SELF_DICT
-        if self.name == 'dict' and name in ('update', 'setdefault'):
+        if self.name == 'dict' and name in (
+                'update', 'setdefault', '__eq__', '__getitem__'):
             return AttrWhere.SELF_SPECIAL
-        if (self.name in ('dict.update', 'dict.setdefault', 'dict.__eq__')
+        if (self.name in ('dict.update', 'dict.setdefault', 'dict.__eq__',
+                          'dict.__getitem__')
                 and name == '__get__'):
             return AttrWhere.CLS
         if (self.name in ('object', 'type', 'dict')
@@ -1199,6 +1201,8 @@ class EBuiltin(EPyObject):
                 return Result(get_guest_builtin('dict.__init__'))
             if name == '__eq__':
                 return Result(get_guest_builtin('dict.__eq__'))
+            if name == '__getitem__':
+                return Result(get_guest_builtin('dict.__getitem__'))
             if name == 'update':
                 return Result(get_guest_builtin('dict.update'))
             if name == '__dict__':
