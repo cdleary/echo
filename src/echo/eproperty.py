@@ -1,6 +1,6 @@
 from typing import Text, Tuple, Any, Dict, Optional
 
-from echo.epy_object import EPyObject
+from echo.epy_object import EPyObject, AttrWhere
 from echo.interp_result import Result, ExceptionData, check_result
 from echo.guest_objects import EFunction, EMethod, NativeFunction, EBuiltin
 from echo.interp_context import ICtx
@@ -10,8 +10,10 @@ class EProperty(EPyObject):
     def __init__(self, fget: EFunction):
         self.fget = fget
 
-    def hasattr(self, name: Text) -> bool:
-        return name in ('__get__', '__set__')
+    def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
+        if name in ('__get__', '__set__'):
+            return AttrWhere.SELF_SPECIAL
+        return None
 
     @check_result
     def _get(self,

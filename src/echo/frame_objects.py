@@ -16,7 +16,7 @@ from echo import import_routines
 from echo.guest_objects import (
     ReturnKind, EBuiltin, EFunction, EPyObject,
     GuestCoroutine, EInstance, get_guest_builtin,
-    do_getitem, do_setitem, do_type,
+    do_getitem, do_setitem, do_type, do_hasattr,
 )
 from echo.ecell import ECell
 from echo.guest_module import EModule
@@ -541,29 +541,25 @@ class StatefulFrame:
             return Result(ExceptionData(
                 None, None, NameError(msg)))
 
-    def _run_LOAD_ATTR(self, arg, argval):
+    def _run_LOAD_ATTR(self, arg, argval) -> Result[Any]:
         obj = self._pop()
         log('bc:la', f'obj {obj!r} attr {argval}')
-        for type_, methods in GUEST_BUILTINS.items():
-            if isinstance(obj, type_) and argval in methods:
-                return Result(EBuiltin(
-                    '{}.{}'.format(type_.__name__, argval), bound_self=obj))
-        if (isinstance(obj, EBuiltin) and obj.name == 'type'
-                and argval == '__dict__'):
-            return Result(type.__dict__)
-        elif isinstance(obj, EInstance):
-            return obj.getattr(argval, self.ictx)
+        if isinstance(obj, EInstance):
+            r = obj.getattr(argval, self.ictx)
         elif isinstance(obj, EPyObject):
-            return obj.getattr(argval, self.ictx)
+            r = obj.getattr(argval, self.ictx)
         elif obj is sys and argval == 'path':
-            return Result(self.interp_state.paths)
+            r = Result(self.interp_state.paths)
         elif obj is sys and argval == 'modules':
-            return Result(self.interp_state.sys_modules)
+            r = Result(self.interp_state.sys_modules)
         else:
             try:
-                return Result(getattr(obj, argval))
+                r = Result(getattr(obj, argval))
             except AttributeError as e:
-                return Result(ExceptionData(None, None, e))
+                r = Result(ExceptionData(None, None, e))
+        if not r.is_exception():
+            assert do_hasattr((obj, argval)).get_value() is True, (obj, argval)
+        return r
 
     def _run_COMPARE_OP(self, arg, argval):
         rhs = self._pop()
@@ -685,11 +681,11 @@ class StatefulFrame:
         attr_result = self._run_LOAD_ATTR(arg, argval)
         if attr_result.is_exception():
             return attr_result
-        log('bc:lm', f'LOAD_ATTR {attr_result}')
+        log('bc:lm', f'LOAD_ATTR obj {obj} argval {argval} => {attr_result}')
         self._push(attr_result.get_value())
         if (desc_count_before == self.ictx.desc_count
                 and interp_routines.method_requires_self(
-                    obj, argval, attr_result.get_value())):
+                    obj=obj, name=argval, value=attr_result.get_value())):
             self._push(obj)
         else:
             self._push(UnboundLocalSentinel)

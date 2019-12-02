@@ -6,13 +6,16 @@ import types
 from typing import Text, Any, Union, Dict, Callable
 import weakref
 
-from echo.elog import log
+from echo.elog import log, debugged
 from echo.interp_context import ICtx
 from echo.interp_result import Result, check_result, ExceptionData
+from echo.epy_object import AttrWhere
 from echo.interpreter_state import InterpreterState
 from echo.guest_objects import (
     EInstance, EBuiltin, EFunction, EClass,
-    get_guest_builtin, EPyObject, EMethod,
+    EPyObject, EMethod,
+    get_guest_builtin,
+    do_hasattr,
 )
 from echo.guest_module import EModule
 from echo.value import Value
@@ -243,15 +246,6 @@ def compare(opname: Text, lhs, rhs, ictx: ICtx) -> Result[bool]:
     raise NotImplementedError(opname, lhs, rhs, type(rhs))
 
 
-def debugged(f: Callable) -> Callable:
-    @functools.wraps(f)
-    def wrapper(*args, **kwargs):
-        result = f(*args, **kwargs)
-        print(f.__name__, 'args:', args, 'kwargs:', kwargs, '=>', result)
-        return result
-    return wrapper
-
-
 def _name_is_from_metaclass(cls: EClass, name: Text) -> bool:
     for c in cls.get_mro():
         if not isinstance(c, EClass):
@@ -263,19 +257,17 @@ def _name_is_from_metaclass(cls: EClass, name: Text) -> bool:
     return False
 
 
+@debugged('ir:mrs')
 def method_requires_self(obj: Any, name: Text, value: Any) -> bool:
-    obj_is_module = isinstance(obj, EModule)
-    if isinstance(value, EBuiltin) and value.bound_self is None:
-        return not obj_is_module
-    if isinstance(value, types.MethodType):
-        return False
-    if isinstance(value, EFunction):
-        if isinstance(obj, EClass):
-            return _name_is_from_metaclass(obj, name)
-        if isinstance(obj, EInstance):
-            return value not in obj.dict_.values()
-        return not obj_is_module
-    return False
+    if isinstance(obj, EPyObject):
+        where = obj.hasattr_where(name)
+        log('ir:mrs', f'attr {name} on {obj} is {where} (value {value})')
+        assert where is not None
+        return where == AttrWhere.CLS and not isinstance(value, EMethod)
+
+    return (
+        hasattr(type(obj), name)
+        and not isinstance(value, (types.BuiltinMethodType, types.MethodType)))
 
 
 def cprint(msg, color, file=sys.stderr, end='\n') -> None:

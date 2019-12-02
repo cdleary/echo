@@ -1,5 +1,7 @@
 d = {}
-d.update(x=4, y='str')
+assert d.update.__self__ == d
+f = d.update
+f(x=4, y='str')
 assert 'x' in d
 assert 'y' in d
 assert d['x'] == 4

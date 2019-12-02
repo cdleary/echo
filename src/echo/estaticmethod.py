@@ -1,6 +1,6 @@
 from typing import Text, Tuple, Any, Dict, Optional
 
-from echo.epy_object import EPyObject
+from echo.epy_object import EPyObject, AttrWhere
 from echo.interp_result import Result, ExceptionData, check_result
 from echo.guest_objects import (
     EFunction, EMethod, NativeFunction, EBuiltin, do_type,
@@ -19,8 +19,14 @@ class EStaticMethod(EPyObject):
     def invoke(self, *args, **kwargs) -> Result[Any]:
         return self.f.invoke(*args, **kwargs)
 
-    def hasattr(self, name: Text) -> bool:
-        return name in self.dict_ or name == '__get__'
+    def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
+        if name in self.dict_:
+            return AttrWhere.SELF_DICT
+        if name == '__func__':
+            return AttrWhere.SELF_SPECIAL
+        if name == '__get__':
+            return AttrWhere.CLS
+        return None
 
     @check_result
     def _get(self,

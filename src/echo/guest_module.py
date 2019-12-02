@@ -1,7 +1,7 @@
-from typing import Text, Iterable, Dict, Any
+from typing import Text, Iterable, Dict, Any, Optional
 
 from echo.interp_context import ICtx
-from echo.epy_object import EPyObject
+from echo.epy_object import EPyObject, AttrWhere
 from echo.interp_result import Result, ExceptionData
 
 
@@ -19,6 +19,13 @@ class EModule(EPyObject):
 
     def keys(self) -> Iterable[Text]:
         return self.globals_.keys()
+
+    def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
+        if name == '__dict__':
+            return AttrWhere.SELF_SPECIAL
+        if name in self.globals_:
+            return AttrWhere.SELF_SPECIAL
+        return None
 
     def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
         if name == '__dict__':

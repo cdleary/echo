@@ -29,7 +29,7 @@ from echo.interpreter_state import InterpreterState
 from echo.ecell import ECell
 from echo.guest_objects import (
     EFunction, EBuiltin, EPyObject,
-    EPartial, EClass, EMethod, GuestGenerator,
+    EPartial, EClass, EMethod, EGenerator,
     GuestAsyncGenerator, ReturnKind, GuestTraceback,
     NativeFunction
 )
@@ -43,6 +43,7 @@ from echo.eclassmethod import EClassMethod
 from echo.guest_module import EModule
 import echo.eproperty
 import echo.builtin_build_class
+import echo.builtin_dict
 
 
 @check_result
@@ -133,7 +134,7 @@ def interp(code: types.CodeType,
                       locals_dict, globals_, cellvars, in_function, ictx)
 
     if attrs.generator:
-        return Result(GuestGenerator(f))
+        return Result(EGenerator(f))
 
     if attrs.async_generator:
         return Result(GuestAsyncGenerator(f))
