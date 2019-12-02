@@ -184,17 +184,8 @@ def compare(opname: Text, lhs, rhs, ictx: ICtx) -> Result[bool]:
         return Result(True)
 
     if isinstance(lhs, dict) and isinstance(rhs, dict):
-        if len(lhs) != len(rhs):
-            return Result(False)
-        for k in set(lhs.keys()) | set(rhs.keys()):
-            if k not in lhs or k not in rhs:
-                return Result(False)
-            e_result = compare(opname, lhs[k], rhs[k], ictx)
-            if e_result.is_exception():
-                return e_result
-            if not e_result.get_value():
-                return Result(False)
-        return Result(True)
+        f = get_guest_builtin('dict.__eq__')
+        return f.invoke((lhs, rhs), {}, {}, ictx)
 
     if opname in ('in', 'not in') and type(rhs) in (
             tuple, list, dict, set, frozenset, type(os.environ),
@@ -215,7 +206,9 @@ def compare(opname: Text, lhs, rhs, ictx: ICtx) -> Result[bool]:
         special_f = lhs.getattr(COMPARE_TO_SPECIAL[opname], ictx)
         if special_f.is_exception():
             return Result(special_f.get_exception())
-        return special_f.get_value().invoke((rhs,), {}, {}, ictx)
+        f = special_f.get_value()
+        log('ir:cmp', f'special function for {opname!r}: {special_f}')
+        return f.invoke((rhs,), {}, {}, ictx)
 
     def is_set_of_strings(x: Any) -> bool:
         return isinstance(x, set) and all(isinstance(e, str) for e in x)

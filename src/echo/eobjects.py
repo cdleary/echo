@@ -265,10 +265,13 @@ def _invoke_desc(self, cls_attr, ictx: ICtx) -> Result[Any]:
 
 class EInstance(EPyObject):
 
+    builtin_storage: Dict[type, Any]
+
     def __init__(self, cls: Union['EClass', 'EBuiltin']):
         assert isinstance(cls, (EClass, EBuiltin)), cls
         self.cls = cls
         self.dict_ = {}
+        self.builtin_storage = {}
 
     def __repr__(self) -> Text:
         return '<{} eobject>'.format(self.cls.name)
@@ -317,6 +320,7 @@ class EInstance(EPyObject):
             if name == '__dict__':
                 return Result(self.dict_)
 
+        log('eo:ei', f'cls_attr: {cls_attr}')
         if isinstance(cls_attr, EPyObject) and cls_attr.hasattr('__get__'):
             log('gi:ga', f'non-overriding descriptor: {cls_attr}')
             return _invoke_desc(self, cls_attr, ictx)
@@ -1155,7 +1159,7 @@ class EBuiltin(EPyObject):
             return AttrWhere.SELF_DICT
         if self.name == 'dict' and name in ('update', 'setdefault'):
             return AttrWhere.SELF_SPECIAL
-        if (self.name in ('dict.update', 'dict.setdefault')
+        if (self.name in ('dict.update', 'dict.setdefault', 'dict.__eq__')
                 and name == '__get__'):
             return AttrWhere.CLS
         if (self.name in ('object', 'type', 'dict')
@@ -1171,18 +1175,30 @@ class EBuiltin(EPyObject):
             return AttrWhere.CLS
         return None
 
+    @debugged('eo:ebi')
+    def _get(self,
+             args: Tuple[Any, ...],
+             kwargs: Dict[Text, Any],
+             locals_dict: Dict[Text, Any],
+             ictx: ICtx) -> Result[Any]:
+        assert len(args) == 3, args
+        _self, obj, objtype = args
+        assert self is _self
+        if obj is None:
+            return Result(_self)
+        return Result(EMethod(f=_self, bound_self=obj))
+
     def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
         if name == '__self__' and self.bound_self is not None:
             return Result(self.bound_self)
-        if name == '__eq__':
-            return Result(get_guest_builtin('object.__eq__'))
-        if name == '__ne__':
-            return Result(get_guest_builtin('object.__ne__'))
+
         if self.name == 'dict':
             if name == '__new__':
                 return Result(get_guest_builtin('dict.__new__'))
             if name == '__init__':
                 return Result(get_guest_builtin('dict.__init__'))
+            if name == '__eq__':
+                return Result(get_guest_builtin('dict.__eq__'))
             if name == 'update':
                 return Result(get_guest_builtin('dict.update'))
             if name == '__dict__':
@@ -1191,6 +1207,11 @@ class EBuiltin(EPyObject):
                 })
             if name == 'setdefault':
                 return Result(get_guest_builtin('dict.setdefault'))
+
+        if self.name in ('dict.update', 'dict.__eq__') and name == '__get__':
+            return Result(EMethod(NativeFunction(
+                self._get, 'ebuiltin.__get__'), bound_self=self))
+
         if self.name == 'object':
             if name == '__new__':
                 return Result(get_guest_builtin('object.__new__'))
@@ -1217,6 +1238,12 @@ class EBuiltin(EPyObject):
                 return Result(get_guest_builtin('type.__subclasses__'))
             if name == '__dict__':  # Fake it for now.
                 return Result({})
+
+        if name == '__eq__':
+            return Result(get_guest_builtin('object.__eq__'))
+        if name == '__ne__':
+            return Result(get_guest_builtin('object.__ne__'))
+
         raise NotImplementedError(self, name)
 
     def setattr(self, name: Text, value: Any) -> Any:
@@ -1246,7 +1273,7 @@ class EPartial:
 
 class NativeFunction(EPyObject):
 
-    def __init__(self, f: Callable, name: Text):
+    def __init__(self, f: Callable[..., Result], name: Text):
         self.f = f
         self.name = name
 

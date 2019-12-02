@@ -3,6 +3,7 @@ from typing import Text, Tuple, Any, Dict, Optional
 from echo.elog import log
 from echo.epy_object import EPyObject
 from echo.interp_result import Result, ExceptionData, check_result
+from echo import interp_routines
 from echo.eobjects import (
     EFunction, EMethod, NativeFunction, EBuiltin, EClass, EInstance,
     register_builtin, _is_dict_builtin, get_guest_builtin,
@@ -18,10 +19,44 @@ def _do_dict_new(
         ictx: ICtx) -> Result[Any]:
     assert len(args) == 1 and not kwargs, (args, kwargs)
     if isinstance(args[0], EClass):
-        return Result(EInstance(args[0]))
+        inst = EInstance(args[0])
+        inst.builtin_storage[dict] = {}
+        return Result(inst)
     if _is_dict_builtin(args[0]):
         return Result({})
     raise NotImplementedError(args, kwargs)
+
+
+def _resolve(x: Any) -> Dict:
+    if isinstance(x, EInstance):
+        return x.builtin_storage[dict]
+    if isinstance(x, dict):
+        return x
+    # Raise type error.
+    raise NotImplementedError(x)
+
+
+@register_builtin('dict.__eq__')
+@check_result
+def _do_dict_eq(
+        args: Tuple[Any, ...],
+        kwargs: Dict[Text, Any],
+        ictx: ICtx) -> Result[Any]:
+    assert len(args) == 2 and not kwargs, (args, kwargs)
+    lhs, rhs = args
+    lhs = _resolve(lhs)
+    rhs = _resolve(rhs)
+    if len(lhs) != len(rhs):
+        return Result(False)
+    for k in set(lhs.keys()) | set(rhs.keys()):
+        if k not in lhs or k not in rhs:
+            return Result(False)
+        e_result = interp_routines.compare('==', lhs[k], rhs[k], ictx)
+        if e_result.is_exception():
+            return e_result
+        if not e_result.get_value():
+            return Result(False)
+    return Result(True)
 
 
 @register_builtin('dict')
@@ -43,8 +78,12 @@ def _do_dict_update(
         kwargs: Dict[Text, Any],
         ictx: ICtx) -> Result[None]:
     log('go:dict.update', f'args: {args} kwargs: {kwargs}')
-    assert isinstance(args[0], dict), args
-    args[0].update(*args[1:], **kwargs)
+    if isinstance(args[0], EInstance):
+        d = args[0].builtin_storage[dict]
+    else:
+        assert isinstance(args[0], dict), args
+        d = args[0]
+    d.update(*args[1:], **kwargs)
     log('go:dict.update', f'd after: {args[0]}')
     return Result(None)
 
