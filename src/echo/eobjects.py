@@ -748,11 +748,6 @@ def _do_getattr(args: Tuple[Any, ...],
     assert not kwargs, kwargs
     o, attr, *default = args
     if not isinstance(o, EPyObject):
-        if o is dict:
-            if attr == '__new__':
-                return Result(get_guest_builtin('dict.__new__'))
-            if attr == '__instancecheck__':
-                return Result(get_guest_builtin('dict.__instancecheck__'))
         return Result(getattr(o, attr, *default))
     if default and not o.hasattr(attr):
         return Result(default[0])
