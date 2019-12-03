@@ -18,7 +18,7 @@ class EClassMethod(EPyObject):
         return '<eclassmethod object at {:#x}>'.format(id(self))
 
     def get_type(self) -> EPyObject:
-        raise get_guest_builtin('classmethod')
+        return get_guest_builtin('classmethod')
 
     def invoke(self, *args, **kwargs) -> Result[Any]:
         return self.f.invoke(*args, **kwargs)

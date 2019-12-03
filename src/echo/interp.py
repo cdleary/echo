@@ -29,8 +29,8 @@ from echo.interpreter_state import InterpreterState
 from echo.ecell import ECell
 from echo.eobjects import (
     EFunction, EBuiltin, EPyObject,
-    EPartial, EClass, EMethod, EGenerator,
-    GuestAsyncGenerator, ReturnKind, GuestTraceback,
+    EPartial, EClass, EMethod,
+    EAsyncGenerator, ReturnKind,
     NativeFunction
 )
 from echo import interp_routines
@@ -40,7 +40,9 @@ from echo.value import Value
 # These register builtins.
 from echo.estaticmethod import EStaticMethod
 from echo.eclassmethod import EClassMethod
+from echo.egenerator import EGenerator
 from echo.guest_module import EModule
+from echo.etraceback import ETraceback
 import echo.emap
 import echo.eproperty
 import echo.builtin_build_class
@@ -139,7 +141,7 @@ def interp(code: types.CodeType,
         return Result(EGenerator(f))
 
     if attrs.async_generator:
-        return Result(GuestAsyncGenerator(f))
+        return Result(EAsyncGenerator(f))
 
     result = f.run_to_return_or_yield()
     if result.is_exception():
@@ -191,7 +193,7 @@ def do_call(f,
             return Result(None)
         tb, p, exc = (exception_data.traceback, exception_data.parameter,
                       exception_data.exception)
-        t = GuestTraceback(tuple(tb))
+        t = ETraceback(tuple(tb))
         return Result((exc, p, t))
     if f is globals:
         return Result(globals_)

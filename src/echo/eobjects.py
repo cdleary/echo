@@ -8,9 +8,9 @@ import types
 from typing import (
     Text, Any, Dict, Iterable, Tuple, Optional, Set, Callable, Union,
 )
-from enum import Enum
 import weakref
 
+from echo.return_kind import ReturnKind
 from echo.epy_object import EPyObject, AttrWhere
 from echo.elog import log, debugged
 from echo.interpreter_state import InterpreterState
@@ -19,11 +19,6 @@ from echo.code_attributes import CodeAttributes
 from echo.interp_result import Result, ExceptionData, check_result
 from echo.value import Value
 from echo.common import memoize
-
-
-class ReturnKind(Enum):
-    RETURN = 'return'
-    YIELD = 'yield'
 
 
 class EFunction(EPyObject):
@@ -113,7 +108,7 @@ class GuestCoroutine(EPyObject):
         self.f = f
 
     def get_type(self) -> EPyObject:
-        raise NotImplementedError
+        return GuestCoroutineType.singleton
 
     def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
         if name == 'close':
@@ -133,12 +128,32 @@ class GuestCoroutine(EPyObject):
         raise NotImplementedError
 
 
-class GuestAsyncGenerator(EPyObject):
+class EAsyncGeneratorType(EPyObject):
+    def __repr__(self) -> Text:
+        return "<eclass 'async_generator'>"
+
+    def get_type(self) -> EPyObject:
+        return get_guest_builtin('type')
+
+    def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
+        raise NotImplementedError
+
+    def setattr(self, name: Text, value: Any) -> Any:
+        raise NotImplementedError
+
+    def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
+        return None
+
+
+EAsyncGeneratorType.singleton = EAsyncGeneratorType()
+
+
+class EAsyncGenerator(EPyObject):
     def __init__(self, f):
         self.f = f
 
     def get_type(self) -> EPyObject:
-        raise NotImplementedError
+        return EAsyncGeneratorType.singleton
 
     def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
         return None
@@ -150,55 +165,24 @@ class GuestAsyncGenerator(EPyObject):
         raise NotImplementedError
 
 
-class GuestTraceback(EPyObject):
-    def __init__(self, data: Tuple[Text, ...]):
-        self.data = data
+class EMethodType(EPyObject):
+    def __repr__(self) -> Text:
+        return "<eclass 'method'>"
 
     def get_type(self) -> EPyObject:
+        return get_guest_builtin('type')
+
+    def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
+        raise NotImplementedError
+
+    def setattr(self, name: Text, value: Any) -> Any:
         raise NotImplementedError
 
     def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
-        if name == 'tb_frame':
-            return AttrWhere.SELF_SPECIAL
         return None
 
-    def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
-        if name == 'tb_frame':
-            return Result(None)
-        raise NotImplementedError
 
-    def setattr(self, name: Text, value: Any) -> Any:
-        raise NotImplementedError
-
-
-class EGenerator(EPyObject):
-    def __init__(self, f):
-        self.f = f
-
-    def get_type(self) -> EPyObject:
-        raise NotImplementedError
-
-    def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
-        raise NotImplementedError
-
-    def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
-        raise NotImplementedError
-
-    def setattr(self, name: Text, value: Any) -> Any:
-        raise NotImplementedError
-
-    def next(self) -> Result[Value]:
-        result = self.f.run_to_return_or_yield()
-        if result.is_exception():
-            return Result(result.get_exception())
-
-        v, return_kind = result.get_value()
-        assert isinstance(v, Value), v
-        if return_kind == ReturnKind.YIELD:
-            return Result(v.wrapped)
-
-        assert v.wrapped is None, v
-        return Result(ExceptionData(None, None, StopIteration))
+EMethodType.singleton = EMethodType()
 
 
 class EMethod(EPyObject):
@@ -212,7 +196,7 @@ class EMethod(EPyObject):
             self.f.name, self.bound_self)
 
     def get_type(self) -> EPyObject:
-        raise NotImplementedError
+        return EMethodType.singleton
 
     @property
     def code(self): return self.f.code
@@ -620,6 +604,9 @@ class GuestCoroutineType(EPyObject):
         raise NotImplementedError(name, value)
 
 
+GuestCoroutineType.singleton = GuestCoroutineType()
+
+
 def _is_type_builtin(x) -> bool:
     return isinstance(x, EBuiltin) and x.name == 'type'
 
@@ -640,6 +627,7 @@ def _is_str_builtin(x) -> bool:
     return isinstance(x, EBuiltin) and x.name == 'str'
 
 
+@check_result
 def _do_isinstance(
         args: Tuple[Any, ...],
         ictx: ICtx) -> Result[bool]:
@@ -681,18 +669,21 @@ def _do_isinstance(
     if _is_list_builtin(args[1]):
         return Result(isinstance(args[0], list))
 
-    if args[0] is None:
-        return Result(args[1] is type(None))  # noqa
-
     if _is_object_builtin(args[1]):
         return Result(True)  # Everything is an object.
+
+    if args[0] is None:
+        return Result(args[1] is type(None))  # noqa
 
     if (not isinstance(args[0], EPyObject)
             and isinstance(args[1], EClass)):
         return Result(type(args[0]) in args[1].get_mro())
 
-    if isinstance(args[0], EPyObject) and isinstance(args[1], EClass):
-        return Result(args[0].get_type() in args[1].get_mro())
+    if isinstance(args[0], EPyObject):
+        if isinstance(args[1], EClass):
+            return Result(args[0].get_type() in args[1].get_mro())
+        if args[0].get_type() == args[1]:
+            return Result(True)
 
     raise NotImplementedError(args)
 
@@ -746,7 +737,6 @@ def _do_issubclass(
 def _do_next(args: Tuple[Any, ...]) -> Result[Any]:
     assert len(args) == 1, args
     g = args[0]
-    assert isinstance(g, EGenerator), g
     return g.next()
 
 
@@ -1069,7 +1059,7 @@ class EBuiltin(EPyObject):
         return o in cls._registry.values()
 
     @classmethod
-    def get_type(cls, name: Text) -> type:
+    def get_ebuiltin_type(cls, name: Text) -> type:
         t = cls._registry[name][1]
         assert t is not None
         return t
@@ -1087,6 +1077,17 @@ class EBuiltin(EPyObject):
             return "<eclass 'super'>"
         return 'EBuiltin(name={!r}, bound_self={!r}, ...)'.format(
             self.name, self.bound_self)
+
+    def get_type(self) -> EPyObject:
+        if self.name in ('object.__init__', 'object.__str__', 'dict.__eq__',
+                         'dict.fromkeys', 'dict.update'):
+            if self.bound_self:
+                return EMethodType.singleton
+            else:
+                return EFunctionType.singleton
+        if self.name in ('type', 'dict'):
+            return get_guest_builtin('type')
+        raise NotImplementedError(self)
 
     def get_mro(self) -> Tuple['EPyObject', ...]:
         if self.name == 'object':
@@ -1366,22 +1367,8 @@ def do_type(args: Tuple[Any, ...], kwargs: Dict[Text, Any]) -> Result[Any]:
     assert not kwargs, kwargs
     log('go:type()', f'args: {args}')
     if len(args) == 1:
-        if isinstance(args[0], (EInstance, ESuper)):
+        if isinstance(args[0], EPyObject):
             return Result(args[0].get_type())
-        if isinstance(args[0], EClass):
-            return Result(args[0].metaclass or get_guest_builtin('type'))
-        if isinstance(args[0], EFunction):
-            return Result(EFunctionType.singleton)
-        if isinstance(args[0], EFunctionType):
-            return Result(get_guest_builtin('type'))
-        if isinstance(args[0], GuestCoroutine):
-            return Result(GuestCoroutineType())
-        if isinstance(args[0], EBuiltin.get_type('classmethod')):
-            return Result(get_guest_builtin('classmethod'))
-        if isinstance(args[0], EBuiltin.get_type('staticmethod')):
-            return Result(get_guest_builtin('staticmethod'))
-        if _is_type_builtin(args[0]):
-            return Result(args[0])
         res = type(args[0])
         if res is object:
             return Result(get_guest_builtin('object'))

@@ -14,7 +14,7 @@ class EProperty(EPyObject):
         self.fget = fget
 
     def get_type(self) -> EPyObject:
-        raise get_guest_builtin('property')
+        return get_guest_builtin('property')
 
     def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
         if name in ('__get__', '__set__'):

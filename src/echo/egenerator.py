@@ -1,0 +1,61 @@
+from typing import Text, Tuple, Any, Dict, Optional
+
+from echo.epy_object import EPyObject, AttrWhere
+from echo.interp_result import Result, ExceptionData, check_result
+from echo.eobjects import (
+    EFunction, EMethod, NativeFunction, EBuiltin,
+    get_guest_builtin,
+)
+from echo.return_kind import ReturnKind
+from echo.interp_context import ICtx
+from echo.value import Value
+
+
+class EGeneratorType(EPyObject):
+    def __repr__(self) -> Text:
+        return "<eclass 'generator'>"
+
+    def get_type(self) -> EPyObject:
+        return get_guest_builtin('type')
+
+    def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
+        raise NotImplementedError
+
+    def setattr(self, name: Text, value: Any) -> Any:
+        raise NotImplementedError
+
+    def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
+        return None
+
+
+EGeneratorType.singleton = EGeneratorType()
+
+
+class EGenerator(EPyObject):
+    def __init__(self, f):
+        self.f = f
+
+    def get_type(self) -> EPyObject:
+        return EGeneratorType.singleton
+
+    def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
+        raise NotImplementedError
+
+    def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
+        raise NotImplementedError
+
+    def setattr(self, name: Text, value: Any) -> Any:
+        raise NotImplementedError
+
+    def next(self) -> Result[Value]:
+        result = self.f.run_to_return_or_yield()
+        if result.is_exception():
+            return Result(result.get_exception())
+
+        v, return_kind = result.get_value()
+        assert isinstance(v, Value), v
+        if return_kind == ReturnKind.YIELD:
+            return Result(v.wrapped)
+
+        assert v.wrapped is None, v
+        return Result(ExceptionData(None, None, StopIteration()))

@@ -16,3 +16,6 @@ assert issubclass(type, object)
 
 # object has no bases
 assert not object.__bases__
+
+# None is an object.
+assert isinstance(None, object)

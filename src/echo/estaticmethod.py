@@ -18,7 +18,7 @@ class EStaticMethod(EPyObject):
         return '<estaticmethod object at {:#x}>'.format(id(self))
 
     def get_type(self) -> EPyObject:
-        raise get_guest_builtin('staticmethod')
+        return get_guest_builtin('staticmethod')
 
     def invoke(self, *args, **kwargs) -> Result[Any]:
         return self.f.invoke(*args, **kwargs)
