@@ -9,27 +9,16 @@ from echo.eobjects import (
 from echo.interp_context import ICtx
 
 
-class EProperty(EPyObject):
-    def __init__(self, fget: EFunction):
-        self.fget = fget
+class EMap(EPyObject):
+    def __init__(self, f: EFunction, it):
+        self.f = f
+        self.it = it
 
     def get_type(self) -> EPyObject:
-        raise get_guest_builtin('property')
+        return get_guest_builtin('map')
 
     def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
-        if name in ('__get__', '__set__'):
-            return AttrWhere.SELF_SPECIAL
         return None
-
-    @check_result
-    def _get(self,
-             args: Tuple[Any, ...],
-             kwargs: Dict[Text, Any],
-             locals_dict: Dict[Text, Any],
-             ictx: ICtx) -> Result[Any]:
-        _self, obj, objtype = args
-        assert _self is self
-        return self.fget.invoke((obj,), kwargs, locals_dict, ictx)
 
     @check_result
     def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
@@ -43,16 +32,16 @@ class EProperty(EPyObject):
 
 
 @check_result
-def _do_property(
+def _do_map(
         args: Tuple[Any, ...],
         kwargs: Optional[Dict[Text, Any]],
         ictx: ICtx) -> Result[Any]:
     if kwargs:
         raise NotImplementedError(kwargs)
-    if len(args) != 1:
+    if len(args) != 2:
         raise NotImplementedError(args)
-    guest_property = EProperty(args[0])
-    return Result(guest_property)
+    e = EMap(args[0], args[1])
+    return Result(e)
 
 
-EBuiltin.register('property', _do_property, EProperty)
+EBuiltin.register('map', _do_map, EMap)

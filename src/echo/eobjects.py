@@ -50,6 +50,9 @@ class EFunction(EPyObject):
             '__name__': name,
         }
 
+    def get_type(self) -> EPyObject:
+        return EFunctionType.singleton
+
     def __repr__(self):
         return '<efunction {} at {:#x}>'.format(self.name, id(self))
 
@@ -109,6 +112,9 @@ class GuestCoroutine(EPyObject):
     def __init__(self, f: EFunction):
         self.f = f
 
+    def get_type(self) -> EPyObject:
+        raise NotImplementedError
+
     def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
         if name == 'close':
             return AttrWhere.CLS
@@ -131,6 +137,9 @@ class GuestAsyncGenerator(EPyObject):
     def __init__(self, f):
         self.f = f
 
+    def get_type(self) -> EPyObject:
+        raise NotImplementedError
+
     def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
         return None
 
@@ -144,6 +153,9 @@ class GuestAsyncGenerator(EPyObject):
 class GuestTraceback(EPyObject):
     def __init__(self, data: Tuple[Text, ...]):
         self.data = data
+
+    def get_type(self) -> EPyObject:
+        raise NotImplementedError
 
     def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
         if name == 'tb_frame':
@@ -162,6 +174,9 @@ class GuestTraceback(EPyObject):
 class EGenerator(EPyObject):
     def __init__(self, f):
         self.f = f
+
+    def get_type(self) -> EPyObject:
+        raise NotImplementedError
 
     def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
         raise NotImplementedError
@@ -195,6 +210,9 @@ class EMethod(EPyObject):
     def __repr__(self) -> Text:
         return '<ebound method {} of {!r}>'.format(
             self.f.name, self.bound_self)
+
+    def get_type(self) -> EPyObject:
+        raise NotImplementedError
 
     @property
     def code(self): return self.f.code
@@ -546,6 +564,9 @@ class EFunctionType(EPyObject):
     def __repr__(self) -> Text:
         return "<eclass 'function'>"
 
+    def get_type(self) -> EPyObject:
+        return get_guest_builtin('type')
+
     def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
         if name in ('__code__', '__globals__', '__get__'):
             return AttrWhere.SELF_SPECIAL
@@ -582,6 +603,9 @@ class GuestCoroutineType(EPyObject):
     def __init__(self):
         self.dict_ = {}
 
+    def get_type(self) -> EPyObject:
+        raise NotImplementedError
+
     def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
         return None
 
@@ -602,6 +626,10 @@ def _is_type_builtin(x) -> bool:
 
 def _is_dict_builtin(x) -> bool:
     return isinstance(x, EBuiltin) and x.name == 'dict'
+
+
+def _is_list_builtin(x) -> bool:
+    return isinstance(x, EBuiltin) and x.name == 'list'
 
 
 def _is_object_builtin(x) -> bool:
@@ -649,6 +677,9 @@ def _do_isinstance(
 
     if _is_dict_builtin(args[1]):
         return Result(isinstance(args[0], dict))
+
+    if _is_list_builtin(args[1]):
+        return Result(isinstance(args[0], list))
 
     if args[0] is None:
         return Result(args[1] is type(None))  # noqa

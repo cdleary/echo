@@ -17,6 +17,9 @@ class EModule(EPyObject):
                 'filename={!r}, ...)'.format(
                     self.fully_qualified_name, self.filename))
 
+    def get_type(self) -> EPyObject:
+        raise NotImplementedError
+
     def keys(self) -> Iterable[Text]:
         return self.globals_.keys()
 

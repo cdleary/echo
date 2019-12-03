@@ -41,6 +41,8 @@ GUEST_BUILTIN_NAMES = (
     'isinstance',
     'issubclass',
     'iter',
+    'list',
+    'map',
     'next',
     'object',
     'property',

@@ -41,9 +41,11 @@ from echo.value import Value
 from echo.estaticmethod import EStaticMethod
 from echo.eclassmethod import EClassMethod
 from echo.guest_module import EModule
+import echo.emap
 import echo.eproperty
 import echo.builtin_build_class
 import echo.builtin_dict
+import echo.builtin_list
 
 
 @check_result
@@ -177,7 +179,7 @@ def do_call(f,
     assert in_function
 
     kwargs = kwargs or {}
-    if f in (dict, chr, range, print, sorted, str, set, tuple, list, hasattr,
+    if f in (dict, chr, range, print, sorted, str, set, tuple, hasattr,
              bytearray, object, frozenset, weakref.WeakSet,
              weakref.ref) + interp_routines.BUILTIN_EXCEPTION_TYPES:
         r = f(*args, **kwargs)

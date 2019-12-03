@@ -3,7 +3,8 @@ from typing import Text, Tuple, Any, Dict, Optional
 from echo.epy_object import EPyObject, AttrWhere
 from echo.interp_result import Result, ExceptionData, check_result
 from echo.eobjects import (
-    EFunction, EMethod, NativeFunction, EBuiltin, do_type,
+    EFunction, EMethod, NativeFunction, EBuiltin,
+    do_type, get_guest_builtin,
 )
 from echo.interp_context import ICtx
 
@@ -15,6 +16,9 @@ class EStaticMethod(EPyObject):
 
     def __repr__(self) -> Text:
         return '<estaticmethod object at {:#x}>'.format(id(self))
+
+    def get_type(self) -> EPyObject:
+        raise get_guest_builtin('staticmethod')
 
     def invoke(self, *args, **kwargs) -> Result[Any]:
         return self.f.invoke(*args, **kwargs)

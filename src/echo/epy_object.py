@@ -15,6 +15,10 @@ class AttrWhere(Enum):
 class EPyObject(metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
+    def get_type(self) -> 'EPyObject':
+        raise NotImplementedError
+
+    @abc.abstractmethod
     def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
         raise NotImplementedError(self, name)
 
