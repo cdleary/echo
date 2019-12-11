@@ -960,7 +960,8 @@ class EBuiltin(EPyType):
     def get_type(self) -> EPyObject:
         if self.name in ('object.__init__', 'object.__str__', 'dict.__eq__',
                          'dict.__setitem__', 'dict.__getitem__',
-                         'dict.fromkeys', 'dict.update', 'dict.setdefault',):
+                         'dict.fromkeys', 'dict.update', 'dict.setdefault',
+                         'dict.pop'):
             if self.bound_self:
                 return EMethodType.singleton
             else:
@@ -1070,15 +1071,15 @@ class EBuiltin(EPyType):
         if name in self.dict:
             return AttrWhere.SELF_DICT
         if self.name == 'dict' and name in (
-                'update', 'setdefault', '__eq__', '__getitem__', '__setitem__',
-                '__delitem__'):
+                'update', 'setdefault', 'pop', '__eq__', '__getitem__',
+                '__setitem__', '__delitem__'):
             return AttrWhere.SELF_SPECIAL
         if (self.name in self.BUILTIN_TYPES
                 and name in ('__mro__', '__dict__',)):
             return AttrWhere.SELF_SPECIAL
-        if (self.name in ('dict.update', 'dict.setdefault', 'dict.__eq__',
-                          'dict.__getitem__', 'dict.__setitem__',
-                          'dict.__delitem__')
+        if (self.name in ('dict.update', 'dict.setdefault', 'dict.pop',
+                          'dict.__eq__', 'dict.__getitem__',
+                          'dict.__setitem__', 'dict.__delitem__')
                 and name == '__get__'):
             return AttrWhere.CLS
         if (self.name in ('object', 'type', 'dict', 'tuple')
@@ -1132,9 +1133,11 @@ class EBuiltin(EPyType):
                 })
             if name == 'setdefault':
                 return Result(get_guest_builtin('dict.setdefault'))
+            if name == 'pop':
+                return Result(get_guest_builtin('dict.pop'))
 
         if (self.name in ('dict.update', 'dict.__eq__', 'dict.__setitem__',
-                          'dict.__getitem__', 'dict.setdefault',)
+                          'dict.__getitem__', 'dict.setdefault', 'dict.pop')
                 and name == '__get__'):
             return Result(EMethod(NativeFunction(
                 self._get, 'ebuiltin.__get__'), bound_self=self))

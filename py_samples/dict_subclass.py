@@ -13,3 +13,5 @@ d.setdefault('k', 64)
 assert d == {'k': 42}
 d.setdefault('m', 64)
 assert d == {'k': 42, 'm': 64}
+assert d.pop('k') == 42
+assert d == {'m': 64}
