@@ -15,3 +15,6 @@ d.setdefault('m', 64)
 assert d == {'k': 42, 'm': 64}
 assert d.pop('k') == 42
 assert d == {'m': 64}
+
+assert 'm' in d, d
+assert 'n' not in d, d

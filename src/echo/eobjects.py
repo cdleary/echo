@@ -958,10 +958,11 @@ class EBuiltin(EPyType):
             self.name, self.bound_self)
 
     def get_type(self) -> EPyObject:
-        if self.name in ('object.__init__', 'object.__str__', 'dict.__eq__',
-                         'dict.__setitem__', 'dict.__getitem__',
-                         'dict.fromkeys', 'dict.update', 'dict.setdefault',
-                         'dict.pop'):
+        if self.name in (
+                'object.__init__', 'object.__str__', 'dict.__eq__',
+                'dict.__setitem__', 'dict.__getitem__', 'dict.__contains__',
+                'dict.fromkeys', 'dict.update', 'dict.setdefault',
+                'dict.pop'):
             if self.bound_self:
                 return EMethodType.singleton
             else:
@@ -1072,14 +1073,15 @@ class EBuiltin(EPyType):
             return AttrWhere.SELF_DICT
         if self.name == 'dict' and name in (
                 'update', 'setdefault', 'pop', 'get', '__eq__', '__getitem__',
-                '__setitem__', '__delitem__'):
+                '__setitem__', '__delitem__', '__contains__'):
             return AttrWhere.SELF_SPECIAL
         if (self.name in self.BUILTIN_TYPES
                 and name in ('__mro__', '__dict__',)):
             return AttrWhere.SELF_SPECIAL
-        if (self.name in ('dict.update', 'dict.setdefault', 'dict.pop',
-                          'dict.__eq__', 'dict.__getitem__',
-                          'dict.__setitem__', 'dict.__delitem__')
+        if (self.name in (
+                'dict.update', 'dict.setdefault', 'dict.pop',
+                'dict.__eq__', 'dict.__getitem__',
+                'dict.__setitem__', 'dict.__delitem__', 'dict.__contains__',)
                 and name == '__get__'):
             return AttrWhere.CLS
         if (self.name in ('object', 'type', 'dict', 'tuple')
@@ -1123,6 +1125,8 @@ class EBuiltin(EPyType):
                 return Result(get_guest_builtin('dict.__getitem__'))
             if name == '__setitem__':
                 return Result(get_guest_builtin('dict.__setitem__'))
+            if name == '__contains__':
+                return Result(get_guest_builtin('dict.__contains__'))
             if name == '__delitem__':
                 return Result(get_guest_builtin('dict.__delitem__'))
             if name == 'update':
@@ -1139,7 +1143,8 @@ class EBuiltin(EPyType):
                 return Result(get_guest_builtin('dict.get'))
 
         if (self.name in ('dict.update', 'dict.__eq__', 'dict.__setitem__',
-                          'dict.__getitem__', 'dict.setdefault', 'dict.pop',
+                          'dict.__getitem__', 'dict.__contains__',
+                          'dict.setdefault', 'dict.pop',
                           'dict.get',)
                 and name == '__get__'):
             return Result(EMethod(NativeFunction(

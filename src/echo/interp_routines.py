@@ -32,6 +32,8 @@ COMPARE_TO_SPECIAL = {
     '==': '__eq__',
     '<': '__lt__',
     '>': '__gt__',
+    'in': '__contains__',
+    'not in': '__contains__',
 }
 GUEST_BUILTIN_NAMES = (
     'classmethod',
@@ -209,13 +211,23 @@ def compare(opname: Text, lhs, rhs, ictx: ICtx) -> Result[bool]:
         op = COMPARE_OPS[opname]
         return Result(op(lhs, rhs))
 
-    if opname in COMPARE_TO_SPECIAL and isinstance(lhs, EInstance):
+    if (opname in COMPARE_TO_SPECIAL and
+            (isinstance(lhs, EInstance) or
+             (isinstance(rhs, EInstance) and opname in ('in', 'not in')))):
+        log('ir:cmp', f'opname: {opname!r} lhs: {lhs!r} rhs: {rhs!r}')
+        lhs, rhs = (rhs, lhs) if opname in ('in', 'not in') else (lhs, rhs)
+        log('ir:cmp', f'opname: {opname!r} lhs: {lhs!r} rhs: {rhs!r}')
         special_f = lhs.getattr(COMPARE_TO_SPECIAL[opname], ictx)
         if special_f.is_exception():
             return Result(special_f.get_exception())
         f = special_f.get_value()
         log('ir:cmp', f'special function for {opname!r}: {special_f}')
-        return f.invoke((rhs,), {}, {}, ictx)
+        r = f.invoke((rhs,), {}, {}, ictx)
+        if r.is_exception():
+            return r
+        if opname == 'not in':
+            return Result(Value(r.get_value()).is_falsy())
+        return r
 
     def is_set_of_strings(x: Any) -> bool:
         return isinstance(x, set) and all(isinstance(e, str) for e in x)

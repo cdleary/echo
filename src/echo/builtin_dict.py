@@ -114,6 +114,20 @@ def _do_dict_setitem(
     return Result(d.__setitem__(k, v))
 
 
+@register_builtin('dict.__contains__')
+@check_result
+def _do_dict_contains(
+        args: Tuple[Any, ...],
+        kwargs: Dict[Text, Any],
+        ictx: ICtx) -> Result[bool]:
+    assert len(args) == 2, args
+    assert not kwargs, kwargs
+    lhs, k = args
+    d = _resolve(lhs)
+    log('go:dict.contains', f'd: {d} k: {k}')
+    return Result(d.__contains__(k))
+
+
 @register_builtin('dict.setdefault')
 @check_result
 def _do_dict_setdefault(
