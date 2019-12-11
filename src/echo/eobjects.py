@@ -129,6 +129,9 @@ class GuestCoroutine(EPyObject):
 
 
 class EAsyncGeneratorType(EPyObject):
+    def __init__(self):
+        self._dict = {}
+
     def __repr__(self) -> Text:
         return "<eclass 'async_generator'>"
 
@@ -136,12 +139,18 @@ class EAsyncGeneratorType(EPyObject):
         return get_guest_builtin('type')
 
     def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
-        raise NotImplementedError
+        if name == '__mro__':
+            return Result((self, get_guest_builtin('type')))
+        if name == '__dict__':
+            return Result(self._dict)
+        raise NotImplementedError(self, name)
 
     def setattr(self, name: Text, value: Any) -> Any:
         raise NotImplementedError
 
     def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
+        if name in ('__mro__', '__dict__'):
+            return AttrWhere.SELF_SPECIAL
         return None
 
 
@@ -588,9 +597,11 @@ class GuestCoroutineType(EPyObject):
         self.dict_ = {}
 
     def get_type(self) -> EPyObject:
-        raise NotImplementedError
+        return get_guest_builtin('type')
 
     def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
+        if name in ('__mro__', '__dict__'):
+            return AttrWhere.SELF_SPECIAL
         return None
 
     def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
@@ -657,8 +668,13 @@ def _do_isinstance(
     if _is_type_builtin(args[1]):
         if _is_type_builtin(args[0]) or _is_object_builtin(args[0]):
             return Result(True)
-        type_types = (type, EClass, EFunctionType, GuestCoroutineType)
-        return Result(isinstance(args[0], type_types))
+        lhs_type = do_type((args[0],), {})
+        if lhs_type.is_exception():
+            return Result(lhs_type.get_exception())
+        result = _do_issubclass(
+            (lhs_type.get_value(), get_guest_builtin('type')), ictx)
+        log('go:isinstance', f'args: {args} result: {result}')
+        return result
 
     if _is_str_builtin(args[1]):
         return Result(isinstance(args[0], str))
@@ -693,8 +709,11 @@ def _do_issubclass(
         args: Tuple[Any, ...],
         ictx: ICtx) -> Result[bool]:
     assert len(args) == 2, args
-    log('go:issubclass', 'arg0: {args[0]}')
-    log('go:issubclass', 'arg1: {args[1]}')
+    log('go:issubclass', f'arg0: {args[0]}')
+    log('go:issubclass', f'arg1: {args[1]}')
+
+    if args[0] is args[1] and isinstance(args[0], EBuiltin):
+        return Result(True)
 
     if (isinstance(args[1], EPyObject) and
             args[1].hasattr('__subclasscheck__')):
@@ -724,13 +743,22 @@ def _do_issubclass(
     if isinstance(args[1], GuestCoroutineType):
         return Result(False)
 
-    if not isinstance(args[1], type):
-        raise NotImplementedError('args[1] is not a type:', args)
+    if _is_type_builtin(args[1]):
+        if isinstance(args[0], EPyObject):
+            result = args[0].get_type().is_subtype_of(
+                get_guest_builtin('type'))
+            assert isinstance(result, bool), result
+            return Result(result)
+        if isinstance(args[0], type):
+            return Result(issubclass(args[0], type))
 
     if isinstance(args[0], EClass):
         return Result(args[1] in args[0].get_mro())
 
-    return Result(issubclass(args[0], args[1]))
+    if isinstance(args[0], type) and isinstance(args[1], type):
+        return Result(issubclass(args[0], args[1]))
+
+    raise NotImplementedError(args)
 
 
 @check_result
@@ -1360,6 +1388,7 @@ def do_setitem(args: Tuple[Any, ...], ictx: ICtx) -> Result[None]:
 @check_result
 def do_type(args: Tuple[Any, ...], kwargs: Dict[Text, Any]) -> Result[Any]:
     assert not kwargs, kwargs
+    assert isinstance(args, tuple), args
     log('go:type()', f'args: {args}')
     if len(args) == 1:
         if isinstance(args[0], EPyObject):

@@ -51,6 +51,9 @@ def check_result(f: Callable[..., Result]) -> Callable[..., Result]:
     def checker(*args, **kwargs):
         assert callable(f), f
         result = f(*args, **kwargs)
-        assert isinstance(result, Result), (f, args, kwargs, result)
+        data = (f, args, kwargs, result)
+        assert isinstance(result, Result), data
+        if not result.is_exception():
+            assert not isinstance(result.get_value(), Result), data
         return result
     return checker
