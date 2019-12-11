@@ -15,7 +15,7 @@ class Value:
 
     def is_falsy(self) -> bool:
         w = self.wrapped
-        if isinstance(w, (bool, int, str, type(None), tuple, list)):
+        if isinstance(w, (bool, int, str, set, type(None), tuple, list)):
             return not bool(w)
         raise NotImplementedError(w)
 
