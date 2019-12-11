@@ -18,7 +18,7 @@ from termcolor import cprint
 DEBUG_PRINT_IMPORTS = bool(os.getenv('DEBUG_PRINT_IMPORTS', False))
 SPECIAL_MODULES = (
     'functools', 'os', 'sys', 'itertools', 'builtins', 'time',
-    '_weakref', '_weakrefset', '_thread',
+    '_weakref', '_weakrefset', '_thread', 'errno',
 )
 
 

@@ -29,7 +29,7 @@ def _do___build_class__(
         if ns.is_exception():
             return Result(ns.get_exception())
         ns = ns.get_value()
-        log('bc',
+        log('bc:__build_class__',
             f'prepared ns via metaclass {metaclass} prep_f {prep_f}: {ns}')
     else:
         ns = {}  # Namespace for the class.
@@ -46,7 +46,8 @@ def _do___build_class__(
     if cell is None:
         if metaclass and metaclass.hasattr('__new__'):
             new_f = metaclass.getattr('__new__', ictx).get_value()
-            log('bc', f'invoking metaclass new: {new_f} ns: {ns}')
+            log('bc:__build_class__',
+                f'invoking metaclass new: {new_f} ns: {ns}')
             return ictx.call(
                 new_f, (metaclass, name, bases, ns), kwargs, {},
                 globals_=new_f.globals_)

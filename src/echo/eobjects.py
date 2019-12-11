@@ -960,6 +960,10 @@ class ESuper(EPyObject):
                 if name == '__new__':
                     return AttrWhere.SELF_SPECIAL
                 continue
+            if _is_dict_builtin(t):
+                if name == '__init__':
+                    return AttrWhere.SELF_SPECIAL
+                continue
             if _is_object_builtin(t):
                 continue
             assert isinstance(t, EClass), t
@@ -989,9 +993,13 @@ class ESuper(EPyObject):
                 if name == '__new__':
                     return Result(get_guest_builtin('type.__new__'))
                 continue
+            if _is_dict_builtin(t):
+                if name == '__init__':
+                    return Result(get_guest_builtin('dict.__init__'))
+                continue
             if _is_object_builtin(t):
                 continue
-            assert isinstance(t, EClass), t
+            assert isinstance(t, EClass), (t, name)
             if name not in t.dict_:
                 continue
             # Name is in this class within the MRO, grab the attr.

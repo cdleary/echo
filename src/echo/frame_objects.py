@@ -367,7 +367,7 @@ class StatefulFrame:
     @sets_pc
     def _run_JUMP_IF_FALSE_OR_POP(self, arg, argval):
         if self._peek_value().is_falsy():
-            pc = arg
+            self.pc = arg
             return True
         else:
             self._pop()
@@ -376,7 +376,7 @@ class StatefulFrame:
     @sets_pc
     def _run_JUMP_IF_TRUE_OR_POP(self, arg, argval):
         if self._peek_value().is_truthy():
-            pc = arg
+            self.pc = arg
             return True
         else:
             self._pop()
@@ -782,6 +782,7 @@ class StatefulFrame:
 
         stack_depth_before = len(self.stack)
         result = f(arg=instruction.arg, argval=instruction.argval)
+        log('bc:res', f'result {result}')
         if result is None or type(result) == bool:
             pass
         else:
@@ -817,8 +818,12 @@ class StatefulFrame:
                 stack_effect)
 
         f_sets_pc = getattr(f, '_sets_pc', False)
-        if not f_sets_pc or f_sets_pc and not result:
-            self.pc += self.pc_to_bc_width[self.pc]
+        if (not f_sets_pc) or (f_sets_pc and not result):
+            width = self.pc_to_bc_width[self.pc]
+            log('bc:pc',
+                f'f_sets_pc: {f_sets_pc} result: {result}; '
+                f'incrementing pc by {width}')
+            self.pc += width
 
         return None
 

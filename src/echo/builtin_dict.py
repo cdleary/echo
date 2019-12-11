@@ -77,6 +77,8 @@ def _do_dict_update(
         args: Tuple[Any, ...],
         kwargs: Dict[Text, Any],
         ictx: ICtx) -> Result[None]:
+    if len(args) <= 1 and not kwargs:
+        return Result(None)
     log('go:dict.update', f'args: {args} kwargs: {kwargs}')
     if isinstance(args[0], EInstance):
         d = args[0].builtin_storage[dict]
