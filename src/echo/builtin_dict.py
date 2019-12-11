@@ -28,7 +28,7 @@ def _do_dict_new(
 
 
 def _resolve(x: Any) -> Dict:
-    if isinstance(x, EInstance):
+    if isinstance(x, EPyObject):
         return x.builtin_storage[dict]
     if isinstance(x, dict):
         return x
@@ -99,6 +99,19 @@ def _do_dict_getitem(
     lhs, rhs = args
     d = _resolve(lhs)
     return Result(d.__getitem__(rhs))
+
+
+@register_builtin('dict.__setitem__')
+@check_result
+def _do_dict_setitem(
+        args: Tuple[Any, ...],
+        kwargs: Dict[Text, Any],
+        ictx: ICtx) -> Result[None]:
+    assert len(args) == 3, args
+    assert not kwargs, kwargs
+    lhs, k, v = args
+    d = _resolve(lhs)
+    return Result(d.__setitem__(k, v))
 
 
 @register_builtin('dict.setdefault')

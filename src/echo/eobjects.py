@@ -253,27 +253,6 @@ class EMethod(EPyObject):
             kwargs, locals_dict, ictx)
 
 
-@check_result
-def _invoke_desc(self, cls_attr, ictx: ICtx) -> Result[Any]:
-    assert cls_attr.hasattr('__get__')
-
-    # Grab the descriptor getter off the descriptor.
-    f_result = cls_attr.getattr('__get__', ictx)
-    if f_result.is_exception():
-        return Result(f_result.get_exception())
-    f = f_result.get_value()
-
-    # Determine the type of obj.
-    objtype_result = do_type((cls_attr,), {})
-    if objtype_result.is_exception():
-        return Result(objtype_result.get_exception())
-    objtype = objtype_result.get_value()
-
-    ictx.desc_count += 1
-
-    return f.invoke((self, objtype), {}, {}, ictx)
-
-
 class EInstance(EPyObject):
 
     builtin_storage: Dict[type, Any]
@@ -321,7 +300,7 @@ class EInstance(EPyObject):
                 and cls_attr.hasattr('__set__')):
             log('gi:ga', f'overriding descriptor: {cls_attr}')
             # Overriding descriptor.
-            return _invoke_desc(self, cls_attr, ictx)
+            return invoke_desc(self, cls_attr, ictx)
 
         try:
             return Result(self.dict_[name])
@@ -334,7 +313,7 @@ class EInstance(EPyObject):
         log('eo:ei', f'cls_attr: {cls_attr}')
         if isinstance(cls_attr, EPyObject) and cls_attr.hasattr('__get__'):
             log('gi:ga', f'non-overriding descriptor: {cls_attr}')
-            return _invoke_desc(self, cls_attr, ictx)
+            return invoke_desc(self, cls_attr, ictx)
 
         if cls_attr is not None:
             return Result(cls_attr)
@@ -924,133 +903,6 @@ def _do_dir(args: Tuple[Any, ...],
     return Result(dir(o))
 
 
-def _get_mro(o: EPyObject) -> Tuple[EPyObject, ...]:
-    if isinstance(o, EBuiltin):
-        return o.get_mro()
-    assert isinstance(o, EClass), o
-    return o.get_mro()
-
-
-class ESuper(EPyObject):
-    def __init__(self, type_, obj_or_type, obj_or_type_type):
-        self.type_ = type_
-        self.obj_or_type = obj_or_type
-        self.obj_or_type_type = obj_or_type_type
-
-    def get_type(self) -> 'EPyObject':
-        return get_guest_builtin('super')
-
-    def __repr__(self) -> Text:
-        return "<esuper: <class '{}'>, <{} object>>".format(
-            self.type_.name, self.obj_or_type_type.name)
-
-    def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
-        if name in ('__thisclass__', '__self_class__', '__self__',
-                    '__class__'):
-            return AttrWhere.SELF_SPECIAL
-
-        start_type = self.obj_or_type_type
-        mro = _get_mro(start_type)
-        # Look at everything succeeding 'type_' in the MRO order.
-        i = mro.index(self.type_)
-        mro = mro[i+1:]
-
-        for t in mro:
-            if _is_type_builtin(t):
-                if name == '__new__':
-                    return AttrWhere.SELF_SPECIAL
-                continue
-            if _is_dict_builtin(t):
-                if name == '__init__':
-                    return AttrWhere.SELF_SPECIAL
-                continue
-            if _is_object_builtin(t):
-                continue
-            assert isinstance(t, EClass), t
-            if name in t.dict_:
-                return AttrWhere.SELF_SPECIAL
-
-        return None
-
-    def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
-        if name == '__thisclass__':
-            return Result(self.type_)
-        if name == '__self_class__':
-            return Result(self.obj_or_type_type)
-        if name == '__self__':
-            return Result(self.obj_or_type)
-        if name == '__class__':
-            return Result(get_guest_builtin('super'))
-
-        start_type = self.obj_or_type_type
-        mro = _get_mro(start_type)
-        # Look at everything succeeding 'type_' in the MRO order.
-        i = mro.index(self.type_)
-        mro = mro[i+1:]
-
-        for t in mro:
-            if _is_type_builtin(t):
-                if name == '__new__':
-                    return Result(get_guest_builtin('type.__new__'))
-                continue
-            if _is_dict_builtin(t):
-                if name == '__init__':
-                    return Result(get_guest_builtin('dict.__init__'))
-                continue
-            if _is_object_builtin(t):
-                continue
-            assert isinstance(t, EClass), (t, name)
-            if name not in t.dict_:
-                continue
-            # Name is in this class within the MRO, grab the attr.
-            cls_attr = t.getattr(name, ictx)
-            if cls_attr.is_exception():
-                return cls_attr.get_exception()
-            cls_attr = cls_attr.get_value()
-            if (not isinstance(self.obj_or_type, EClass)
-                    and cls_attr.hasattr('__get__')):
-                return _invoke_desc(self.obj_or_type, cls_attr, ictx)
-            return Result(cls_attr)
-
-        return Result(ExceptionData(
-            None, None,
-            AttributeError(f"'super' object has no attribute {name!r}")))
-
-    def setattr(self, *args, **kwargs) -> Result[None]:
-        return self.obj_or_type.setattr(*args, **kwargs)
-
-
-@check_result
-def _do_super(args: Tuple[Any, ...],
-              ictx: ICtx) -> Result[Any]:
-    if not args:
-        frame = ictx.interp_state.last_frame
-        if frame is None:
-            return Result(ExceptionData(
-                traceback=None, parameter=None,
-                exception=RuntimeError('super(): no current frame')))
-        cell = next(cell for cell in frame.cellvars
-                    if cell._name == '__class__')
-        type_ = cell._storage
-        if not isinstance(type_, EClass):
-            raise NotImplementedError
-        obj_or_type = frame.locals_[0]
-    else:
-        assert len(args) == 2, args
-        type_, obj_or_type = args
-
-    log('super', f'type_: {type_} obj: {obj_or_type}')
-
-    def supercheck():
-        if isinstance(obj_or_type, EClass):
-            return obj_or_type
-        assert isinstance(obj_or_type, EInstance)
-        return obj_or_type.get_type()
-
-    obj_type = supercheck()
-    return Result(ESuper(type_, obj_or_type, obj_type))
-
-
 _ITER_BUILTIN_TYPES = (
     tuple, str, bytes, bytearray, type({}.keys()), type({}.values()),
     type({}.items()), list, type(reversed([])), type(range(0, 0)),
@@ -1107,7 +959,8 @@ class EBuiltin(EPyType):
 
     def get_type(self) -> EPyObject:
         if self.name in ('object.__init__', 'object.__str__', 'dict.__eq__',
-                         'dict.fromkeys', 'dict.update'):
+                         'dict.__setitem__', 'dict.__getitem__',
+                         'dict.fromkeys', 'dict.update', 'dict.setdefault',):
             if self.bound_self:
                 return EMethodType.singleton
             else:
@@ -1189,8 +1042,6 @@ class EBuiltin(EPyType):
             return _do_object_eq(args, kwargs, ictx)
         if self.name == 'object.__ne__':
             return _do_object_ne(args, kwargs, ictx)
-        if self.name == 'super':
-            return _do_super(args, ictx)
         if self.name == 'iter':
             return _do_iter(args)
         if self.name == 'type':
@@ -1282,7 +1133,9 @@ class EBuiltin(EPyType):
             if name == 'setdefault':
                 return Result(get_guest_builtin('dict.setdefault'))
 
-        if self.name in ('dict.update', 'dict.__eq__') and name == '__get__':
+        if (self.name in ('dict.update', 'dict.__eq__', 'dict.__setitem__',
+                          'dict.__getitem__', 'dict.setdefault',)
+                and name == '__get__'):
             return Result(EMethod(NativeFunction(
                 self._get, 'ebuiltin.__get__'), bound_self=self))
 
@@ -1470,3 +1323,24 @@ def do_getattr(args: Tuple[Any, ...],
     if default and not o.hasattr(attr):
         return Result(default[0])
     return o.getattr(attr, ictx)
+
+
+@check_result
+def invoke_desc(self, cls_attr: EPyObject, ictx: ICtx) -> Result[Any]:
+    assert cls_attr.hasattr('__get__')
+
+    # Grab the descriptor getter off the descriptor.
+    f_result = cls_attr.getattr('__get__', ictx)
+    if f_result.is_exception():
+        return Result(f_result.get_exception())
+    f = f_result.get_value()
+
+    # Determine the type of obj.
+    objtype_result = do_type((cls_attr,), {})
+    if objtype_result.is_exception():
+        return Result(objtype_result.get_exception())
+    objtype = objtype_result.get_value()
+
+    ictx.desc_count += 1
+
+    return f.invoke((self, objtype), {}, {}, ictx)

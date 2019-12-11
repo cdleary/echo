@@ -26,6 +26,7 @@ import termcolor
 OPNAME_TO_SPECIAL = {
     'BINARY_SUBTRACT': '__sub__',
     'BINARY_ADD': '__add__',
+    'BINARY_SUBSCR': '__getitem__',
 }
 COMPARE_TO_SPECIAL = {
     '==': '__eq__',
@@ -78,6 +79,7 @@ COMPARE_OPS = {
     'is not': operator.is_not,
     'is': operator.is_,
     'in': lambda a, b: operator.contains(b, a),
+    'not in': lambda a, b: not operator.contains(b, a),
 }
 BUILTIN_VALUE_TYPES = {
     int,
