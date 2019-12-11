@@ -125,6 +125,17 @@ def _do_dict_setdefault(
     return Result(r)
 
 
+@register_builtin('dict.get')
+@check_result
+def _do_dict_get(
+        args: Tuple[Any, ...],
+        kwargs: Dict[Text, Any],
+        ictx: ICtx) -> Result[None]:
+    d = _resolve(args[0])
+    r = d.get(*args[1:], **kwargs)
+    return Result(r)
+
+
 @register_builtin('dict.pop')
 @check_result
 def _do_dict_pop(

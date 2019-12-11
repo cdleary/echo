@@ -1071,7 +1071,7 @@ class EBuiltin(EPyType):
         if name in self.dict:
             return AttrWhere.SELF_DICT
         if self.name == 'dict' and name in (
-                'update', 'setdefault', 'pop', '__eq__', '__getitem__',
+                'update', 'setdefault', 'pop', 'get', '__eq__', '__getitem__',
                 '__setitem__', '__delitem__'):
             return AttrWhere.SELF_SPECIAL
         if (self.name in self.BUILTIN_TYPES
@@ -1135,9 +1135,12 @@ class EBuiltin(EPyType):
                 return Result(get_guest_builtin('dict.setdefault'))
             if name == 'pop':
                 return Result(get_guest_builtin('dict.pop'))
+            if name == 'get':
+                return Result(get_guest_builtin('dict.get'))
 
         if (self.name in ('dict.update', 'dict.__eq__', 'dict.__setitem__',
-                          'dict.__getitem__', 'dict.setdefault', 'dict.pop')
+                          'dict.__getitem__', 'dict.setdefault', 'dict.pop',
+                          'dict.get',)
                 and name == '__get__'):
             return Result(EMethod(NativeFunction(
                 self._get, 'ebuiltin.__get__'), bound_self=self))

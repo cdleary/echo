@@ -592,6 +592,9 @@ class StatefulFrame:
     def _run_BINARY_ADD(self, arg, argval):
         return self._run_binary('BINARY_ADD')
 
+    def _run_BINARY_AND(self, arg, argval):
+        return self._run_binary('BINARY_AND')
+
     def _run_BINARY_LSHIFT(self, arg, argval):
         return self._run_binary('BINARY_LSHIFT')
 
