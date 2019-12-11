@@ -11,7 +11,7 @@ from typing import (
 import weakref
 
 from echo.return_kind import ReturnKind
-from echo.epy_object import EPyObject, AttrWhere
+from echo.epy_object import EPyObject, AttrWhere, EPyType
 from echo.elog import log, debugged
 from echo.interpreter_state import InterpreterState
 from echo.interp_context import ICtx
@@ -384,7 +384,7 @@ def _get_bases(c: EClassOrBuiltin) -> Tuple[EPyObject, ...]:
     raise NotImplementedError(c)
 
 
-class EClass(EPyObject):
+class EClass(EPyType):
     """Represents a user-defined class."""
 
     bases: Tuple[EClassOrBuiltin, ...]
@@ -452,16 +452,6 @@ class EClass(EPyObject):
         if eobject not in order:
             order.append(eobject)
         return tuple(order)
-
-    def is_subtype_of(self, other: 'EClass') -> bool:
-        if self is other:
-            return True
-        return other in self.get_mro()
-
-    def is_strict_subtype_of(self, other: 'EClass') -> bool:
-        if self is other:
-            return False
-        return self.is_subtype_of(other)
 
     def instantiate(self,
                     args: Tuple[Any, ...],
@@ -538,7 +528,7 @@ class EClass(EPyObject):
             ha = do_hasattr((base, name)).get_value()
             log('ga', f'checking base: {base} for {name} => {ha}')
             if ha:
-                return _do_getattr((base, name), {}, ictx)
+                return do_getattr((base, name), {}, ictx)
 
         if self.metaclass and self.metaclass.hasattr(name):
             return self.metaclass.getattr(name, ictx)
@@ -638,6 +628,10 @@ def _is_str_builtin(x) -> bool:
     return isinstance(x, EBuiltin) and x.name == 'str'
 
 
+def _is_tuple_builtin(x) -> bool:
+    return isinstance(x, EBuiltin) and x.name == 'tuple'
+
+
 @check_result
 def _do_isinstance(
         args: Tuple[Any, ...],
@@ -664,6 +658,11 @@ def _do_isinstance(
     if isinstance(args[1], type) and issubclass(args[1], Exception):
         # TODO(leary) How does the real type builtin make it here?
         return Result(isinstance(args[0], args[1]))
+
+    if _is_tuple_builtin(args[1]):
+        if not isinstance(args[0], EPyObject):
+            return Result(isinstance(args[0], tuple))
+        raise NotImplementedError(args)
 
     if _is_type_builtin(args[1]):
         if _is_type_builtin(args[0]) or _is_object_builtin(args[0]):
@@ -728,8 +727,17 @@ def _do_issubclass(
     if isinstance(args[0], EClass) and isinstance(args[1], EBuiltin):
         return Result(args[0].is_subtype_of(args[1]))
 
-    if isinstance(args[0], EClass) and isinstance(args[1], EClass):
+    if isinstance(args[0], EPyType) and isinstance(args[1], EPyType):
         return Result(args[0].is_subtype_of(args[1]))
+
+    if ((isinstance(args[0], EPyObject)
+         and not isinstance(args[1], EPyObject)) or
+        (not isinstance(args[0], EPyObject)
+         and isinstance(args[1], EPyObject))):
+        return Result(False)
+
+    if isinstance(args[0], EBuiltin) and isinstance(args[1], EPyType):
+        return Result(False)
 
     if isinstance(args[0], GuestCoroutineType):
         return Result(_is_type_builtin(args[1]))
@@ -766,20 +774,6 @@ def _do_next(args: Tuple[Any, ...]) -> Result[Any]:
     assert len(args) == 1, args
     g = args[0]
     return g.next()
-
-
-@check_result
-def _do_getattr(args: Tuple[Any, ...],
-                kwargs: Dict[Text, Any],
-                ictx: ICtx) -> Result[Any]:
-    assert 2 <= len(args) <= 3, args
-    assert not kwargs, kwargs
-    o, attr, *default = args
-    if not isinstance(o, EPyObject):
-        return Result(getattr(o, attr, *default))
-    if default and not o.hasattr(attr):
-        return Result(default[0])
-    return o.getattr(attr, ictx)
 
 
 @check_result
@@ -1064,8 +1058,10 @@ def _do_iter(args: Tuple[Any, ...]) -> Result[Any]:
     raise NotImplementedError(args)
 
 
-class EBuiltin(EPyObject):
-    """A builtin function in the echo VM."""
+class EBuiltin(EPyType):
+    """A builtin function/type in the echo VM."""
+
+    BUILTIN_TYPES = ('object', 'type', 'dict', 'tuple', 'list')
 
     _registry: Dict[Text, Tuple[Callable, Optional[type]]] = {}
 
@@ -1093,7 +1089,7 @@ class EBuiltin(EPyObject):
 
     def __repr__(self):
         if self.name == 'object':
-            return "<ebuiltin class 'object'>"
+            return "<eclass 'object'>"
         if self.name == 'type':
             return "<eclass 'type'>"
         if self.name == 'super':
@@ -1108,22 +1104,24 @@ class EBuiltin(EPyObject):
                 return EMethodType.singleton
             else:
                 return EFunctionType.singleton
-        if self.name in ('type', 'dict'):
+        if self.name in self.BUILTIN_TYPES:
             return get_guest_builtin('type')
         raise NotImplementedError(self)
 
     def get_mro(self) -> Tuple['EPyObject', ...]:
         if self.name == 'object':
             return (get_guest_builtin('object'),)
-        elif self.name == 'type':
-            return (get_guest_builtin('type'), get_guest_builtin('object'))
+        elif self.name in self.BUILTIN_TYPES:
+            return (get_guest_builtin(self.name), get_guest_builtin('object'))
         else:
             raise NotImplementedError(self)
 
     def note_subclass(self, cls: 'EClass') -> None:
         pass
 
-    def is_subtype_of(self, other: 'EClass') -> bool:
+    def is_subtype_of(self, other: EPyType) -> bool:
+        if _is_type_builtin(self) and _is_object_builtin(other):
+            return True
         return False
 
     @check_result
@@ -1202,7 +1200,7 @@ class EBuiltin(EPyObject):
         if self.name == 'dir':
             return _do_dir(args, kwargs, ictx)
         if self.name == 'getattr':
-            return _do_getattr(args, kwargs, ictx)
+            return do_getattr(args, kwargs, ictx)
         if self.name in self._registry:
             if self.bound_self is not None:
                 args = (self.bound_self,) + args
@@ -1213,13 +1211,18 @@ class EBuiltin(EPyObject):
         if name in self.dict:
             return AttrWhere.SELF_DICT
         if self.name == 'dict' and name in (
-                'update', 'setdefault', '__eq__', '__getitem__'):
+                'update', 'setdefault', '__eq__', '__getitem__', '__setitem__',
+                '__delitem__'):
+            return AttrWhere.SELF_SPECIAL
+        if (self.name in self.BUILTIN_TYPES
+                and name in ('__mro__', '__dict__',)):
             return AttrWhere.SELF_SPECIAL
         if (self.name in ('dict.update', 'dict.setdefault', 'dict.__eq__',
-                          'dict.__getitem__')
+                          'dict.__getitem__', 'dict.__setitem__',
+                          'dict.__delitem__')
                 and name == '__get__'):
             return AttrWhere.CLS
-        if (self.name in ('object', 'type', 'dict')
+        if (self.name in ('object', 'type', 'dict', 'tuple')
                 and name in ('__new__', '__init__', '__dict__', '__str__',
                              '__repr__', '__eq__', '__ne__', '__new__',
                              '__name__')):
@@ -1258,6 +1261,10 @@ class EBuiltin(EPyObject):
                 return Result(get_guest_builtin('dict.__eq__'))
             if name == '__getitem__':
                 return Result(get_guest_builtin('dict.__getitem__'))
+            if name == '__setitem__':
+                return Result(get_guest_builtin('dict.__setitem__'))
+            if name == '__delitem__':
+                return Result(get_guest_builtin('dict.__delitem__'))
             if name == 'update':
                 return Result(get_guest_builtin('dict.update'))
             if name == '__dict__':
@@ -1302,6 +1309,12 @@ class EBuiltin(EPyObject):
             return Result(get_guest_builtin('object.__eq__'))
         if name == '__ne__':
             return Result(get_guest_builtin('object.__ne__'))
+
+        if self.name in self.BUILTIN_TYPES:
+            if name == '__mro__':
+                return Result(self.get_mro())
+            if name == '__dict__':  # Fake it for now.
+                return Result({})
 
         raise NotImplementedError(self, name)
 
@@ -1398,6 +1411,8 @@ def do_type(args: Tuple[Any, ...], kwargs: Dict[Text, Any]) -> Result[Any]:
             return Result(get_guest_builtin('object'))
         if res is type:
             return Result(get_guest_builtin('type'))
+        if res is tuple:
+            return Result(get_guest_builtin('tuple'))
         return Result(res)
 
     assert len(args) == 3, args
@@ -1426,3 +1441,24 @@ def do_hasattr(args: Tuple[Any, ...]) -> Result[bool]:
     b = o.hasattr(attr)
     assert isinstance(b, bool), b
     return Result(b)
+
+
+@check_result
+def do_getattr(args: Tuple[Any, ...],
+               kwargs: Dict[Text, Any],
+               ictx: ICtx) -> Result[Any]:
+    assert 2 <= len(args) <= 3, args
+    assert not kwargs, kwargs
+    o, attr, *default = args
+    if type(o) is tuple and attr == '__class__':
+        return Result(get_guest_builtin('tuple'))
+    if not isinstance(o, EPyObject):
+        try:
+            a = getattr(o, attr, *default)
+        except AttributeError as e:
+            return Result(ExceptionData(None, None, e))
+        else:
+            return Result(a)
+    if default and not o.hasattr(attr):
+        return Result(default[0])
+    return o.getattr(attr, ictx)

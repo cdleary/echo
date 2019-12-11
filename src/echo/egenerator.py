@@ -1,6 +1,6 @@
 from typing import Text, Tuple, Any, Dict, Optional
 
-from echo.epy_object import EPyObject, AttrWhere
+from echo.epy_object import EPyObject, AttrWhere, EPyType
 from echo.interp_result import Result, ExceptionData, check_result
 from echo.eobjects import (
     EFunction, EMethod, NativeFunction, EBuiltin,
@@ -11,20 +11,32 @@ from echo.interp_context import ICtx
 from echo.value import Value
 
 
-class EGeneratorType(EPyObject):
+class EGeneratorType(EPyType):
+    def __init__(self):
+        self._dict = {}
+
     def __repr__(self) -> Text:
         return "<eclass 'generator'>"
 
     def get_type(self) -> EPyObject:
         return get_guest_builtin('type')
 
+    def get_mro(self) -> Tuple[EPyObject, ...]:
+        return (self, get_guest_builtin('object'))
+
     def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
-        raise NotImplementedError
+        if name == '__mro__':
+            return Result(self.get_mro())
+        if name == '__dict__':
+            return Result(self._dict)
+        raise NotImplementedError(self, name)
 
     def setattr(self, name: Text, value: Any) -> Any:
         raise NotImplementedError
 
     def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
+        if name in ('__mro__', '__dict__'):
+            return AttrWhere.SELF_SPECIAL
         return None
 
 

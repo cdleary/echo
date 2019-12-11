@@ -16,7 +16,7 @@ from echo import import_routines
 from echo.eobjects import (
     ReturnKind, EBuiltin, EFunction, EPyObject,
     GuestCoroutine, EInstance, get_guest_builtin,
-    do_getitem, do_setitem, do_type, do_hasattr,
+    do_getitem, do_setitem, do_type, do_hasattr, do_getattr,
 )
 from echo.ecell import ECell
 from echo.guest_module import EModule
@@ -171,6 +171,7 @@ class StatefulFrame:
         # If the user can observe the real isinstance they can break the
         # virtualization abstraction, which is undesirable.
         assert x is not isinstance
+        assert x is not tuple
         assert not isinstance(x, Value), x
         assert x is not GuestCoroutine
         log('fo:push()', repr(x))
@@ -553,12 +554,10 @@ class StatefulFrame:
         elif obj is sys and argval == 'modules':
             r = Result(self.interp_state.sys_modules)
         else:
-            try:
-                r = Result(getattr(obj, argval))
-            except AttributeError as e:
-                r = Result(ExceptionData(None, None, e))
+            r = do_getattr((obj, argval), {}, self.ictx)
         if not r.is_exception():
             assert do_hasattr((obj, argval)).get_value() is True, (obj, argval)
+        log('bc:la', f'obj {obj!r} attr {argval} => {r}')
         return r
 
     def _run_COMPARE_OP(self, arg, argval):

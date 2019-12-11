@@ -48,6 +48,7 @@ import echo.eproperty
 import echo.builtin_build_class
 import echo.builtin_dict
 import echo.builtin_list
+import echo.builtin_tuple
 
 
 @check_result

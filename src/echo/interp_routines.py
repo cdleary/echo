@@ -50,6 +50,7 @@ GUEST_BUILTIN_NAMES = (
     'reversed',
     'staticmethod',
     'super',
+    'tuple',
     'type',
     'zip',
 )
@@ -238,7 +239,11 @@ def compare(opname: Text, lhs, rhs, ictx: ICtx) -> Result[bool]:
             and not isinstance(rhs, EPyObject)):
         return Result(True)
 
-    raise NotImplementedError(opname, lhs, rhs, type(rhs))
+    if (opname == '==' and isinstance(lhs, EBuiltin)
+            and isinstance(rhs, EBuiltin)):
+        return Result(lhs is rhs)
+
+    raise NotImplementedError(opname, lhs, rhs)
 
 
 def _name_is_from_metaclass(cls: EClass, name: Text) -> bool:

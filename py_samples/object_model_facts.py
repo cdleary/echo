@@ -12,7 +12,7 @@ assert type('T', (), {}).__class__ is type
 assert isinstance(object, type)
 
 # type is a subclass of object
-assert issubclass(type, object)
+assert issubclass(type, object), 'type is a subclass of object'
 
 # object has no bases
 assert not object.__bases__

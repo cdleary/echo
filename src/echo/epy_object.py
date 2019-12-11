@@ -1,6 +1,6 @@
 import abc
 from enum import Enum
-from typing import Text, Any, Optional
+from typing import Text, Any, Optional, Tuple
 
 from echo.interp_context import ICtx
 from echo.interp_result import Result
@@ -12,7 +12,7 @@ class AttrWhere(Enum):
     CLS = 'cls'
 
 
-class EPyObject(metaclass=abc.ABCMeta):
+class EPyObject(abc.ABC):
 
     @abc.abstractmethod
     def get_type(self) -> 'EPyObject':
@@ -36,3 +36,16 @@ class EPyObject(metaclass=abc.ABCMeta):
     # @abc.abstractmethod
     def delattr(self, name: Text, value: Any) -> Any:
         raise NotImplementedError(self, name, value)
+
+
+class EPyType(EPyObject):
+
+    @abc.abstractmethod
+    def get_mro(self) -> Tuple[EPyObject, ...]:
+        raise NotImplementedError
+
+    def is_subtype_of(self, other: EPyObject) -> bool:
+        is_subtype = other in self.get_mro()
+        if self is other:
+            assert is_subtype
+        return is_subtype
