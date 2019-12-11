@@ -10,7 +10,7 @@ from typing import (
 
 from echo.interp_context import ICtx
 from echo.interp_result import Result, ExceptionData
-from echo.guest_module import EModule
+from echo.emodule import EModule
 
 from termcolor import cprint
 

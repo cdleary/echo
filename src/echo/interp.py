@@ -41,7 +41,7 @@ from echo.value import Value
 from echo.estaticmethod import EStaticMethod
 from echo.eclassmethod import EClassMethod
 from echo.egenerator import EGenerator
-from echo.guest_module import EModule
+from echo.emodule import EModule
 from echo.etraceback import ETraceback
 import echo.emap
 import echo.eproperty

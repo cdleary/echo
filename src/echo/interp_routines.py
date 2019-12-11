@@ -17,7 +17,7 @@ from echo.eobjects import (
     get_guest_builtin,
     do_hasattr,
 )
-from echo.guest_module import EModule
+from echo.emodule import EModule
 from echo.value import Value
 
 import termcolor

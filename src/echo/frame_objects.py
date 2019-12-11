@@ -19,7 +19,7 @@ from echo.eobjects import (
     do_getitem, do_setitem, do_type, do_hasattr, do_getattr,
 )
 from echo.ecell import ECell
-from echo.guest_module import EModule
+from echo.emodule import EModule
 from echo.code_attributes import CodeAttributes
 from echo.interpreter_state import InterpreterState
 from echo.interp_result import Result, ExceptionData
