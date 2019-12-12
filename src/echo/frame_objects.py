@@ -227,7 +227,7 @@ class StatefulFrame:
     def _run_DELETE_SUBSCR(self, arg, argval):
         tos = self._pop()
         tos1 = self._pop()
-        if isinstance(tos1, dict):
+        if isinstance(tos1, (dict, list)):
             del tos1[tos]
         elif isinstance(tos1, EPyObject):
             tos1.delattr(tos)
@@ -600,6 +600,9 @@ class StatefulFrame:
 
     def _run_BINARY_ADD(self, arg, argval):
         return self._run_binary('BINARY_ADD')
+
+    def _run_BINARY_OR(self, arg, argval):
+        return self._run_binary('BINARY_OR')
 
     def _run_BINARY_AND(self, arg, argval):
         return self._run_binary('BINARY_AND')

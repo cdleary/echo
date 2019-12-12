@@ -115,6 +115,7 @@ _BINARY_OPS = {
     'BINARY_RSHIFT': operator.rshift,
     'BINARY_ADD': operator.add,
     'BINARY_AND': operator.and_,
+    'BINARY_OR': operator.or_,
     'BINARY_MODULO': operator.mod,
     'BINARY_MULTIPLY': operator.mul,
     'BINARY_SUBTRACT': operator.sub,
