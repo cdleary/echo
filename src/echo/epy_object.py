@@ -40,6 +40,9 @@ class EPyObject(abc.ABC):
 
 class EPyType(EPyObject):
 
+    def has_standard_getattr(self) -> bool:
+        return True
+
     @abc.abstractmethod
     def get_mro(self) -> Tuple[EPyObject, ...]:
         raise NotImplementedError

@@ -528,12 +528,15 @@ class EClass(EPyType):
         return Result(None)
 
 
-class EFunctionType(EPyObject):
+class EFunctionType(EPyType):
     def __repr__(self) -> Text:
         return "<eclass 'function'>"
 
     def get_type(self) -> EPyObject:
         return get_guest_builtin('type')
+
+    def get_mro(self) -> Tuple[EPyObject, ...]:
+        return (self,)
 
     def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
         if name in ('__code__', '__globals__', '__get__'):
@@ -566,10 +569,13 @@ class EFunctionType(EPyObject):
 EFunctionType.singleton = EFunctionType()
 
 
-class GuestCoroutineType(EPyObject):
+class GuestCoroutineType(EPyType):
 
     def __init__(self):
         self.dict_ = {}
+
+    def get_mro(self) -> Tuple[EPyObject, ...]:
+        return (self, get_guest_builtin('type'))
 
     def get_type(self) -> EPyObject:
         return get_guest_builtin('type')
@@ -581,7 +587,7 @@ class GuestCoroutineType(EPyObject):
 
     def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
         if name == '__mro__':
-            return Result((self, get_guest_builtin('type')))
+            return Result(self.get_mro())
         if name == '__dict__':
             return Result(self.dict_)
         raise NotImplementedError(name)
@@ -951,6 +957,11 @@ class EBuiltin(EPyType):
         self.bound_self = bound_self
         self.dict = {}
         self.globals_ = {}
+
+    def has_standard_getattr(self) -> bool:
+        if self.name in ('super',):
+            return False
+        return True
 
     @classmethod
     def is_ebuiltin(cls, o: Any) -> bool:

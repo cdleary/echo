@@ -31,6 +31,9 @@ class CountingTraceDumper:
             self.code_stack[-1][1] = True
         self.code_stack.append([code, False])
 
+    def note_block_stack(self, bs):
+        pass
+
     def note_return(self, code):
         this_code, saw_call = self.code_stack.pop()
         assert this_code is code
@@ -240,7 +243,7 @@ class CtypeFrame:
         self.print_block_stack()
 
 
-def _note_opcode_event(frame, opcodeno) -> None:
+def _note_opcode_event(frame, opcodeno, verbose=True) -> None:
     # From the docs:
     #     The interpreter is about to execute a new opcode (see dis for
     #     opcode details). The local trace function is called; arg is None;
@@ -249,27 +252,31 @@ def _note_opcode_event(frame, opcodeno) -> None:
     #     explicitly requested by setting f_trace_opcodes to True on the
     #     frame.
     # -- https://docs.python.org/3/library/sys.html#sys.settrace
-    #eprint('opcode about to execute...')
+    if verbose:
+        eprint('opcode about to execute...')
+
     ctf = CtypeFrame(frame)
-    #eprint(' frame.f_lasti:', frame.f_lasti)
     instructions = dis.get_instructions(frame.f_code)
     instruction = next(inst for inst in instructions
                        if inst.offset == frame.f_lasti)
     TRACE_DUMPER.note_instruction(instruction, ctf)
-    #cprint('i: {} code: {}; lineno: {}'.format(opcodeno, frame.f_code, frame.f_lineno),
-    #       color='blue')
-    #cprint(' instruction: {}'.format(instruction), color='yellow')
-    #locals_ = dict(frame.f_locals)
-    #for name in ['__builtins__']:
-    #    if name in locals_:
-    #        del locals_[name]
-    #eprint(' frame.f_locals:', locals_)
-    #try:
-    #    eprint(' stack effect:', dis.stack_effect(instruction.opcode,
-    #          instruction.arg))
-    #except ValueError:
-    #    pass
-    #ctf.print_stack()
+
+    if verbose:
+        eprint(' frame.f_lasti:', frame.f_lasti)
+        cprint('i: {} code: {}; lineno: {}'.format(opcodeno, frame.f_code, frame.f_lineno),
+               color='blue')
+        cprint(' instruction: {}'.format(instruction), color='yellow')
+        locals_ = dict(frame.f_locals)
+        for name in ['__builtins__']:
+            if name in locals_:
+                del locals_[name]
+        eprint(' frame.f_locals:', locals_)
+        try:
+            eprint(' stack effect:', dis.stack_effect(instruction.opcode,
+                  instruction.arg))
+        except ValueError:
+            pass
+        ctf.print_stack()
 
 
 def note_trace(frame, event, arg):

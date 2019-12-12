@@ -26,6 +26,9 @@ class ESuper(EPyObject):
         self.obj_or_type = obj_or_type
         self.obj_or_type_type = obj_or_type_type
 
+    def has_standard_getattr(self) -> bool:
+        return False
+
     @property
     def builtin_storage(self):
         return self.obj_or_type.builtin_storage
@@ -77,14 +80,16 @@ class ESuper(EPyObject):
         for t in mro:
             if isinstance(t, EBuiltin):
                 if t.hasattr(name):
-                    return t.getattr(name, ictx)
+                    cls_attr = t.getattr(name, ictx)
                 else:
                     continue
-            assert isinstance(t, EClass), (t, name)
-            if name not in t.dict_:
-                continue
-            # Name is in this class within the MRO, grab the attr.
-            cls_attr = t.getattr(name, ictx)
+            else:
+                assert isinstance(t, EClass), (t, name)
+                if name not in t.dict_:
+                    continue
+                # Name is in this class within the MRO, grab the attr.
+                cls_attr = t.getattr(name, ictx)
+
             if cls_attr.is_exception():
                 return cls_attr.get_exception()
             cls_attr = cls_attr.get_value()

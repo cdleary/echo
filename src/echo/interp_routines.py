@@ -280,8 +280,12 @@ def _name_is_from_metaclass(cls: EClass, name: Text) -> bool:
 @debugged('ir:mrs')
 def method_requires_self(obj: Any, name: Text, value: Any) -> bool:
     if isinstance(obj, EPyObject):
+        type_ = obj.get_type()
+        if not type_.has_standard_getattr():
+            return False
         where = obj.hasattr_where(name)
-        log('ir:mrs', f'attr {name} on {obj} is {where} (value {value})')
+        log('ir:mrs',
+            f'attr {name} on {obj} (type {type_}) is {where} (value {value})')
         assert where is not None
         return where == AttrWhere.CLS and not isinstance(value, EMethod)
 
