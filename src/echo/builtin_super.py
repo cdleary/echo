@@ -49,22 +49,8 @@ class ESuper(EPyObject):
         mro = mro[i+1:]
 
         for t in mro:
-            if _is_type_builtin(t):
-                if name == '__new__':
-                    return AttrWhere.SELF_SPECIAL
-                continue
-            if _is_int_builtin(t):
-                if name == '__new__':
-                    return AttrWhere.SELF_SPECIAL
-                continue
-            if _is_dict_builtin(t):
-                if name == '__init__':
-                    return AttrWhere.SELF_SPECIAL
-                if name == '__setitem__':
-                    return AttrWhere.SELF_SPECIAL
-                continue
-            if _is_object_builtin(t):
-                continue
+            if isinstance(t, EBuiltin) and t.hasattr(name):
+                return AttrWhere.CLS
             assert isinstance(t, EClass), t
             if name in t.dict_:
                 return AttrWhere.SELF_SPECIAL
@@ -89,23 +75,11 @@ class ESuper(EPyObject):
         mro = mro[i+1:]
 
         for t in mro:
-            if _is_type_builtin(t):
-                if name == '__new__':
-                    return Result(get_guest_builtin('type.__new__'))
-                continue
-            if _is_int_builtin(t):
-                if name == '__new__':
-                    return Result(get_guest_builtin('type.__new__'))
-                continue
-            if _is_dict_builtin(t):
-                if name == '__init__':
-                    return Result(get_guest_builtin('dict.__init__'))
-                if name == '__setitem__':
-                    return invoke_desc(
-                        self, get_guest_builtin('dict.__setitem__'), ictx)
-                continue
-            if _is_object_builtin(t):
-                continue
+            if isinstance(t, EBuiltin):
+                if t.hasattr(name):
+                    return t.getattr(name, ictx)
+                else:
+                    continue
             assert isinstance(t, EClass), (t, name)
             if name not in t.dict_:
                 continue
