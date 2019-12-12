@@ -945,10 +945,16 @@ class EBuiltin(EPyType):
 
     BUILTIN_TYPES = ('object', 'type', 'dict', 'tuple', 'list', 'int')
     BUILTIN_FNS = (
-                'object.__init__', 'object.__str__', 'dict.__eq__',
-                'dict.__setitem__', 'dict.__getitem__', 'dict.__contains__',
-                'dict.fromkeys', 'dict.update', 'dict.setdefault',
-                'dict.pop', 'int.__new__', 'int.__add__')
+        # object
+        'object.__init__', 'object.__str__',
+        # dict
+        'dict.__eq__',
+        'dict.__setitem__', 'dict.__getitem__', 'dict.__contains__',
+        'dict.fromkeys', 'dict.update', 'dict.setdefault',
+        'dict.pop',
+        # int
+        'int.__new__', 'int.__add__', 'int.__init__',
+    )
 
     _registry: Dict[Text, Tuple[Callable, Optional[type]]] = {}
 
@@ -1106,7 +1112,7 @@ class EBuiltin(EPyType):
                 '__setitem__', '__delitem__', '__contains__'):
             return AttrWhere.SELF_SPECIAL
         if self.name == 'int' and name in (
-                '__add__'):
+                '__add__', '__init__'):
             return AttrWhere.SELF_SPECIAL
         if (self.name in self.BUILTIN_TYPES
                 and name in ('__mro__', '__dict__',)):
@@ -1148,6 +1154,8 @@ class EBuiltin(EPyType):
                 return Result(get_guest_builtin('int.__new__'))
             if name == '__add__':
                 return Result(get_guest_builtin('int.__add__'))
+            if name == '__init__':
+                return Result(get_guest_builtin('int.__init__'))
 
         if self.name == 'dict':
             if name == '__new__':

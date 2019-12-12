@@ -264,6 +264,14 @@ class StatefulFrame:
         vs = items[1::2]
         return Result(dict(zip(ks, vs)))
 
+    def _run_MAP_ADD(self, arg, argval) -> None:
+        k = self._pop()
+        v = self._pop()
+        map_ = self.stack[-arg]
+        assert isinstance(map_, dict), map_
+        si = get_guest_builtin('dict.__setitem__')
+        si.invoke((map_, k, v), {}, {}, self.ictx)
+
     def _run_BUILD_SET(self, arg, argval):
         count = arg
         limit = len(self.stack)-count

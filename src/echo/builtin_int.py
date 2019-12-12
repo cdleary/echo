@@ -50,6 +50,15 @@ def _do_int_new(
     raise NotImplementedError(args, kwargs)
 
 
+@register_builtin('int.__init__')
+@check_result
+def _do_int_init(
+        args: Tuple[Any, ...],
+        kwargs: Dict[Text, Any],
+        ictx: ICtx) -> Result[Any]:
+    return Result(None)
+
+
 @register_builtin('int.__add__')
 @check_result
 def _do_int_add(
