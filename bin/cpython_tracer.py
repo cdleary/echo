@@ -2,6 +2,7 @@
 
 import collections
 import ctypes
+import datetime
 import dis
 import functools
 import inspect
@@ -243,7 +244,7 @@ class CtypeFrame:
         self.print_block_stack()
 
 
-def _note_opcode_event(frame, opcodeno, verbose=True) -> None:
+def _note_opcode_event(frame, opcodeno, verbose=False) -> None:
     # From the docs:
     #     The interpreter is about to execute a new opcode (see dis for
     #     opcode details). The local trace function is called; arg is None;
@@ -284,8 +285,9 @@ def note_trace(frame, event, arg):
     #eprint('--- trace')
 
     def print_frame_info():
-        eprint(' frame.f_lasti:', frame.f_lasti)
-        eprint(' frame.f_lineno:', frame.f_lineno)
+        eprint('{}:{}'.format(frame.f_code.co_filename, frame.f_lineno))
+        # eprint(' frame.f_lasti:', frame.f_lasti)
+        # eprint(' frame.f_lineno:', frame.f_lineno)
         # eprint(' frame.f_locals:', frame.f_locals)
 
     if event == 'call':
@@ -298,12 +300,14 @@ def note_trace(frame, event, arg):
     elif event == 'opcode':
         _note_opcode_event(frame, OPCODE_COUNT)
         OPCODE_COUNT += 1
+        if OPCODE_COUNT % 98304 == 0:
+            eprint('opcodes: {:,}'.format(OPCODE_COUNT))
         pass
     elif event == 'line':
         #eprint('line!')
-        #print_frame_info()
         pass
     elif event == 'return':
+        #print_frame_info()
         TRACE_DUMPER.note_return(frame.f_code)
         pass
     elif event == 'exception':
@@ -326,7 +330,7 @@ def main():
 
     path = args[0]
 
-    sys.argv = args[1:]
+    #sys.argv = args[1:]
 
     print('Reading path:', path, file=sys.stderr)
     with open(path) as f:
@@ -334,10 +338,16 @@ def main():
 
     sys.settrace(note_trace)
     globals_ = {'__name__': '__main__'}
-    exec(contents, globals_)
+    start = datetime.datetime.now()
+    try:
+        exec(contents, globals_)
+    except BaseException as e:
+        eprint(e)
+    end = datetime.datetime.now()
     sys.settrace(None)
 
-    print('opcode count:', OPCODE_COUNT)
+    eprint('opcode count: {:,}'.format(OPCODE_COUNT))
+    eprint('opcodes/s:    {:,.2f}'.format(OPCODE_COUNT / (end-start).total_seconds()))
 
     if opts.dump_trace:
         print('Dumping', len(TRACE_DUMPER.entries), 'trace entries...')
