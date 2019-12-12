@@ -17,6 +17,7 @@ from echo.eobjects import (
     ReturnKind, EBuiltin, EFunction, EPyObject,
     GuestCoroutine, EInstance, get_guest_builtin,
     do_getitem, do_setitem, do_type, do_hasattr, do_getattr,
+    do_iter, do_next,
 )
 from echo.ecell import ECell
 from echo.emodule import EModule
@@ -737,6 +738,32 @@ class StatefulFrame:
         module = self._peek()
         import_routines.import_star(module, self.globals_, self.ictx)
         self._pop()  # Docs say 'module is popped after loading all names'.
+
+    def _run_UNPACK_EX(self, arg, argval):
+        tos = self._pop()
+        it = do_iter((tos,))
+        if it.is_exception():
+            return it
+        it = it.get_value()
+        stack_values = []
+        for _ in range(arg):
+            r = do_next((it,))
+            if r.is_exception():
+                return r
+            stack_values.append(r.get_value())
+        rest = []
+        while True:
+            r = do_next((it,))
+            if (r.is_exception()
+                    and isinstance(r.get_exception().exception,
+                                   StopIteration)):
+                break
+            if r.is_exception():
+                return r
+            rest.append(r.get_value())
+        stack_values.append(rest)
+        for item in reversed(stack_values):
+            self._push(item)
 
     def _run_UNPACK_SEQUENCE(self, arg, argval):
         # https://docs.python.org/3.7/library/dis.html#opcode-UNPACK_SEQUENCE

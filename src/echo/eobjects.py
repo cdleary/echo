@@ -388,7 +388,7 @@ class EClass(EPyType):
         self.subclasses.add(derived)
 
     def __repr__(self) -> Text:
-        if '__module__' in self.dict_:
+        if isinstance(self.dict_, dict) and '__module__' in self.dict_:
             return '<eclass \'{}.{}\'>'.format(
                 self.dict_['__module__'], self.name)
         return '<eclass \'{}\">'.format(self.name)
@@ -485,7 +485,10 @@ class EClass(EPyType):
             return Result(self.dict_)
 
         if name in self.dict_:
-            v = self.dict_[name]
+            r = do_getitem((self.dict_, name), ictx)
+            if r.is_exception():
+                return r
+            v = r.get_value()
             if isinstance(v, EPyObject) and v.hasattr('__get__'):
                 f_result = v.getattr('__get__', ictx)
                 if f_result.is_exception():
@@ -518,7 +521,9 @@ class EClass(EPyType):
             AttributeError))
 
     def setattr(self, name: Text, value: Any, ictx: ICtx) -> Result[None]:
-        self.dict_[name] = value
+        r = do_setitem((self.dict_, name, value), ictx)
+        if r.is_exception():
+            return r
         return Result(None)
 
 
@@ -749,13 +754,6 @@ def _do_issubclass(
 
 
 @check_result
-def _do_next(args: Tuple[Any, ...]) -> Result[Any]:
-    assert len(args) == 1, args
-    g = args[0]
-    return g.next()
-
-
-@check_result
 def _do_repr(args: Tuple[Any, ...], ictx: ICtx) -> Result[Any]:
     assert len(args) == 1, args
     o = args[0]
@@ -806,7 +804,11 @@ def _do_type_new(
             None, None,
             TypeError(msg)))
     metaclass, name, bases, ns = args
-    cls = EClass(name, dict_=ns, bases=bases, metaclass=metaclass)
+    ns_copy = do_dict((ns,), {}, ictx)
+    if ns_copy.is_exception():
+        return ns_copy
+    ns_copy = ns_copy.get_value()
+    cls = EClass(name, dict_=ns_copy, bases=bases, metaclass=metaclass)
     return Result(cls)
 
 
@@ -908,14 +910,6 @@ _ITER_BUILTIN_TYPES = (
     type({}.items()), list, type(reversed([])), type(range(0, 0)),
     set, type(zip((), ())),
 )
-
-
-def _do_iter(args: Tuple[Any, ...]) -> Result[Any]:
-    assert len(args) == 1
-
-    if isinstance(args[0], _ITER_BUILTIN_TYPES):
-        return Result(iter(args[0]))
-    raise NotImplementedError(args)
 
 
 class EBuiltin(EPyType):
@@ -1045,11 +1039,11 @@ class EBuiltin(EPyType):
         if self.name == 'object.__ne__':
             return _do_object_ne(args, kwargs, ictx)
         if self.name == 'iter':
-            return _do_iter(args)
+            return do_iter(args)
         if self.name == 'type':
             return do_type(args, {})
         if self.name == 'next':
-            return _do_next(args)
+            return do_next(args)
         if self.name == 'hasattr':
             return do_hasattr(args)
         if self.name == 'repr':
@@ -1337,6 +1331,14 @@ def do_getattr(args: Tuple[Any, ...],
 
 
 @check_result
+def do_dict(args: Tuple[Any, ...],
+            kwargs: Dict[Text, Any],
+            ictx: ICtx) -> Result[Any]:
+    f = get_guest_builtin('dict')
+    return f.invoke(args, kwargs, {}, ictx)
+
+
+@check_result
 def invoke_desc(self, cls_attr: EPyObject, ictx: ICtx) -> Result[Any]:
     assert cls_attr.hasattr('__get__')
 
@@ -1355,3 +1357,24 @@ def invoke_desc(self, cls_attr: EPyObject, ictx: ICtx) -> Result[Any]:
     ictx.desc_count += 1
 
     return f.invoke((self, objtype), {}, {}, ictx)
+
+
+@check_result
+def do_iter(args: Tuple[Any, ...]) -> Result[Any]:
+    assert len(args) == 1
+
+    if isinstance(args[0], _ITER_BUILTIN_TYPES):
+        return Result(iter(args[0]))
+    raise NotImplementedError(args)
+
+
+@check_result
+def do_next(args: Tuple[Any, ...]) -> Result[Any]:
+    assert len(args) == 1, args
+    g = args[0]
+    if isinstance(g, type(iter(()))):
+        try:
+            return Result(next(g))
+        except StopIteration as e:
+            return Result(ExceptionData(None, None, e))
+    return g.next()

@@ -223,10 +223,13 @@ def compare(opname: Text, lhs, rhs, ictx: ICtx) -> Result[bool]:
         f = special_f.get_value()
         log('ir:cmp', f'special function for {opname!r}: {special_f}')
         r = f.invoke((rhs,), {}, {}, ictx)
+        log('ir:cmp', f'special function for {opname!r}: {special_f} => {r}')
         if r.is_exception():
             return r
         if opname == 'not in':
-            return Result(Value(r.get_value()).is_falsy())
+            result = Value(r.get_value()).is_falsy()
+            log('ir:cmp', f'not in: lhs {lhs} rhs {rhs} => {result}')
+            return Result(result)
         return r
 
     def is_set_of_strings(x: Any) -> bool:
