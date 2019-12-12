@@ -18,3 +18,5 @@ assert d == {'m': 64}
 
 assert 'm' in d, d
 assert 'n' not in d, d
+
+assert dict(d) == {'m': 64}

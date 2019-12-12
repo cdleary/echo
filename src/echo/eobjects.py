@@ -248,6 +248,7 @@ class EMethod(EPyObject):
                kwargs: Dict[Text, Any],
                locals_dict: Dict[Text, Any],
                ictx: ICtx) -> Result[Any]:
+        assert isinstance(args, tuple), args
         return self.f.invoke(
             (self.bound_self,) + args,
             kwargs, locals_dict, ictx)
@@ -356,7 +357,7 @@ def _get_bases(c: EClassOrBuiltin) -> Tuple[EPyObject, ...]:
     assert isinstance(c, (EClass, EBuiltin)), c
     if isinstance(c, EClass):
         return c.bases
-    if _is_type_builtin(c) or _is_dict_builtin(c):
+    if _is_type_builtin(c) or _is_dict_builtin(c) or _is_int_builtin(c):
         return (get_guest_builtin('object'),)
     if _is_object_builtin(c):
         return ()
@@ -600,6 +601,10 @@ def _is_dict_builtin(x) -> bool:
     return isinstance(x, EBuiltin) and x.name == 'dict'
 
 
+def _is_int_builtin(x) -> bool:
+    return isinstance(x, EBuiltin) and x.name == 'int'
+
+
 def _is_list_builtin(x) -> bool:
     return isinstance(x, EBuiltin) and x.name == 'list'
 
@@ -667,6 +672,9 @@ def _do_isinstance(
 
     if _is_list_builtin(args[1]):
         return Result(isinstance(args[0], list))
+
+    if _is_int_builtin(args[1]):
+        return Result(isinstance(args[0], int))
 
     if _is_object_builtin(args[1]):
         return Result(True)  # Everything is an object.
@@ -813,6 +821,20 @@ def _do_type_new(
 
 
 @check_result
+def _do_type_mro(
+        args: Tuple[Any, ...],
+        kwargs: Dict[Text, Any],
+        ictx: ICtx) -> Result[Any]:
+    assert isinstance(args, tuple), args
+    assert len(args) == 1
+    assert not kwargs
+    if isinstance(args[0], EClass):
+        return Result(list(args[0].get_mro()))
+    else:
+        raise NotImplementedError
+
+
+@check_result
 def _do_type_subclasses(
         args: Tuple[Any, ...],
         kwargs: Dict[Text, Any],
@@ -915,7 +937,12 @@ _ITER_BUILTIN_TYPES = (
 class EBuiltin(EPyType):
     """A builtin function/type in the echo VM."""
 
-    BUILTIN_TYPES = ('object', 'type', 'dict', 'tuple', 'list')
+    BUILTIN_TYPES = ('object', 'type', 'dict', 'tuple', 'list', 'int')
+    BUILTIN_FNS = (
+                'object.__init__', 'object.__str__', 'dict.__eq__',
+                'dict.__setitem__', 'dict.__getitem__', 'dict.__contains__',
+                'dict.fromkeys', 'dict.update', 'dict.setdefault',
+                'dict.pop', 'int.__new__', 'int.__add__')
 
     _registry: Dict[Text, Tuple[Callable, Optional[type]]] = {}
 
@@ -952,11 +979,7 @@ class EBuiltin(EPyType):
             self.name, self.bound_self)
 
     def get_type(self) -> EPyObject:
-        if self.name in (
-                'object.__init__', 'object.__str__', 'dict.__eq__',
-                'dict.__setitem__', 'dict.__getitem__', 'dict.__contains__',
-                'dict.fromkeys', 'dict.update', 'dict.setdefault',
-                'dict.pop'):
+        if self.name in self.BUILTIN_FNS:
             if self.bound_self:
                 return EMethodType.singleton
             else:
@@ -1042,6 +1065,8 @@ class EBuiltin(EPyType):
             return do_iter(args)
         if self.name == 'type':
             return do_type(args, {})
+        if self.name == 'type.mro':
+            return _do_type_mro(args, {}, ictx)
         if self.name == 'next':
             return do_next(args)
         if self.name == 'hasattr':
@@ -1069,23 +1094,22 @@ class EBuiltin(EPyType):
                 'update', 'setdefault', 'pop', 'get', '__eq__', '__getitem__',
                 '__setitem__', '__delitem__', '__contains__'):
             return AttrWhere.SELF_SPECIAL
+        if self.name == 'int' and name in (
+                '__add__'):
+            return AttrWhere.SELF_SPECIAL
         if (self.name in self.BUILTIN_TYPES
                 and name in ('__mro__', '__dict__',)):
             return AttrWhere.SELF_SPECIAL
-        if (self.name in (
-                'dict.update', 'dict.setdefault', 'dict.pop',
-                'dict.__eq__', 'dict.__getitem__',
-                'dict.__setitem__', 'dict.__delitem__', 'dict.__contains__',)
-                and name == '__get__'):
+        if self.name in self.BUILTIN_FNS and name == '__get__':
             return AttrWhere.CLS
-        if (self.name in ('object', 'type', 'dict', 'tuple')
+        if (self.name in self.BUILTIN_TYPES
                 and name in ('__new__', '__init__', '__dict__', '__str__',
                              '__repr__', '__eq__', '__ne__', '__new__',
                              '__name__')):
             return AttrWhere.SELF_SPECIAL
         if self.name == 'object' and name in ('__subclasshook__', '__bases__'):
             return AttrWhere.SELF_SPECIAL
-        if self.name == 'type' and name in ('__subclasses__',):
+        if self.name == 'type' and name in ('__subclasses__', 'mro'):
             return AttrWhere.SELF_SPECIAL
         if name == '__eq__':
             return AttrWhere.CLS
@@ -1107,6 +1131,12 @@ class EBuiltin(EPyType):
     def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
         if name == '__self__' and self.bound_self is not None:
             return Result(self.bound_self)
+
+        if self.name == 'int':
+            if name == '__new__':
+                return Result(get_guest_builtin('int.__new__'))
+            if name == '__add__':
+                return Result(get_guest_builtin('int.__add__'))
 
         if self.name == 'dict':
             if name == '__new__':
@@ -1136,10 +1166,7 @@ class EBuiltin(EPyType):
             if name == 'get':
                 return Result(get_guest_builtin('dict.get'))
 
-        if (self.name in ('dict.update', 'dict.__eq__', 'dict.__setitem__',
-                          'dict.__getitem__', 'dict.__contains__',
-                          'dict.setdefault', 'dict.pop',
-                          'dict.get',)
+        if (self.name in self.BUILTIN_FNS
                 and name == '__get__'):
             return Result(EMethod(NativeFunction(
                 self._get, 'ebuiltin.__get__'), bound_self=self))
@@ -1168,6 +1195,8 @@ class EBuiltin(EPyType):
                 return Result(get_guest_builtin('type.__repr__'))
             if name == '__subclasses__':
                 return Result(get_guest_builtin('type.__subclasses__'))
+            if name == 'mro':
+                return Result(get_guest_builtin('type.mro'))
             if name == '__dict__':  # Fake it for now.
                 return Result({})
 
@@ -1279,6 +1308,8 @@ def do_type(args: Tuple[Any, ...], kwargs: Dict[Text, Any]) -> Result[Any]:
             return Result(get_guest_builtin('type'))
         if res is tuple:
             return Result(get_guest_builtin('tuple'))
+        if res is int:
+            return Result(get_guest_builtin('int'))
         return Result(res)
 
     assert len(args) == 3, args
@@ -1335,6 +1366,14 @@ def do_dict(args: Tuple[Any, ...],
             kwargs: Dict[Text, Any],
             ictx: ICtx) -> Result[Any]:
     f = get_guest_builtin('dict')
+    return f.invoke(args, kwargs, {}, ictx)
+
+
+@check_result
+def do_tuple(args: Tuple[Any, ...],
+             kwargs: Dict[Text, Any],
+             ictx: ICtx) -> Result[Any]:
+    f = get_guest_builtin('tuple')
     return f.invoke(args, kwargs, {}, ictx)
 
 

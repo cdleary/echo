@@ -8,6 +8,7 @@ from echo.eobjects import (
     EFunction, EMethod, NativeFunction, EBuiltin, EClass, EInstance,
     register_builtin, get_guest_builtin, invoke_desc,
     _is_type_builtin, _is_dict_builtin, _is_object_builtin,
+    _is_int_builtin,
 )
 from echo.interp_context import ICtx
 
@@ -52,6 +53,10 @@ class ESuper(EPyObject):
                 if name == '__new__':
                     return AttrWhere.SELF_SPECIAL
                 continue
+            if _is_int_builtin(t):
+                if name == '__new__':
+                    return AttrWhere.SELF_SPECIAL
+                continue
             if _is_dict_builtin(t):
                 if name == '__init__':
                     return AttrWhere.SELF_SPECIAL
@@ -85,6 +90,10 @@ class ESuper(EPyObject):
 
         for t in mro:
             if _is_type_builtin(t):
+                if name == '__new__':
+                    return Result(get_guest_builtin('type.__new__'))
+                continue
+            if _is_int_builtin(t):
                 if name == '__new__':
                     return Result(get_guest_builtin('type.__new__'))
                 continue

@@ -65,8 +65,15 @@ def _do_dict_call(
         args: Tuple[Any, ...],
         kwargs: Dict[Text, Any],
         ictx: ICtx) -> Result[Any]:
-    d = dict(*args, **kwargs)
-    log('go:dict()', f'dict(*{args}, **{kwargs}) => {d}')
+    d = {}
+    if (len(args) == 1 and isinstance(args[0], EInstance)
+            and dict in args[0].builtin_storage):
+        # TODO read from keys, this is a hack
+        d.update(args[0].builtin_storage[dict])
+        args = ()
+
+    log('go:dict()', f'dict(*{args}, **{kwargs})')
+    d.update(*args, **kwargs)
     return Result(d)
 
 

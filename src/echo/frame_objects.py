@@ -17,7 +17,7 @@ from echo.eobjects import (
     ReturnKind, EBuiltin, EFunction, EPyObject,
     GuestCoroutine, EInstance, get_guest_builtin,
     do_getitem, do_setitem, do_type, do_hasattr, do_getattr,
-    do_iter, do_next,
+    do_iter, do_next, do_tuple
 )
 from echo.ecell import ECell
 from echo.emodule import EModule
@@ -717,6 +717,11 @@ class StatefulFrame:
         else:
             kwargs = None
         callargs = self._pop()
+        if not isinstance(callargs, tuple):
+            callargs = do_tuple((callargs,), {}, self.ictx)
+            if callargs.is_exception():
+                return callargs
+            callargs = callargs.get_value()
         func = self._pop()
         return self.do_call_callback(
             func, callargs, kwargs, self.locals_dict, globals_=self.globals_,

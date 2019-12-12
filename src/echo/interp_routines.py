@@ -41,6 +41,7 @@ GUEST_BUILTIN_NAMES = (
     'dir',
     'getattr',
     'hasattr',
+    'int',
     'isinstance',
     'issubclass',
     'iter',
