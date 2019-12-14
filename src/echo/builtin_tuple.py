@@ -22,7 +22,7 @@ def _do_tuple(args: Tuple[Any, ...],
         it = args[0]
         items = []
         while True:
-            r = do_next((it,))
+            r = do_next((it,), ictx)
             if (r.is_exception() and
                     isinstance(r.get_exception().exception, StopIteration)):
                 break

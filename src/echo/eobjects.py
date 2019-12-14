@@ -1063,7 +1063,7 @@ class EBuiltin(EPyType):
         if self.name == 'iter':
             return do_iter(args, ictx)
         if self.name == 'next':
-            return do_next(args)
+            return do_next(args, ictx)
         if self.name == 'hasattr':
             return do_hasattr(args)
         if self.name == 'repr':
@@ -1398,14 +1398,35 @@ def do_iter(args: Tuple[Any, ...], ictx: ICtx) -> Result[Any]:
     if isinstance(args[0], _ITER_BUILTIN_TYPES):
         return Result(iter(args[0]))
 
+    if isinstance(args[0], EPyObject) and args[0].hasattr('__iter__'):
+        iter_f = args[0].getattr('__iter__', ictx)
+        if iter_f.is_exception():
+            return iter_f
+        iter_f = iter_f.get_value()
+        return iter_f.invoke((), {}, {}, ictx)
+
     raise NotImplementedError(args[0], type(args[0]))
 
 
+TUPLE_ITERATOR = type(iter(()))
+LIST_ITERATOR = type(iter([]))
+LIST_REV_ITERATOR = type(reversed([]))
+DICT_ITERATOR = type(iter({}))
+DICT_ITERATOR = type(iter(set([])))
+DICT_KEY_ITERATOR = type(iter({}.keys()))
+DICT_ITEM_ITERATOR = type(iter({}.items()))
+RANGE_ITERATOR = type(iter(range(0)))
+ZIP_ITERATOR = type(iter(zip((), ())))
+
+
 @check_result
-def do_next(args: Tuple[Any, ...]) -> Result[Any]:
+def do_next(args: Tuple[Any, ...], ictx: ICtx) -> Result[Any]:
     assert len(args) == 1, args
     g = args[0]
-    if isinstance(g, type(iter(()))):
+    if isinstance(g, (TUPLE_ITERATOR, LIST_ITERATOR, LIST_REV_ITERATOR,
+                      DICT_ITERATOR, RANGE_ITERATOR,
+                      DICT_KEY_ITERATOR, ZIP_ITERATOR,
+                      DICT_ITEM_ITERATOR, types.GeneratorType)):
         try:
             return Result(next(g))
         except StopIteration as e:

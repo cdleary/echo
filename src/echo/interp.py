@@ -188,6 +188,7 @@ def do_call(f,
     if f in (dict, chr, range, print, sorted, str, set, tuple, hasattr,
              bytearray, object, frozenset, weakref.WeakSet,
              weakref.ref) + interp_routines.BUILTIN_EXCEPTION_TYPES:
+        log('interp:do_call', f'f: {f} args: {args} kwargs: {kwargs}')
         r = f(*args, **kwargs)
         return Result(r)
 

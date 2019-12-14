@@ -172,6 +172,7 @@ class StatefulFrame:
         # virtualization abstraction, which is undesirable.
         assert x is not isinstance
         assert x is not tuple
+        assert x is not dict
         assert not isinstance(x, Value), x
         assert x is not GuestCoroutine
         log('fo:push()', repr(x))
@@ -393,9 +394,10 @@ class StatefulFrame:
 
     @sets_pc
     def _run_FOR_ITER(self, arg, argval):
-        try:
-            x = self._peek().__next__()
-        except StopIteration:
+        o = self._peek()
+        r = do_next((o,), self.ictx)
+        if (r.is_exception()
+                and isinstance(r.get_exception().exception, StopIteration)):
             self._pop()
             self.pc += self.pc_to_bc_width[self.pc] + arg
             new_instruction = self.pc_to_instruction[self.pc]
@@ -404,9 +406,8 @@ class StatefulFrame:
                 'Attempted to jump to invalid target.', self.pc,
                 self.pc_to_instruction[self.pc])
             return True
-        else:
-            self._push(x)
-            return False
+        assert not r.is_exception(), r
+        self._push(r.get_value())
 
     def _run_MAKE_FUNCTION(self, arg, argval):
         if sys.version_info >= (3, 6):
@@ -766,13 +767,13 @@ class StatefulFrame:
         it = it.get_value()
         stack_values = []
         for _ in range(arg):
-            r = do_next((it,))
+            r = do_next((it,), self.ictx)
             if r.is_exception():
                 return r
             stack_values.append(r.get_value())
         rest = []
         while True:
-            r = do_next((it,))
+            r = do_next((it,), self.ictx)
             if (r.is_exception()
                     and isinstance(r.get_exception().exception,
                                    StopIteration)):

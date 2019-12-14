@@ -100,6 +100,8 @@ def do_type(args: Tuple[Any, ...], kwargs: Dict[Text, Any],
             return Result(get_guest_builtin('tuple'))
         if res is int:
             return Result(get_guest_builtin('int'))
+        if res is dict:
+            return Result(get_guest_builtin('dict'))
         return Result(res)
 
     assert len(args) == 3, args
