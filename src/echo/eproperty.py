@@ -6,6 +6,7 @@ from echo.eobjects import (
     EFunction, EMethod, NativeFunction, EBuiltin,
     get_guest_builtin,
 )
+from echo.elog import log
 from echo.interp_context import ICtx
 
 
@@ -28,6 +29,7 @@ class EProperty(EPyObject):
              locals_dict: Dict[Text, Any],
              ictx: ICtx) -> Result[Any]:
         _self, obj, objtype = args
+        log('ep:get', f'fget: {self.fget} obj: {obj} objtype: {objtype}')
         assert _self is self
         return self.fget.invoke((obj,), kwargs, locals_dict, ictx)
 

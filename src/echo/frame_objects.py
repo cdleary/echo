@@ -16,8 +16,8 @@ from echo import import_routines
 from echo.eobjects import (
     ReturnKind, EBuiltin, EFunction, EPyObject,
     GuestCoroutine, EInstance, get_guest_builtin,
-    do_getitem, do_setitem, do_type, do_hasattr, do_getattr,
-    do_iter, do_next, do_tuple
+    do_getitem, do_setitem, do_hasattr, do_getattr,
+    do_iter, do_next, do_tuple, do_delitem,
 )
 from echo.ecell import ECell
 from echo.emodule import EModule
@@ -29,7 +29,6 @@ from echo import bytecode_trace
 from echo.value import Value
 
 
-ECHO_TRACE = bool(os.getenv('ECHO_TRACE', False))
 DEBUG_PRINT_BYTECODE_LINE = bool(os.getenv('DEBUG_PRINT_BYTECODE_LINE', False))
 GUEST_BUILTINS = {
     list: {'append', 'remove', 'insert'},
@@ -230,7 +229,8 @@ class StatefulFrame:
         if isinstance(tos1, (dict, list)):
             del tos1[tos]
         elif isinstance(tos1, EPyObject):
-            tos1.delattr(tos)
+            r = do_delitem((tos1, tos), self.ictx)
+            assert not r.is_exception(), r
         else:
             raise NotImplementedError(tos, tos1)
 
@@ -238,7 +238,7 @@ class StatefulFrame:
         return Result(self.consts[arg])
 
     def _run_GET_ITER(self, arg, argval):
-        return Result(self._pop().__iter__())
+        return do_iter((self._pop(),), self.ictx)
 
     def _run_LOAD_BUILD_CLASS(self, arg, argval):
         return Result(get_guest_builtin('__build_class__'))
@@ -558,6 +558,8 @@ class StatefulFrame:
             r = obj.getattr(argval, self.ictx)
         elif isinstance(obj, EPyObject):
             r = obj.getattr(argval, self.ictx)
+        elif obj is None and argval == '__new__':
+            r = Result(get_guest_builtin('type.__new__'))
         elif obj is sys and argval == 'path':
             r = Result(self.interp_state.paths)
         elif obj is sys and argval == 'modules':
@@ -651,7 +653,8 @@ class StatefulFrame:
         tos1 = self._pop()
         tos2 = self._pop()
         log('bc:store_subscr', f'd: {tos1} k: {tos} v: {tos2}')
-        operator.setitem(tos1, tos, tos2)
+        r = do_setitem((tos1, tos, tos2), self.ictx)
+        assert not r.is_exception(), r
 
     def _run_CALL_FUNCTION_KW(self, arg, argval):
         args = arg
@@ -695,7 +698,7 @@ class StatefulFrame:
         attr_result = self._run_LOAD_ATTR(arg, argval)
         if attr_result.is_exception():
             return attr_result
-        log('bc:lm', f'LOAD_ATTR obj {obj} argval {argval} => {attr_result}')
+        log('bc:lm', f'LOAD_ATTR obj {obj!r} argval {argval} => {attr_result}')
         self._push(attr_result.get_value())
         if (desc_count_before == self.ictx.desc_count
                 and interp_routines.method_requires_self(
@@ -757,7 +760,7 @@ class StatefulFrame:
 
     def _run_UNPACK_EX(self, arg, argval):
         tos = self._pop()
-        it = do_iter((tos,))
+        it = do_iter((tos,), self.ictx)
         if it.is_exception():
             return it
         it = it.get_value()
@@ -797,14 +800,6 @@ class StatefulFrame:
     def _run_one_bytecode(self) -> Optional[Result[Tuple[Value, ReturnKind]]]:
         instruction = self.pc_to_instruction[self.pc]
         assert instruction is not None
-
-        if ECHO_TRACE:
-            print('opcode about to execute...')
-            print(' instruction:', instruction)
-            print(' stack ({}):'.format(len(self.stack)))
-            for i, value in enumerate(reversed(self.stack)):
-                print('  TOS{}: {} :: {} :: {}'.format(
-                      i, do_type((value,)).get_value(), value, id(value)))
 
         if instruction.starts_line:
             log('bc:line',

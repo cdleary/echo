@@ -10,5 +10,7 @@ class Derived(Base):
     value = 42
 
 
-assert Base.f() == 64
-assert Derived.f() == 42
+assert type(Base) is MyMeta
+assert type(Derived) is MyMeta
+assert Base.f() == 64, Base.f()
+assert Derived.f() == 42, Derived.f()

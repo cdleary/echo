@@ -9,6 +9,7 @@ from typing import Tuple, Any, Text
 import pytest
 
 from echo import interp
+from echo import interp_result
 from echo import interp_context
 
 
@@ -33,16 +34,14 @@ def test_is_prefix_of() -> None:
     assert _is_prefix_of((3, 7), (3, 7, 2))
 
 
-@pytest.mark.parametrize(
-        'vm,path', itertools.product(('evm', 'cpy'), SAMPLE_FILES))
-def test_echo_on_sample(path: Text, vm: Text):
+def run_to_result(path: Text, vm: Text) -> interp_result.Result[Any]:
     basename = os.path.basename(path)
     fullpath = os.path.realpath(path)
     dirpath = os.path.dirname(fullpath)
 
     if vm == 'cpy':
         subp.check_call(['python', path])
-        return
+        return interp_result.Result(None)
 
     if basename.startswith('knownf_'):
         pytest.xfail('Known-failing sample.')
@@ -72,4 +71,13 @@ def test_echo_on_sample(path: Text, vm: Text):
     if result.is_exception():
         print(result.get_exception().exception)
         pprint.pprint(result.get_exception().traceback, width=120)
-    assert not result.is_exception(), result.get_exception()
+    return result
+
+
+PROD = itertools.product(('evm', 'cpy'), SAMPLE_FILES)
+
+
+@pytest.mark.parametrize('vm,path', PROD)
+def test_echo_on_sample(path: Text, vm: Text):
+    r = run_to_result(path, vm)
+    assert not r.is_exception(), r.get_exception()

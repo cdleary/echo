@@ -4,7 +4,7 @@ from echo.epy_object import EPyObject, AttrWhere
 from echo.interp_result import Result, ExceptionData, check_result
 from echo.eobjects import (
     EFunction, EMethod, NativeFunction, EBuiltin,
-    do_type, get_guest_builtin,
+    get_guest_builtin,
 )
 from echo.interp_context import ICtx
 
@@ -41,6 +41,7 @@ class EClassMethod(EPyObject):
         _self, obj, objtype = args
         assert _self is self
         if obj is not None:
+            do_type = get_guest_builtin('type')
             objtype = do_type((obj,), {})
         return Result(EMethod(self.f, bound_self=objtype))
 

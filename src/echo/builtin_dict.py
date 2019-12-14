@@ -121,6 +121,19 @@ def _do_dict_setitem(
     return Result(d.__setitem__(k, v))
 
 
+@register_builtin('dict.__delitem__')
+@check_result
+def _do_dict_delitem(
+        args: Tuple[Any, ...],
+        kwargs: Dict[Text, Any],
+        ictx: ICtx) -> Result[None]:
+    assert len(args) == 2, args
+    assert not kwargs, kwargs
+    lhs, k = args
+    d = _resolve(lhs)
+    return Result(d.__delitem__(k))
+
+
 @register_builtin('dict.__contains__')
 @check_result
 def _do_dict_contains(

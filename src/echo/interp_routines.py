@@ -264,6 +264,21 @@ def compare(opname: Text, lhs, rhs, ictx: ICtx) -> Result[bool]:
             and isinstance(rhs, EBuiltin)):
         return Result(lhs is rhs)
 
+    def symmetrical_isinstance(cls0, cls1):
+        return ((isinstance(lhs, cls0) and isinstance(rhs, cls1)) or
+                (isinstance(lhs, cls1) and isinstance(rhs, cls0)))
+
+    if opname == '==' and symmetrical_isinstance(EBuiltin, EFunction):
+        return Result(False)
+
+    if (opname == '==' and isinstance(lhs, (EBuiltin, EFunction))
+            and rhs is None):
+        return Result(False)
+
+    if (opname == '==' and isinstance(lhs, EFunction)
+            and isinstance(rhs, EFunction)):
+        return Result(lhs is rhs)
+
     raise NotImplementedError(opname, lhs, rhs)
 
 

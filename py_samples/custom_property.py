@@ -15,5 +15,8 @@ class ClassWithProperty:
         return 42
 
 
-cwp = ClassWithProperty()
-assert cwp.stuff == 42
+descr = ClassWithProperty.__dict__['stuff']
+#assert isinstance(descr, MyProperty), descr
+assert hasattr(descr, 'fget'), descr
+#cwp = ClassWithProperty()
+#assert cwp.stuff == 42

@@ -1,13 +1,31 @@
-from typing import Text, Tuple, Any, Dict, Optional
+from typing import Text, Tuple, Any, Dict, Optional, Union
 
-from echo.epy_object import EPyObject
+from echo.epy_object import EPyObject, EPyType
 from echo.interp_result import Result, ExceptionData, check_result
 from echo.eobjects import (
     EFunction, EClass, EMethod, NativeFunction, EBuiltin,
-    do_setitem, do_type,
+    do_setitem, get_guest_builtin,
 )
 from echo.interp_context import ICtx
 from echo.elog import log
+
+
+def _pytype_calculate_metaclass(
+        metatype: EPyType,
+        bases: Tuple[EPyType, EBuiltin]) -> Result[Union[EPyType, EBuiltin]]:
+    winner = metatype
+    for tmp in bases:
+        tmptype = tmp.get_type()
+        if winner.is_subtype_of(tmptype):
+            continue
+        if tmptype.is_subtype_of(winner):
+            winner = tmptype
+            continue
+        log('go:pcm', f'winner: {winner} tmptype: {tmptype}')
+        msg = ('metaclass conflict: the metaclass of a derived class must be a'
+               ' (non-strict subclass of the metaclasses of all its bases')
+        return Result(ExceptionData(None, None, TypeError(msg)))
+    return Result(winner)
 
 
 @check_result
@@ -19,7 +37,18 @@ def _do___build_class__(
     func, name, *bases = args
     bases = tuple(bases)
     metaclass = kwargs.pop('metaclass', None) if kwargs else None
-    if metaclass and metaclass.hasattr('__prepare__'):
+    if not metaclass:
+        if bases:
+            metaclass = bases[0].get_type()
+            log('go:build_class', f'bases[0] start metaclass: {metaclass}')
+            metaclass = _pytype_calculate_metaclass(metaclass, bases)
+            if metaclass.is_exception():
+                return metaclass
+            metaclass = metaclass.get_value()
+        else:
+            metaclass = get_guest_builtin('type')
+
+    if metaclass.hasattr('__prepare__'):
         prep_f = metaclass.getattr('__prepare__', ictx)
         if prep_f.is_exception():
             return Result(prep_f.get_exception())
@@ -44,7 +73,7 @@ def _do___build_class__(
         return Result(class_eval_result.get_exception())
     cell = class_eval_result.get_value()
     if cell is None:
-        if metaclass and metaclass.hasattr('__new__'):
+        if metaclass.hasattr('__new__'):
             new_f = metaclass.getattr('__new__', ictx).get_value()
             log('bc:__build_class__',
                 f'invoking metaclass new: {new_f} ns: {ns}')
@@ -53,11 +82,11 @@ def _do___build_class__(
                 globals_=new_f.globals_)
         return Result(EClass(name, ns, bases=bases, metaclass=metaclass))
 
-    if metaclass:
+    if metaclass != get_guest_builtin('type'):
         raise NotImplementedError(metaclass, cell)
 
     # Now we call the metaclass with the evaluated namespace.
-    cls_result = do_type((name, bases, ns), {})
+    cls_result = metaclass.invoke((name, bases, ns), {}, {}, ictx)
     if cls_result.is_exception():
         return Result(cls_result.get_exception())
 

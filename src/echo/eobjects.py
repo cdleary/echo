@@ -254,6 +254,73 @@ class EMethod(EPyObject):
             kwargs, locals_dict, ictx)
 
 
+class NotFoundSentinel:
+    pass
+
+
+NotFoundSentinel.singleton = NotFoundSentinel()
+
+
+def _find_name_in_mro(type_: EPyType, name: Text, ictx: ICtx) -> Any:
+    mro = type_.get_mro()
+    log('eo:fnim', f'searching for {name} in {mro}')
+    for cls in mro:
+        if isinstance(cls, EBuiltin):
+            if cls.hasattr(name):
+                return cls.getattr(name, ictx).get_value()
+        else:
+            assert isinstance(cls, EClass), cls
+            log('eo:fnim',
+                f'searching for {name} in {cls.name} among {cls.dict_.keys()}')
+            if name in cls.dict_:
+                return cls.dict_[name]
+    return NotFoundSentinel.singleton
+
+
+def _type_getattro(type_: EPyType, name: Text, ictx: ICtx) -> Result[Any]:
+    if name == '__dict__':
+        return Result(type_.dict_)
+    if name == '__mro__':
+        return Result(type_.get_mro())
+    if name == '__class__':
+        return Result(type_.metaclass or get_guest_builtin('type'))
+    if name == '__bases__':
+        return Result(type_.bases)
+
+    metatype = type_.get_type()
+    meta_attr = _find_name_in_mro(metatype, name, ictx)
+    log('eo:ec:ga', f'type_: {type_} name: {name!r} metaclass: {metatype} '
+                    f'meta_attr: {meta_attr}')
+    if meta_attr is not NotFoundSentinel.singleton:
+        if (isinstance(meta_attr, EPyObject)
+                and meta_attr.hasattr('__get__')
+                and meta_attr.hasattr('__set__')):
+            log('gi:ga', f'overriding descriptor: {meta_attr}')
+            f = meta_attr.getattr('__get__', ictx)
+            if f.is_exception():
+                return f
+            f = f.get_value()
+            return f.invoke((type_, metatype), {}, {}, ictx)
+
+    attr = _find_name_in_mro(type_, name, ictx)
+    if attr is not NotFoundSentinel.singleton:
+        log('eo:ec:ga', f'dict attr {name!r} on {type_}: {attr}')
+        if isinstance(attr, EPyObject) and attr.hasattr('__get__'):
+            f_result = attr.getattr('__get__', ictx)
+            if f_result.is_exception():
+                return Result(f_result.get_exception())
+            return f_result.get_value().invoke((None, type_), {}, {}, ictx)
+        return Result(attr)
+
+    if meta_attr is not NotFoundSentinel.singleton:
+        return Result(meta_attr)
+
+    return Result(ExceptionData(
+        None,
+        f'Class {type_.name} does not have attribute {name!r}',
+        AttributeError))
+
+
 class EInstance(EPyObject):
 
     builtin_storage: Dict[type, Any]
@@ -280,19 +347,10 @@ class EInstance(EPyObject):
         assert isinstance(cls_hasattr, bool), (self.cls, cls_hasattr)
         return AttrWhere.CLS if cls_hasattr else None
 
-    def _search_mro_for(self, name: Text, ictx: ICtx) -> Optional[Any]:
-        for cls in self.cls.get_mro():
-            if isinstance(cls, EBuiltin):
-                if cls.hasattr(name):
-                    return cls.getattr(name, ictx).get_value()
-                continue
-            assert isinstance(cls, EClass), cls
-            if name in cls.dict_:
-                return cls.dict_[name]
-        return None
-
+    @check_result
     def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
-        cls_attr = self._search_mro_for(name, ictx)
+        """Looks up an attribute on this object instance."""
+        cls_attr = _find_name_in_mro(self.get_type(), name, ictx)
 
         log('gi:ga', f'self: {self} name: {name} cls_attr: {cls_attr}')
 
@@ -316,7 +374,7 @@ class EInstance(EPyObject):
             log('gi:ga', f'non-overriding descriptor: {cls_attr}')
             return invoke_desc(self, cls_attr, ictx)
 
-        if cls_attr is not None:
+        if cls_attr is not NotFoundSentinel.singleton:
             return Result(cls_attr)
 
         return Result(ExceptionData(
@@ -482,44 +540,11 @@ class EClass(EPyType):
 
     @check_result
     def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
-        if name == '__dict__':
-            return Result(self.dict_)
+        """Looks up an attribute on this class object.
 
-        if name in self.dict_:
-            r = do_getitem((self.dict_, name), ictx)
-            if r.is_exception():
-                return r
-            v = r.get_value()
-            if isinstance(v, EPyObject) and v.hasattr('__get__'):
-                f_result = v.getattr('__get__', ictx)
-                if f_result.is_exception():
-                    return Result(f_result.get_exception())
-                return f_result.get_value().invoke((None, self), {}, {}, ictx)
-            return Result(v)
-
-        if name == '__mro__':
-            return Result(self.get_mro())
-        if name == '__class__':
-            return Result(self.metaclass or get_guest_builtin('type'))
-        if name == '__bases__':
-            return Result(self.bases)
-        if name == '__subclasses__':
-            return Result(get_guest_builtin('type.__subclasses__'))
-        log('ga', f'bases: {self.bases} metaclass: {self.metaclass}')
-
-        for base in self.get_mro()[1:]:
-            ha = do_hasattr((base, name)).get_value()
-            log('ga', f'checking base: {base} for {name} => {ha}')
-            if ha:
-                return do_getattr((base, name), {}, ictx)
-
-        if self.metaclass and self.metaclass.hasattr(name):
-            return self.metaclass.getattr(name, ictx)
-
-        return Result(ExceptionData(
-            None,
-            f'Class {self.name} does not have attribute {name!r}',
-            AttributeError))
+        This should effectively correspond to type_getattro.
+        """
+        return _type_getattro(self, name, ictx)
 
     def setattr(self, name: Text, value: Any, ictx: ICtx) -> Result[None]:
         r = do_setitem((self.dict_, name, value), ictx)
@@ -662,7 +687,8 @@ def _do_isinstance(
     if _is_type_builtin(args[1]):
         if _is_type_builtin(args[0]) or _is_object_builtin(args[0]):
             return Result(True)
-        lhs_type = do_type((args[0],), {})
+        do_type = get_guest_builtin('type')
+        lhs_type = do_type.invoke((args[0],), {}, {}, ictx)
         if lhs_type.is_exception():
             return Result(lhs_type.get_exception())
         result = _do_issubclass(
@@ -718,7 +744,7 @@ def _do_issubclass(
         if scc.is_exception():
             return Result(scc.get_exception())
         scc = scc.get_value()
-        result = ictx.call(scc, (args[1], args[0]), {}, {},
+        result = ictx.call(scc, (args[1], args[0],), {}, {},
                            globals_=scc.globals_)
         return result
 
@@ -801,54 +827,6 @@ def _do_str(args: Tuple[Any, ...], ictx: ICtx) -> Result[Any]:
 def _do_object(args: Tuple[Any, ...]) -> Result[Any]:
     assert len(args) == 0, args
     return Result(EInstance(cls=get_guest_builtin('object')))
-
-
-@check_result
-def _do_type_new(
-        args: Tuple[Any, ...],
-        kwargs: Dict[Text, Any],
-        ictx: ICtx) -> Result[EClass]:
-    if kwargs:
-        kwarg_metaclass = kwargs.pop('metaclass', args[0])
-        assert kwarg_metaclass is args[0]
-        assert not kwargs, kwargs
-    if len(args) != 4:
-        msg = f"Expected 4 arguments to type.__new__, got {len(args)}"
-        return Result(ExceptionData(
-            None, None,
-            TypeError(msg)))
-    metaclass, name, bases, ns = args
-    ns_copy = do_dict((ns,), {}, ictx)
-    if ns_copy.is_exception():
-        return ns_copy
-    ns_copy = ns_copy.get_value()
-    cls = EClass(name, dict_=ns_copy, bases=bases, metaclass=metaclass)
-    return Result(cls)
-
-
-@check_result
-def _do_type_mro(
-        args: Tuple[Any, ...],
-        kwargs: Dict[Text, Any],
-        ictx: ICtx) -> Result[Any]:
-    assert isinstance(args, tuple), args
-    assert len(args) == 1
-    assert not kwargs
-    if isinstance(args[0], EClass):
-        return Result(list(args[0].get_mro()))
-    else:
-        raise NotImplementedError
-
-
-@check_result
-def _do_type_subclasses(
-        args: Tuple[Any, ...],
-        kwargs: Dict[Text, Any],
-        ictx: ICtx) -> Result[Any]:
-    assert len(args) == 1, args
-    c = args[0]
-    assert isinstance(c, EClass), c
-    return Result(sorted(list(c.subclasses)))
 
 
 @check_result
@@ -936,20 +914,26 @@ def _do_dir(args: Tuple[Any, ...],
 _ITER_BUILTIN_TYPES = (
     tuple, str, bytes, bytearray, type({}.keys()), type({}.values()),
     type({}.items()), list, type(reversed([])), type(range(0, 0)),
-    set, type(zip((), ())),
+    set, type(zip((), ())), frozenset, weakref.WeakSet, dict,
 )
 
 
 class EBuiltin(EPyType):
     """A builtin function/type in the echo VM."""
 
-    BUILTIN_TYPES = ('object', 'type', 'dict', 'tuple', 'list', 'int')
+    BUILTIN_TYPES = (
+        'object', 'type', 'dict', 'tuple', 'list', 'int', 'classmethod',
+        'staticmethod', 'property',
+    )
     BUILTIN_FNS = (
         # object
         'object.__init__', 'object.__str__',
+        # type
+        'type.__init__', 'type.__str__',
         # dict
         'dict.__eq__',
-        'dict.__setitem__', 'dict.__getitem__', 'dict.__contains__',
+        'dict.__setitem__', 'dict.__getitem__', 'dict.__delitem__',
+        'dict.__contains__',
         'dict.fromkeys', 'dict.update', 'dict.setdefault',
         'dict.pop',
         # int
@@ -1019,6 +1003,8 @@ class EBuiltin(EPyType):
     def is_subtype_of(self, other: EPyType) -> bool:
         if _is_type_builtin(self) and _is_object_builtin(other):
             return True
+        if self is other:
+            return True
         return False
 
     @check_result
@@ -1060,10 +1046,6 @@ class EBuiltin(EPyType):
             return _do_isinstance(args, ictx)
         if self.name == 'issubclass':
             return _do_issubclass(args, ictx)
-        if self.name == 'type.__new__':
-            return _do_type_new(args, kwargs, ictx)
-        if self.name == 'type.__subclasses__':
-            return _do_type_subclasses(args, kwargs, ictx)
         if self.name == 'object.__subclasshook__':
             return _do_object_subclasshook(args, kwargs, ictx)
         if self.name == 'object.__new__':
@@ -1079,11 +1061,7 @@ class EBuiltin(EPyType):
         if self.name == 'object.__ne__':
             return _do_object_ne(args, kwargs, ictx)
         if self.name == 'iter':
-            return do_iter(args)
-        if self.name == 'type':
-            return do_type(args, {})
-        if self.name == 'type.mro':
-            return _do_type_mro(args, {}, ictx)
+            return do_iter(args, ictx)
         if self.name == 'next':
             return do_next(args)
         if self.name == 'hasattr':
@@ -1112,7 +1090,7 @@ class EBuiltin(EPyType):
                 '__setitem__', '__delitem__', '__contains__'):
             return AttrWhere.SELF_SPECIAL
         if self.name == 'int' and name in (
-                '__add__', '__init__'):
+                '__add__', '__init__', '__repr__'):
             return AttrWhere.SELF_SPECIAL
         if (self.name in self.BUILTIN_TYPES
                 and name in ('__mro__', '__dict__',)):
@@ -1156,6 +1134,10 @@ class EBuiltin(EPyType):
                 return Result(get_guest_builtin('int.__add__'))
             if name == '__init__':
                 return Result(get_guest_builtin('int.__init__'))
+            if name == '__repr__':
+                return Result(get_guest_builtin('int.__repr__'))
+            if name == '__str__':
+                return Result(get_guest_builtin('int.__str__'))
 
         if self.name == 'dict':
             if name == '__new__':
@@ -1208,10 +1190,14 @@ class EBuiltin(EPyType):
         if self.name == 'type':
             if name == '__new__':
                 return Result(get_guest_builtin('type.__new__'))
+            if name == '__init__':
+                return Result(get_guest_builtin('type.__init__'))
             if name == '__name__':
                 return Result(get_guest_builtin('type.__name__'))
             if name == '__repr__':
                 return Result(get_guest_builtin('type.__repr__'))
+            if name == '__str__':
+                return Result(get_guest_builtin('type.__str__'))
             if name == '__subclasses__':
                 return Result(get_guest_builtin('type.__subclasses__'))
             if name == 'mro':
@@ -1313,34 +1299,20 @@ def do_setitem(args: Tuple[Any, ...], ictx: ICtx) -> Result[None]:
 
 
 @check_result
-def do_type(args: Tuple[Any, ...], kwargs: Dict[Text, Any]) -> Result[Any]:
-    assert not kwargs, kwargs
-    assert isinstance(args, tuple), args
-    log('go:type()', f'args: {args}')
-    if len(args) == 1:
-        if isinstance(args[0], EPyObject):
-            return Result(args[0].get_type())
-        res = type(args[0])
-        if res is object:
-            return Result(get_guest_builtin('object'))
-        if res is type:
-            return Result(get_guest_builtin('type'))
-        if res is tuple:
-            return Result(get_guest_builtin('tuple'))
-        if res is int:
-            return Result(get_guest_builtin('int'))
-        return Result(res)
-
-    assert len(args) == 3, args
-    name, bases, ns = args
-
-    cls = EClass(name, ns, bases=bases)
-
-    if '__classcell__' in ns:
-        ns['__classcell__'].set(cls)
-        del ns['__classcell__']
-
-    return Result(cls)
+def do_delitem(args: Tuple[Any, ...], ictx: ICtx) -> Result[None]:
+    assert len(args) == 2, args
+    log('go:do_delitem()', f'args: {args}')
+    o, name = args
+    if not isinstance(o, EPyObject):
+        del o[name]
+        return Result(None)
+    if o.hasattr('__delitem__'):
+        f = o.getattr('__delitem__', ictx).get_value()
+        res = ictx.call(f, (args[1],), {}, {}, globals_=f.globals_)
+        if res.is_exception():
+            return res
+        return Result(None)
+    raise NotImplementedError(o, name)
 
 
 @check_result
@@ -1407,7 +1379,9 @@ def invoke_desc(self, cls_attr: EPyObject, ictx: ICtx) -> Result[Any]:
     f = f_result.get_value()
 
     # Determine the type of obj.
-    objtype_result = do_type((cls_attr,), {})
+    do_type = get_guest_builtin('type')
+    objtype_result = do_type.invoke(args=(cls_attr,), kwargs={},
+                                    locals_dict={}, ictx=ictx)
     if objtype_result.is_exception():
         return Result(objtype_result.get_exception())
     objtype = objtype_result.get_value()
@@ -1418,12 +1392,13 @@ def invoke_desc(self, cls_attr: EPyObject, ictx: ICtx) -> Result[Any]:
 
 
 @check_result
-def do_iter(args: Tuple[Any, ...]) -> Result[Any]:
+def do_iter(args: Tuple[Any, ...], ictx: ICtx) -> Result[Any]:
     assert len(args) == 1
 
     if isinstance(args[0], _ITER_BUILTIN_TYPES):
         return Result(iter(args[0]))
-    raise NotImplementedError(args)
+
+    raise NotImplementedError(args[0], type(args[0]))
 
 
 @check_result

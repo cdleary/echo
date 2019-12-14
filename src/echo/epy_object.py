@@ -34,8 +34,8 @@ class EPyObject(abc.ABC):
         return self.hasattr_where(name) is not None
 
     # @abc.abstractmethod
-    def delattr(self, name: Text, value: Any) -> Any:
-        raise NotImplementedError(self, name, value)
+    def delattr(self, name: Text) -> Any:
+        raise NotImplementedError(self, name)
 
 
 class EPyType(EPyObject):

@@ -1,0 +1,114 @@
+from typing import Text, Tuple, Any, Dict, Optional
+
+from echo.elog import log
+from echo.epy_object import EPyObject
+from echo.interp_result import Result, ExceptionData, check_result
+from echo import interp_routines
+from echo.eobjects import (
+    EFunction, EMethod, NativeFunction, EClass, EInstance,
+    register_builtin, _is_dict_builtin, get_guest_builtin,
+)
+from echo.interp_context import ICtx
+
+
+@register_builtin('type.__new__')
+@check_result
+def _do_type_new(
+        args: Tuple[Any, ...],
+        kwargs: Dict[Text, Any],
+        ictx: ICtx) -> Result[EClass]:
+    if kwargs:
+        kwarg_metaclass = kwargs.pop('metaclass', args[0])
+        assert kwarg_metaclass is args[0]
+        assert not kwargs, kwargs
+    if len(args) != 4:
+        msg = f"Expected 4 arguments to type.__new__, got {len(args)}"
+        return Result(ExceptionData(
+            None, None,
+            TypeError(msg)))
+    metaclass, name, bases, ns = args
+    do_dict = get_guest_builtin('dict')
+    ns_copy = do_dict.invoke((ns,), {}, {}, ictx)
+    if ns_copy.is_exception():
+        return ns_copy
+    ns_copy = ns_copy.get_value()
+    cls = EClass(name, dict_=ns_copy, bases=bases, metaclass=metaclass)
+    return Result(cls)
+
+
+@register_builtin('type.__init__')
+@check_result
+def _do_type_init(
+        args: Tuple[Any, ...],
+        kwargs: Dict[Text, Any],
+        ictx: ICtx) -> Result[Any]:
+    return Result(None)
+
+
+@register_builtin('type.__str__')
+@check_result
+def _do_type_str(
+        args: Tuple[Any, ...],
+        kwargs: Dict[Text, Any],
+        ictx: ICtx) -> Result[Any]:
+    raise NotImplementedError(args)
+
+
+@register_builtin('type.mro')
+@check_result
+def _do_type_mro(
+        args: Tuple[Any, ...],
+        kwargs: Dict[Text, Any],
+        ictx: ICtx) -> Result[Any]:
+    assert isinstance(args, tuple), args
+    assert len(args) == 1
+    assert not kwargs
+    if isinstance(args[0], EClass):
+        return Result(list(args[0].get_mro()))
+    else:
+        raise NotImplementedError
+
+
+@register_builtin('type.__subclasses__')
+@check_result
+def _do_type_subclasses(
+        args: Tuple[Any, ...],
+        kwargs: Dict[Text, Any],
+        ictx: ICtx) -> Result[Any]:
+    assert len(args) == 1, args
+    c = args[0]
+    assert isinstance(c, EClass), c
+    return Result(sorted(list(c.subclasses)))
+
+
+@register_builtin('type')
+@check_result
+def do_type(args: Tuple[Any, ...], kwargs: Dict[Text, Any],
+            ictx: ICtx) -> Result[Any]:
+    assert not kwargs, kwargs
+    assert isinstance(args, tuple), args
+    log('go:type()', f'args: {args}')
+    if len(args) == 1:
+        if isinstance(args[0], EPyObject):
+            return Result(args[0].get_type())
+        res = type(args[0])
+        if res is object:
+            return Result(get_guest_builtin('object'))
+        if res is type:
+            return Result(get_guest_builtin('type'))
+        if res is tuple:
+            return Result(get_guest_builtin('tuple'))
+        if res is int:
+            return Result(get_guest_builtin('int'))
+        return Result(res)
+
+    assert len(args) == 3, args
+    name, bases, ns = args
+
+    cls = EClass(name, ns, bases=bases)
+
+    if '__classcell__' in ns:
+        ns['__classcell__'].set(cls)
+        del ns['__classcell__']
+
+    return Result(cls)
