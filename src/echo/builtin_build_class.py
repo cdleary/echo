@@ -16,6 +16,8 @@ def _pytype_calculate_metaclass(
     winner = metatype
     for tmp in bases:
         tmptype = tmp.get_type()
+        assert isinstance(winner, (EPyType, EBuiltin)), winner
+        assert isinstance(tmptype, (EPyType, EBuiltin)), tmptype
         if winner.is_subtype_of(tmptype):
             continue
         if tmptype.is_subtype_of(winner):
@@ -32,7 +34,7 @@ def _pytype_calculate_metaclass(
 def _do___build_class__(
         args: Tuple[Any, ...],
         kwargs: Dict[Text, Any],
-        ictx: ICtx) -> Result[EClass]:
+        ictx: ICtx) -> Result[Any]:
     log('go:build_class', f'args: {args}')
     func, name, *bases = args
     bases = tuple(bases)
@@ -86,6 +88,7 @@ def _do___build_class__(
         raise NotImplementedError(metaclass, cell)
 
     # Now we call the metaclass with the evaluated namespace.
+    assert isinstance(metaclass, (EClass, EBuiltin)), metaclass
     cls_result = metaclass.invoke((name, bases, ns), {}, {}, ictx)
     if cls_result.is_exception():
         return Result(cls_result.get_exception())

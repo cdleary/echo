@@ -1,6 +1,6 @@
 pycodestyle
 pyfakefs==3.7
 pytest==5.3.1
-pytype==2019.10.17
+pytype==2019.12.06
 termcolor
 numpy

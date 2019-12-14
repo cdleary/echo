@@ -277,7 +277,7 @@ def _find_name_in_mro(type_: EPyType, name: Text, ictx: ICtx) -> Any:
     return NotFoundSentinel.singleton
 
 
-def _type_getattro(type_: EPyType, name: Text, ictx: ICtx) -> Result[Any]:
+def _type_getattro(type_: 'EClass', name: Text, ictx: ICtx) -> Result[Any]:
     if name == '__dict__':
         return Result(type_.dict_)
     if name == '__mro__':
