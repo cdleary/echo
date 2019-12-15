@@ -568,7 +568,8 @@ class StatefulFrame:
         else:
             r = do_getattr((obj, argval), {}, self.ictx)
         if not r.is_exception():
-            assert do_hasattr((obj, argval)).get_value() is True, (obj, argval)
+            assert do_hasattr((obj, argval), self.ictx).get_value() is True, \
+                   (obj, argval)
         log('bc:la', f'obj {obj!r} attr {argval} => {r}')
         return r
 
@@ -685,6 +686,9 @@ class StatefulFrame:
             parameter = self._pop()
         if argc > 0:
             exception = self._pop()
+        if (isinstance(exception, type)
+                and issubclass(exception, BaseException)):
+            exception = exception()
         return Result(ExceptionData(traceback, parameter, exception))
 
     def get_exception_data(self) -> Optional[ExceptionData]:

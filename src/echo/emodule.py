@@ -60,7 +60,9 @@ class EModule(EPyObject):
         try:
             return Result(self.globals_[name])
         except KeyError:
-            return Result(ExceptionData(None, name, AttributeError))
+            msg = (f'Module {self.fully_qualified_name} '
+                   f'does not have attribute {name}')
+            return Result(ExceptionData(None, None, AttributeError(msg)))
 
     def setattr(self, name: Text, value: Any, ictx: ICtx) -> Result[None]:
         assert not isinstance(value, Result), value

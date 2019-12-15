@@ -29,6 +29,8 @@ class EProperty(EPyObject):
              locals_dict: Dict[Text, Any],
              ictx: ICtx) -> Result[Any]:
         _self, obj, objtype = args
+        if obj is None:
+            return Result(self)
         log('ep:get', f'fget: {self.fget} obj: {obj} objtype: {objtype}')
         assert _self is self
         return self.fget.invoke((obj,), kwargs, locals_dict, ictx)
@@ -38,7 +40,7 @@ class EProperty(EPyObject):
         if name == '__get__':
             return Result(EMethod(NativeFunction(
                 self._get, 'eproperty.__get__'), bound_self=self))
-        return Result(ExceptionData(None, name, AttributeError))
+        return Result(ExceptionData(None, name, AttributeError(name)))
 
     def setattr(self, name: Text, value: Any) -> Result[None]:
         raise NotImplementedError

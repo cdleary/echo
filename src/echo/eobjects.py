@@ -96,7 +96,8 @@ class EFunction(EPyObject):
         try:
             return Result(self.dict_[name])
         except KeyError:
-            return Result(ExceptionData(None, name, AttributeError))
+            msg = f'Cannot find attribute {name} on {self}'
+            return Result(ExceptionData(None, name, AttributeError(msg)))
 
     def setattr(self, name: Text, value: Any, ictx: ICtx) -> Result[None]:
         self.dict_[name] = value
@@ -315,10 +316,11 @@ def _type_getattro(type_: 'EClass', name: Text, ictx: ICtx) -> Result[Any]:
     if meta_attr is not NotFoundSentinel.singleton:
         return Result(meta_attr)
 
+    msg = f'Class {type_.name} does not have attribute {name!r}'
     return Result(ExceptionData(
         None,
-        f'Class {type_.name} does not have attribute {name!r}',
-        AttributeError))
+        None,
+        AttributeError(msg)))
 
 
 class EInstance(EPyObject):
@@ -377,10 +379,20 @@ class EInstance(EPyObject):
         if cls_attr is not NotFoundSentinel.singleton:
             return Result(cls_attr)
 
-        return Result(ExceptionData(
-            None,
-            f"'{self.cls.name}' object does not have attribute {name!r}",
-            AttributeError))
+        dunder_getattr = _find_name_in_mro(self.get_type(), '__getattr__',
+                                           ictx)
+        if dunder_getattr is not NotFoundSentinel.singleton:
+            log('eo:ei:ga', f'__getattr__: {dunder_getattr}')
+            if (isinstance(dunder_getattr, EPyObject)
+                    and dunder_getattr.hasattr('__get__')):
+                dunder_getattr = invoke_desc(self, dunder_getattr, ictx)
+                if dunder_getattr.is_exception():
+                    return dunder_getattr
+                dunder_getattr = dunder_getattr.get_value()
+            return dunder_getattr.invoke((name,), {}, {}, ictx)
+
+        msg = f"'{self.cls.name}' object does not have attribute {name!r}"
+        return Result(ExceptionData(None, None, AttributeError(msg)))
 
     @check_result
     def setattr(self, name: Text, value: Any, ictx: ICtx) -> Result[None]:
@@ -497,7 +509,7 @@ class EClass(EPyType):
                     globals_: Dict[Text, Any],
                     ictx: ICtx) -> Result[EInstance]:
         """Creates an instance of this user-defined class."""
-        log('go:gc', f'instantiate self: {self} args: {args} kwargs: {kwargs}')
+        log('eo:gc', f'instantiate self: {self} args: {args} kwargs: {kwargs}')
         guest_instance = None
         if self.hasattr('__new__'):
             new_f = self.getattr('__new__', ictx).get_value()
@@ -524,7 +536,7 @@ class EClass(EPyType):
                 return result
         return Result(guest_instance)
 
-    @debugged('go:eclass:hasattr_where()')
+    @debugged('eo:eclass:hasattr_where()')
     def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
         if name in self.dict_:
             return AttrWhere.SELF_DICT
@@ -693,7 +705,7 @@ def _do_isinstance(
             return Result(lhs_type.get_exception())
         result = _do_issubclass(
             (lhs_type.get_value(), get_guest_builtin('type')), ictx)
-        log('go:isinstance', f'args: {args} result: {result}')
+        log('eo:isinstance', f'args: {args} result: {result}')
         return result
 
     if _is_str_builtin(args[1]):
@@ -732,8 +744,8 @@ def _do_issubclass(
         args: Tuple[Any, ...],
         ictx: ICtx) -> Result[bool]:
     assert len(args) == 2, args
-    log('go:issubclass', f'arg0: {args[0]}')
-    log('go:issubclass', f'arg1: {args[1]}')
+    log('eo:issubclass', f'arg0: {args[0]}')
+    log('eo:issubclass', f'arg1: {args[1]}')
 
     if args[0] is args[1] and isinstance(args[0], EBuiltin):
         return Result(True)
@@ -803,7 +815,7 @@ def _do_repr(args: Tuple[Any, ...], ictx: ICtx) -> Result[Any]:
     if frepr.is_exception():
         return frepr
     frepr = frepr.get_value()
-    log('go:do_repr()', f'o: {o} frepr: {frepr}')
+    log('eo:do_repr()', f'o: {o} frepr: {frepr}')
     globals_ = frepr.globals_
     return ictx.call(frepr, args=(), kwargs={}, locals_dict={},
                      globals_=globals_)
@@ -1065,7 +1077,7 @@ class EBuiltin(EPyType):
         if self.name == 'next':
             return do_next(args, ictx)
         if self.name == 'hasattr':
-            return do_hasattr(args)
+            return do_hasattr(args, ictx)
         if self.name == 'repr':
             return _do_repr(args, ictx)
         if self.name == 'str':
@@ -1284,7 +1296,7 @@ def do_getitem(args: Tuple[Any, ...], ictx: ICtx) -> Result[Any]:
 @check_result
 def do_setitem(args: Tuple[Any, ...], ictx: ICtx) -> Result[None]:
     assert len(args) == 3, args
-    log('go:do_setitem()', f'args: {args}')
+    log('eo:do_setitem()', f'args: {args}')
     o, name, value = args
     if not isinstance(o, EPyObject):
         o[name] = value
@@ -1301,7 +1313,7 @@ def do_setitem(args: Tuple[Any, ...], ictx: ICtx) -> Result[None]:
 @check_result
 def do_delitem(args: Tuple[Any, ...], ictx: ICtx) -> Result[None]:
     assert len(args) == 2, args
-    log('go:do_delitem()', f'args: {args}')
+    log('eo:do_delitem()', f'args: {args}')
     o, name = args
     if not isinstance(o, EPyObject):
         del o[name]
@@ -1316,19 +1328,24 @@ def do_delitem(args: Tuple[Any, ...], ictx: ICtx) -> Result[None]:
 
 
 @check_result
-def do_hasattr(args: Tuple[Any, ...]) -> Result[bool]:
+def do_hasattr(args: Tuple[Any, ...], ictx: ICtx) -> Result[bool]:
     assert len(args) == 2, args
     o, attr = args
     assert isinstance(attr, str), attr
 
     if not isinstance(o, EPyObject):
         r = hasattr(o, attr)
-        log('go:hasattr()', f'{o}, {attr} => {r}')
+        log('eo:hasattr()', f'{o}, {attr} => {r}')
         return Result(r)
 
-    b = o.hasattr(attr)
-    assert isinstance(b, bool), b
-    return Result(b)
+    r = o.getattr(attr, ictx)
+    log('eo:hasattr()', f'o {o} attr {attr!r} getattr result: {r}')
+    if r.is_exception():
+        if isinstance(r.get_exception().exception, AttributeError):
+            return Result(False)
+        return r
+
+    return Result(True)
 
 
 @check_result

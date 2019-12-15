@@ -25,7 +25,7 @@ class EMap(EPyObject):
         if name == '__get__':
             return Result(EMethod(NativeFunction(
                 self._get, 'eproperty.__get__'), bound_self=self))
-        return Result(ExceptionData(None, name, AttributeError))
+        return Result(ExceptionData(None, name, AttributeError(name)))
 
     def setattr(self, name: Text, value: Any) -> Result[None]:
         raise NotImplementedError

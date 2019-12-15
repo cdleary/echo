@@ -138,11 +138,12 @@ def _find_absolute_import_path(module_name: Text,
         module_path = _resolve_module_or_package(path, module_name)
         if not module_path.is_exception():
             return module_path
+    msg = 'Could not find absolute import for package with name: {!r}'.format(
+        module_name)
     return Result(ExceptionData(
         None,
-        'Could not find absolute import for '
-        'package with name: {!r}'.format(module_name),
-        ImportError))
+        None,
+        ImportError(msg)))
 
 
 def getattr_or_subimport(current_mod: ModuleT,
@@ -387,8 +388,9 @@ def run_IMPORT_NAME(importing_path: Text,
         return Result(ictx.interp_state.sys_modules[multi_module_name])
 
     if multi_module_name == '_abc':
+        msg = 'Cannot import C-module _abc.'
         return Result(ExceptionData(
-            None, 'Cannot import C-module _abc.', ImportError))
+            None, None, ImportError(msg)))
     elif multi_module_name in SPECIAL_MODULES:
         module = __import__(multi_module_name, globals_)  # type: ModuleType
         result = _extract_fromlist(module, module, fromlist, ictx)
