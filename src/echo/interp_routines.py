@@ -36,6 +36,7 @@ COMPARE_TO_SPECIAL = {
     'not in': '__contains__',
 }
 GUEST_BUILTIN_NAMES = (
+    'Exception',
     'classmethod',
     'dict',
     'dir',
@@ -165,12 +166,10 @@ def builtins_get(builtins: Union[types.ModuleType, Dict], name: Text) -> Any:
     return builtins[name]
 
 
-def exception_match(lhs, rhs) -> bool:
-    if set([lhs, rhs]) <= set(BUILTIN_EXCEPTION_TYPES):
-        return issubclass(lhs, rhs)
-    if isinstance(lhs, rhs):
-        return True
-    raise NotImplementedError(lhs, rhs)
+def exception_match(lhs, rhs, ictx: ICtx) -> Result[Any]:
+    log('ir:em', f'lhs {lhs} rhs {rhs}')
+    do_isinstance = get_guest_builtin('isinstance')
+    return do_isinstance.invoke((lhs, rhs), {}, {}, ictx)
 
 
 @check_result

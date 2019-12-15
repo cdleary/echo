@@ -10,8 +10,7 @@ T = TypeVar('T')
 
 
 class ExceptionData:
-    def __init__(self, traceback, parameter, exception: BaseException):
-        assert isinstance(exception, BaseException), exception
+    def __init__(self, traceback, parameter, exception):
         self.traceback = traceback or []
         self.parameter = parameter
         self.exception = exception

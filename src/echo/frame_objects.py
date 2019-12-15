@@ -577,7 +577,7 @@ class StatefulFrame:
         rhs = self._pop()
         lhs = self._pop()
         if argval == 'exception match':
-            return Result(interp_routines.exception_match(lhs, rhs))
+            return interp_routines.exception_match(lhs, rhs, self.ictx)
         else:
             return interp_routines.compare(
                 argval, lhs, rhs, self.ictx)

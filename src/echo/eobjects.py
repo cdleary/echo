@@ -443,6 +443,10 @@ def _get_bases(c: EClassOrBuiltin) -> Tuple[EPyObject, ...]:
         return (get_guest_builtin('object'),)
     if _is_object_builtin(c):
         return ()
+    if _is_exception_builtin(c):
+        return (get_guest_builtin('BaseException'),)
+    if _is_base_exception_builtin(c):
+        return (get_guest_builtin('object'),)
     raise NotImplementedError(c)
 
 
@@ -666,6 +670,14 @@ def _is_list_builtin(x) -> bool:
 
 def _is_object_builtin(x) -> bool:
     return isinstance(x, EBuiltin) and x.name == 'object'
+
+
+def _is_exception_builtin(x) -> bool:
+    return isinstance(x, EBuiltin) and x.name == 'Exception'
+
+
+def _is_base_exception_builtin(x) -> bool:
+    return isinstance(x, EBuiltin) and x.name == 'BaseException'
 
 
 def _is_str_builtin(x) -> bool:
@@ -947,7 +959,7 @@ class EBuiltin(EPyType):
 
     BUILTIN_TYPES = (
         'object', 'type', 'dict', 'tuple', 'list', 'int', 'classmethod',
-        'staticmethod', 'property',
+        'staticmethod', 'property', 'Exception',
     )
     BUILTIN_FNS = (
         # object
@@ -1058,8 +1070,7 @@ class EBuiltin(EPyType):
             try:
                 return Result(self.bound_self.remove(*args))
             except ValueError as e:
-                return Result(ExceptionData(traceback=None, parameter=e.args,
-                                            exception=ValueError))
+                return Result(ExceptionData(None, None, e))
         if self.name == 'zip':
             return Result(zip(*args))
         if self.name == 'reversed':
@@ -1162,6 +1173,12 @@ class EBuiltin(EPyType):
                 return Result(get_guest_builtin('int.__repr__'))
             if name == '__str__':
                 return Result(get_guest_builtin('int.__str__'))
+
+        if self.name == 'Exception':
+            if name == '__new__':
+                return Result(get_guest_builtin('Exception.__new__'))
+            if name == '__init__':
+                return Result(get_guest_builtin('Exception.__init__'))
 
         if self.name == 'dict':
             if name == '__new__':

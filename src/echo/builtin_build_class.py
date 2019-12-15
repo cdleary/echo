@@ -12,10 +12,13 @@ from echo.elog import log
 
 def _pytype_calculate_metaclass(
         metatype: EPyType,
-        bases: Tuple[EPyType, EBuiltin]) -> Result[Union[EPyType, EBuiltin]]:
+        bases: Tuple[EPyType, EBuiltin],
+        ictx: ICtx) -> Result[Union[EPyType, EBuiltin]]:
+    do_type = get_guest_builtin('type')
+
     winner = metatype
     for tmp in bases:
-        tmptype = tmp.get_type()
+        tmptype = do_type.invoke((tmp,), {}, {}, ictx).get_value()
         assert isinstance(winner, (EPyType, EBuiltin)), winner
         assert isinstance(tmptype, (EPyType, EBuiltin)), tmptype
         if winner.is_subtype_of(tmptype):
@@ -41,9 +44,13 @@ def _do___build_class__(
     metaclass = kwargs.pop('metaclass', None) if kwargs else None
     if not metaclass:
         if bases:
-            metaclass = bases[0].get_type()
+            do_type = get_guest_builtin('type')
+            metaclass = do_type.invoke((bases[0],), {}, {}, ictx)
+            if metaclass.is_exception():
+                return metaclass
+            metaclass = metaclass.get_value()
             log('go:build_class', f'bases[0] start metaclass: {metaclass}')
-            metaclass = _pytype_calculate_metaclass(metaclass, bases)
+            metaclass = _pytype_calculate_metaclass(metaclass, bases, ictx)
             if metaclass.is_exception():
                 return metaclass
             metaclass = metaclass.get_value()
