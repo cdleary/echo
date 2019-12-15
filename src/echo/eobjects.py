@@ -314,6 +314,14 @@ def _type_getattro(type_: 'EClass', name: Text, ictx: ICtx) -> Result[Any]:
         return Result(attr)
 
     if meta_attr is not NotFoundSentinel.singleton:
+        if (isinstance(meta_attr, EPyObject)
+                and meta_attr.hasattr('__get__')):
+            log('gi:ga', f'non-overriding descriptor: {meta_attr}')
+            f = meta_attr.getattr('__get__', ictx)
+            if f.is_exception():
+                return f
+            f = f.get_value()
+            return f.invoke((type_, metatype), {}, {}, ictx)
         return Result(meta_attr)
 
     if metatype.hasattr('__getattr__'):
@@ -566,6 +574,7 @@ class EClass(EPyType):
             return AttrWhere.CLS
         return None
 
+    @debugged('eo:ec:ga')
     @check_result
     def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
         """Looks up an attribute on this class object.
@@ -700,7 +709,7 @@ def _do_isinstance(
         if ic.is_exception():
             return Result(ic.get_exception())
         ic = ic.get_value()
-        result = ictx.call(ic, (args[1], args[0]), {}, {},
+        result = ictx.call(ic, (args[0],), {}, {},
                            globals_=ic.globals_)
         return result
 
@@ -780,7 +789,7 @@ def _do_issubclass(
         if scc.is_exception():
             return Result(scc.get_exception())
         scc = scc.get_value()
-        result = ictx.call(scc, (args[1], args[0],), {}, {},
+        result = ictx.call(scc, (args[0],), {}, {},
                            globals_=scc.globals_)
         return result
 

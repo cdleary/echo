@@ -143,7 +143,7 @@ def run_binop(opname: Text, lhs: Any, rhs: Any, ictx: ICtx) -> Result[Any]:
         op = _BINARY_OPS[opname]
         return Result(op(lhs, rhs))
 
-    if opname in OPNAME_TO_SPECIAL and isinstance(lhs, EInstance):
+    if opname in OPNAME_TO_SPECIAL and isinstance(lhs, EPyObject):
         special_f = lhs.getattr(OPNAME_TO_SPECIAL[opname], ictx)
         if special_f.is_exception():
             raise NotImplementedError(special_f)
