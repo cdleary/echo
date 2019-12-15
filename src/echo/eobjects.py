@@ -950,7 +950,7 @@ def _do_dir(args: Tuple[Any, ...],
 _ITER_BUILTIN_TYPES = (
     tuple, str, bytes, bytearray, type({}.keys()), type({}.values()),
     type({}.items()), list, type(reversed([])), type(range(0, 0)),
-    set, type(zip((), ())), frozenset, weakref.WeakSet, dict,
+    set, type(zip((), ())), frozenset, weakref.WeakSet, dict, enumerate,
 )
 
 
@@ -1463,6 +1463,7 @@ DICT_KEY_ITERATOR = type(iter({}.keys()))
 DICT_ITEM_ITERATOR = type(iter({}.items()))
 RANGE_ITERATOR = type(iter(range(0)))
 ZIP_ITERATOR = type(iter(zip((), ())))
+ENUMERATE_ITERATOR = type(iter(enumerate(())))
 
 
 @check_result
@@ -1471,7 +1472,7 @@ def do_next(args: Tuple[Any, ...], ictx: ICtx) -> Result[Any]:
     g = args[0]
     if isinstance(g, (TUPLE_ITERATOR, LIST_ITERATOR, LIST_REV_ITERATOR,
                       DICT_ITERATOR, RANGE_ITERATOR,
-                      DICT_KEY_ITERATOR, ZIP_ITERATOR,
+                      DICT_KEY_ITERATOR, ZIP_ITERATOR, ENUMERATE_ITERATOR,
                       DICT_ITEM_ITERATOR, types.GeneratorType)):
         try:
             return Result(next(g))
