@@ -4,10 +4,9 @@ import sys
 from typing import Text, Callable
 
 
-ECHO_DEBUG = os.getenv('ECHO_DEBUG', '')
-
-
 def _accepts(channel: Text) -> bool:
+    ECHO_DEBUG = os.getenv('ECHO_DEBUG', '')
+
     if not ECHO_DEBUG:
         return False
     if ECHO_DEBUG in ('all', '1'):
@@ -17,6 +16,7 @@ def _accepts(channel: Text) -> bool:
 
 
 def log(channel: Text, s: Text) -> None:
+    ECHO_DEBUG = os.getenv('ECHO_DEBUG', '')
     if not ECHO_DEBUG:
         return
     if not _accepts(channel):

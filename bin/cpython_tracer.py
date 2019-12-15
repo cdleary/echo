@@ -18,6 +18,7 @@ from echo import bytecode_trace
 
 
 OPCODE_COUNT = 0
+VERBOSE = True
 
 
 class CountingTraceDumper:
@@ -244,7 +245,7 @@ class CtypeFrame:
         self.print_block_stack()
 
 
-def _note_opcode_event(frame, opcodeno, verbose=False) -> None:
+def _note_opcode_event(frame, opcodeno, verbose=VERBOSE) -> None:
     # From the docs:
     #     The interpreter is about to execute a new opcode (see dis for
     #     opcode details). The local trace function is called; arg is None;
@@ -254,7 +255,8 @@ def _note_opcode_event(frame, opcodeno, verbose=False) -> None:
     #     frame.
     # -- https://docs.python.org/3/library/sys.html#sys.settrace
     if verbose:
-        eprint('opcode about to execute...')
+        #eprint('opcode about to execute...')
+        pass
 
     ctf = CtypeFrame(frame)
     instructions = dis.get_instructions(frame.f_code)
@@ -263,21 +265,21 @@ def _note_opcode_event(frame, opcodeno, verbose=False) -> None:
     TRACE_DUMPER.note_instruction(instruction, ctf)
 
     if verbose:
-        eprint(' frame.f_lasti:', frame.f_lasti)
-        cprint('i: {} code: {}; lineno: {}'.format(opcodeno, frame.f_code, frame.f_lineno),
-               color='blue')
+        #eprint(' frame.f_lasti:', frame.f_lasti)
+        #cprint('i: {} code: {}; lineno: {}'.format(opcodeno, frame.f_code, frame.f_lineno),
+        #       color='blue')
         cprint(' instruction: {}'.format(instruction), color='yellow')
-        locals_ = dict(frame.f_locals)
-        for name in ['__builtins__']:
-            if name in locals_:
-                del locals_[name]
-        eprint(' frame.f_locals:', locals_)
-        try:
-            eprint(' stack effect:', dis.stack_effect(instruction.opcode,
-                  instruction.arg))
-        except ValueError:
-            pass
-        ctf.print_stack()
+        #locals_ = dict(frame.f_locals)
+        #for name in ['__builtins__']:
+        #    if name in locals_:
+        #        del locals_[name]
+        #eprint(' frame.f_locals:', locals_)
+        #try:
+        #    eprint(' stack effect:', dis.stack_effect(instruction.opcode,
+        #          instruction.arg))
+        #except ValueError:
+        #    pass
+        #ctf.print_stack()
 
 
 def note_trace(frame, event, arg):

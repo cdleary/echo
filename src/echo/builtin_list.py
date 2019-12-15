@@ -28,7 +28,7 @@ def _do_list(args: Tuple[Any, ...],
         if hasattr(args[0], 'next'):
             result = []
             while True:
-                r = args[0].next()
+                r = args[0].next(ictx)
                 if (r.is_exception() and isinstance(
                         r.get_exception().exception, StopIteration)):
                     break

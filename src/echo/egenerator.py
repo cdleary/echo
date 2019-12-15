@@ -59,7 +59,7 @@ class EGenerator(EPyObject):
     def setattr(self, name: Text, value: Any) -> Any:
         raise NotImplementedError
 
-    def next(self) -> Result[Value]:
+    def next(self, ictx: ICtx) -> Result[Value]:
         result = self.f.run_to_return_or_yield()
         if result.is_exception():
             return Result(result.get_exception())

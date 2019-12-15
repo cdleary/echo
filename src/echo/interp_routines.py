@@ -40,6 +40,7 @@ GUEST_BUILTIN_NAMES = (
     'classmethod',
     'dict',
     'dir',
+    'enumerate',
     'getattr',
     'hasattr',
     'int',

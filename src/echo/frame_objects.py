@@ -362,16 +362,22 @@ class StatefulFrame:
 
     @sets_pc
     def _run_POP_JUMP_IF_FALSE(self, arg, argval):
-        if self._pop_value().is_falsy():
+        v = self._pop_value()
+        if v.is_falsy():
+            log('bc:pjif', f'jumping on falsy: {v}')
             self.pc = arg
             return True
+        log('bc:pjif', f'not jumping, truthy: {v}')
         return False
 
     @sets_pc
     def _run_POP_JUMP_IF_TRUE(self, arg, argval):
-        if self._pop_value().is_truthy():
+        v = self._pop_value()
+        if v.is_truthy():
+            log('bc:pjit', f'jumping on truthy: {v}')
             self.pc = arg
             return True
+        log('bc:pjit', f'not jumping, falsy: {v}')
         return False
 
     @sets_pc
@@ -396,6 +402,7 @@ class StatefulFrame:
     def _run_FOR_ITER(self, arg, argval):
         o = self._peek()
         r = do_next((o,), self.ictx)
+        log('bc:for_iter', f'o: {o} r: {r}')
         if (r.is_exception()
                 and isinstance(r.get_exception().exception, StopIteration)):
             self._pop()
@@ -406,6 +413,7 @@ class StatefulFrame:
                 'Attempted to jump to invalid target.', self.pc,
                 self.pc_to_instruction[self.pc])
             return True
+
         assert not r.is_exception(), r
         self._push(r.get_value())
 
@@ -810,7 +818,7 @@ class StatefulFrame:
             log('bc:line',
                 f'{self.code.co_filename}:{instruction.starts_line}')
 
-        log('bc', instruction)
+        log('bc:inst', instruction)
 
         if instruction.starts_line is not None:
             self.line = instruction.starts_line
@@ -866,9 +874,6 @@ class StatefulFrame:
         f_sets_pc = getattr(f, '_sets_pc', False)
         if (not f_sets_pc) or (f_sets_pc and not result):
             width = self.pc_to_bc_width[self.pc]
-            log('bc:pc',
-                f'f_sets_pc: {f_sets_pc} result: {result}; '
-                f'incrementing pc by {width}')
             self.pc += width
 
         return None

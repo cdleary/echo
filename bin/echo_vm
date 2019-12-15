@@ -79,6 +79,12 @@ def main() -> int:
 
     ictx = interp_context.ICtx(state, interp.interp, interp.do_call)
 
+    prior = os.environ.get('ECHO_DEBUG', '')
+    os.environ['ECHO_DEBUG'] = ''
+    assert not import_routines.run_IMPORT_NAME('fake', 0, (), 'types', dict(globals_), ictx).is_exception()
+    assert not import_routines.run_IMPORT_NAME('fake', 0, (), 'collections', dict(globals_), ictx).is_exception()
+    os.environ['ECHO_DEBUG'] = prior
+
     try:
         result = interp.import_path(fullpath, fully_qualified, fully_qualified,
                                     ictx)

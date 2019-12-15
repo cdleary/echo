@@ -19,7 +19,7 @@ from typing import (
 )
 
 from echo.common import dis_to_str, get_code
-from echo.elog import log, ECHO_DEBUG
+from echo.elog import log
 from echo.interp_result import Result, ExceptionData, check_result
 from echo.interp_context import ICtx
 from echo import import_routines
@@ -53,6 +53,7 @@ import echo.builtin_list
 import echo.builtin_super
 import echo.builtin_tuple
 import echo.builtin_type
+import echo.builtin_enumerate
 
 
 @check_result
@@ -123,11 +124,6 @@ def interp(code: types.CodeType,
         else:
             local_value = locals_[index]
             cellvars[i].set(local_value)
-
-    if ECHO_DEBUG:
-        log('interp:ci', dis.code_info(code))
-        # TODO(cdleary): 2019-11-20 Re-enable this in a logging channel.
-        # dis.dis(code, file=sys.stderr)
 
     instructions = tuple(dis.get_instructions(code))
     pc_to_instruction = [None] * (instructions[-1].offset+1)
