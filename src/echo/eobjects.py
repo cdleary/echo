@@ -316,6 +316,18 @@ def _type_getattro(type_: 'EClass', name: Text, ictx: ICtx) -> Result[Any]:
     if meta_attr is not NotFoundSentinel.singleton:
         return Result(meta_attr)
 
+    if metatype.hasattr('__getattr__'):
+        meta_ga = metatype.getattr('__getattr__', ictx)
+        if meta_ga.is_exception():
+            return meta_ga
+        meta_ga = meta_ga.get_value()
+        if meta_ga.hasattr('__get__'):
+            meta_ga = invoke_desc(type_, meta_ga, ictx)
+            if meta_ga.is_exception():
+                return meta_ga
+            meta_ga = meta_ga.get_value()
+        return meta_ga.invoke((name,), {}, {}, ictx)
+
     msg = f'Class {type_.name} does not have attribute {name!r}'
     return Result(ExceptionData(
         None,
