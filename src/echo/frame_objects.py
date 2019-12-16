@@ -819,6 +819,8 @@ class StatefulFrame:
                 f'{self.code.co_filename}:{instruction.starts_line}')
 
         log('bc:inst', instruction)
+        if os.getenv('ECHO_DUMP_INSTS'):
+            print(instruction)
 
         if instruction.starts_line is not None:
             self.line = instruction.starts_line
@@ -883,4 +885,6 @@ class StatefulFrame:
             bc_result = self._run_one_bytecode()
             if bc_result is None:
                 continue
+            if os.getenv('ECHO_DUMP_INSTS'):
+                print('=>', bc_result.get_value()[0].wrapped)
             return bc_result

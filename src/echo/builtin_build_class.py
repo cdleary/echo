@@ -72,9 +72,10 @@ def _do___build_class__(
     else:
         ns = {}  # Namespace for the class.
 
-    res = do_setitem((ns, '__module__', func.globals_['__name__']), ictx)
-    if res.is_exception():
-        return res
+    # TODO(cdleary): 2019-12-15 At what point in the sequence do these get set?
+    # res = do_setitem((ns, '__module__', func.globals_['__name__']), ictx)
+    # if res.is_exception():
+    #     return res
 
     class_eval_result = ictx.call(
         func, (), {}, locals_dict=ns, globals_=func.globals_)
