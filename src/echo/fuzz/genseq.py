@@ -14,6 +14,7 @@ class StmtKind(enum.Enum):
     RETURN = 'return'
     PASS = 'pass'
     IF = 'if'
+    TRY = 'try'
 
 
 class NameDef:
@@ -41,6 +42,12 @@ class Stmt:
                 elifs: Tuple[Tuple['Expr', 'Suite'], ...],
                 alternate: Optional['Suite']) -> 'Stmt':
         return cls(StmtKind.IF, (test, consequent, elifs, alternate))
+
+    @classmethod
+    def make_try(cls, consequent: 'Suite',
+                 excepts: Sequence[Tuple['As', 'Suite']],
+                 finally_: Optional['Suite']) -> 'Stmt':
+        return cls(StmtKind.TRY, (consequent, tuple(excepts), finally_))
 
     @classmethod
     def make_class_def(cls, name: NameDef, body: Tuple['Stmt', ...]) -> 'Stmt':
@@ -90,6 +97,17 @@ class Stmt:
             body = ('\n' + indent_str).join(s.format() for s in body)
             args_str = ', '.join(a.format() for a in args)
             return f'def {name}({args_str}):\n{indent_str}{body}\n'
+        if self.kind == StmtKind.TRY:
+            consequent, excepts, finally_ = self.operands
+            pieces = ['try:\n']
+            pieces.append(consequent.format(INDENT_PER_LEVEL))
+            for except_ in excepts:
+                pieces.append(f'except {except_[0].format()}:\n')
+                pieces.append(except_[1].format(INDENT_PER_LEVEL))
+            if finally_:
+                pieces.append('finally:\n')
+                pieces.append(finally_.format(INDENT_PER_LEVEL))
+            return ''.join(pieces)
         if self.kind == StmtKind.IF:
             test, consequent, elifs, alternate = self.operands
             consequent_str = consequent.format(INDENT_PER_LEVEL)
@@ -119,7 +137,6 @@ class ExprKind(enum.Enum):
     INVOKE = 'invoke'
     DICT_LITERAL = 'dict-literal'
     STR_LITERAL = 'str-literal'
-    NAME_REF = 'name-ref'
     NONE_LITERAL = 'none-literal'
     GETATTR = 'getattr'
 
@@ -143,9 +160,9 @@ class Expr:
         return cls(ExprKind.INVOKE, (lhs, args))
 
     @classmethod
-    def make_name_ref(cls, arg: NameDef) -> 'Expr':
+    def make_name_ref(cls, arg: NameDef) -> 'NameRef':
         assert isinstance(arg, NameDef), repr(arg)
-        return cls(ExprKind.NAME_REF, (arg,))
+        return NameRef(arg)
 
     @classmethod
     def make_getattr(cls, lhs: 'Expr', name: Text) -> 'Expr':
@@ -166,10 +183,6 @@ class Expr:
             return 'None'
         if self.kind == ExprKind.STR_LITERAL:
             return repr(self.operands[0])
-        if self.kind == ExprKind.NAME_REF:
-            name_def = self.operands[0]
-            assert isinstance(name_def, NameDef), repr(name_def)
-            return '{}'.format(name_def.name)
         if self.kind == ExprKind.INVOKE:
             lhs, args = self.operands
             assert isinstance(args, tuple), args
@@ -179,6 +192,31 @@ class Expr:
             return '({}).{}'.format(self.operands[0].format(),
                                     self.operands[1])
         raise NotImplementedError(self)
+
+    def format(self, indent: int = 0) -> Text:
+        return textwrap.indent(self._format(), ' ' * indent)
+
+
+class NameRef(Expr):
+    def __init__(self, name_def: NameDef):
+        self.name_def = name_def
+
+    def __repr__(self) -> Text:
+        return 'NameRef({!r})'.format(self.name_def)
+
+    def _format(self) -> Text:
+        return self.name_def.format()
+
+
+class As:
+    def __init__(self, test: NameRef, binding: Optional[NameDef]):
+        self.test = test
+        self.binding = binding
+
+    def _format(self) -> Text:
+        if self.binding:
+            return '{} as {}'.format(self.test.format(), self.binding)
+        return str(self.test)
 
     def format(self, indent: int = 0) -> Text:
         return textwrap.indent(self._format(), ' ' * indent)

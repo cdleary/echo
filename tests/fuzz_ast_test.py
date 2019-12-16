@@ -1,4 +1,4 @@
-from echo.fuzz.genseq import Stmt, Expr, Suite, NameDef
+from echo.fuzz.genseq import Stmt, Expr, Suite, NameDef, As
 
 
 def test_assign_stmt():
@@ -60,9 +60,25 @@ def test_if_stmt():
     print_def = NameDef('print')
     print_expr = Expr.make_invoke(Expr.make_name_ref(print_def),
                                   (Expr.make_str('yay'),))
-    consequent = Suite((Stmt.make_expr(print_expr),))
+    consequent = Suite([Stmt.make_expr(print_expr)])
     stmt = Stmt.make_if(test, consequent, (), None)
     assert stmt.format() == """\
 if None:
     print('yay')
+"""
+
+
+def test_try_stmt():
+    pass_ = Stmt.make_pass()
+    pass_suite = Suite([pass_])
+    exception_def = NameDef('Exception')
+    except_clause = As(Expr.make_name_ref(exception_def), NameDef('e'))
+    stmt = Stmt.make_try(pass_suite, [(except_clause, pass_suite)], pass_suite)
+    assert stmt.format() == """\
+try:
+    pass
+except Exception as e:
+    pass
+finally:
+    pass
 """
