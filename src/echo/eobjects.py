@@ -310,7 +310,10 @@ def _type_getattro(type_: 'EClass', name: Text, ictx: ICtx) -> Result[Any]:
             f_result = attr.getattr('__get__', ictx)
             if f_result.is_exception():
                 return Result(f_result.get_exception())
-            return f_result.get_value().invoke((None, type_), {}, {}, ictx)
+            f_result = f_result.get_value()
+            res = f_result.invoke((None, type_), {}, {}, ictx)
+            log('eo:ec:ga', f'invoked descriptor getter {f_result} => {res}')
+            return res
         return Result(attr)
 
     if meta_attr is not NotFoundSentinel.singleton:
@@ -566,12 +569,12 @@ class EClass(EPyType):
             return AttrWhere.SELF_DICT
         if name in ('__class__', '__bases__', '__mro__', '__dict__'):
             return AttrWhere.SELF_SPECIAL
+        if self.get_type().hasattr(name):
+            return AttrWhere.CLS
         for base in self.get_mro()[1:]:
             haw = base.hasattr_where(name)
             if haw:
                 return haw
-        if self.get_type().hasattr(name):
-            return AttrWhere.CLS
         return None
 
     @debugged('eo:ec:ga')
@@ -584,10 +587,16 @@ class EClass(EPyType):
         return _type_getattro(self, name, ictx)
 
     def setattr(self, name: Text, value: Any, ictx: ICtx) -> Result[None]:
-        r = do_setitem((self.dict_, name, value), ictx)
-        if r.is_exception():
-            return r
-        return Result(None)
+        sa = _find_name_in_mro(self.get_type(), '__setattr__', ictx)
+        if (sa is NotFoundSentinel.singleton
+                or sa is get_guest_builtin('object.__setattr__')):
+            self.dict_[name] = value
+            log('eo:ec:setattr',
+                f'updated self.dict_ {self.dict_} name {name} value {value}')
+            return Result(None)
+        log('eo:ec:setattr',
+            f'self {self} name {name} value {value} => invoking {sa}')
+        return sa.invoke((self, name, value), {}, {}, ictx)
 
 
 class EFunctionType(EPyType):
@@ -933,6 +942,22 @@ def _do_object_ne(
 
 
 @check_result
+def _do_object_setattr(
+        args: Tuple[Any, ...],
+        kwargs: Dict[Text, Any],
+        ictx: ICtx) -> Result[Any]:
+    assert len(args) == 3, args
+    assert not kwargs
+    o, name, value = args
+    log('eo:object_setattr', f'o {o} name {name} value {value}')
+    if isinstance(o, (EInstance, EClass)):
+        o.dict_[name] = value
+    else:
+        raise NotImplementedError
+    return Result(None)
+
+
+@check_result
 def _do_dir(args: Tuple[Any, ...],
             kwargs: Dict[Text, Any],
             ictx: ICtx) -> Result[Any]:
@@ -972,7 +997,7 @@ class EBuiltin(EPyType):
     )
     BUILTIN_FNS = (
         # object
-        'object.__init__', 'object.__str__',
+        'object.__init__', 'object.__str__', 'object.__setattr__',
         # type
         'type.__init__', 'type.__str__',
         # dict
@@ -1104,6 +1129,8 @@ class EBuiltin(EPyType):
             return _do_object_eq(args, kwargs, ictx)
         if self.name == 'object.__ne__':
             return _do_object_ne(args, kwargs, ictx)
+        if self.name == 'object.__setattr__':
+            return _do_object_setattr(args, kwargs, ictx)
         if self.name == 'iter':
             return do_iter(args, ictx)
         if self.name == 'next':
@@ -1146,7 +1173,8 @@ class EBuiltin(EPyType):
                              '__repr__', '__eq__', '__ne__', '__new__',
                              '__name__')):
             return AttrWhere.SELF_SPECIAL
-        if self.name == 'object' and name in ('__subclasshook__', '__bases__'):
+        if self.name == 'object' and name in (
+                '__subclasshook__', '__bases__', '__setattr__'):
             return AttrWhere.SELF_SPECIAL
         if self.name == 'type' and name in ('__subclasses__', 'mro'):
             return AttrWhere.SELF_SPECIAL
@@ -1237,6 +1265,9 @@ class EBuiltin(EPyType):
                 return Result(())
             if name == '__dict__':  # Fake it for now.
                 return Result({})
+            if name == '__setattr__':
+                return Result(get_guest_builtin('object.__setattr__'))
+
         if self.name == 'type':
             if name == '__new__':
                 return Result(get_guest_builtin('type.__new__'))
@@ -1405,6 +1436,26 @@ def do_getattr(args: Tuple[Any, ...],
     if default and not o.hasattr(attr):
         return Result(default[0])
     return o.getattr(attr, ictx)
+
+
+@check_result
+def do_setattr(args: Tuple[Any, ...],
+               kwargs: Dict[Text, Any],
+               ictx: ICtx) -> Result[Any]:
+    assert isinstance(args, tuple), args
+    assert len(args) == 3, args
+    assert not kwargs, kwargs
+    obj, name, value = args
+    if isinstance(obj, EPyObject):
+        res = obj.setattr(name, value, ictx=ictx)
+        if res.is_exception():
+            return res
+        return Result(None)
+    elif obj is sys and name == 'path':
+        sys.path = ictx.interp_state.paths = value
+        return Result(None)
+    else:
+        raise NotImplementedError(obj, value)
 
 
 @check_result

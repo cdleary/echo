@@ -17,7 +17,7 @@ from echo.eobjects import (
     ReturnKind, EBuiltin, EFunction, EPyObject,
     GuestCoroutine, EInstance, get_guest_builtin,
     do_getitem, do_setitem, do_hasattr, do_getattr,
-    do_iter, do_next, do_tuple, do_delitem,
+    do_iter, do_next, do_tuple, do_delitem, do_setattr,
 )
 from echo.ecell import ECell
 from echo.emodule import EModule
@@ -491,16 +491,10 @@ class StatefulFrame:
         obj = self._pop()
         value = self._pop()
         log('bc:sa', f'obj {obj!r} attr {argval!r} val {value!r}')
-        if isinstance(obj, EPyObject):
-            res = obj.setattr(argval, value, ictx=self.ictx)
-            if res.is_exception():
-                return res
-            return Result(NoStackPushSentinel)
-        elif obj is sys and argval == 'path':
-            sys.path = self.interp_state.paths = value
-            return Result(NoStackPushSentinel)
-        else:
-            raise NotImplementedError(obj, value)
+        r = do_setattr((obj, argval, value), {}, self.ictx)
+        if r.is_exception():
+            return r
+        return Result(NoStackPushSentinel)
 
     def _run_STORE_GLOBAL(self, arg, argval):
         self.globals_[argval] = self._pop()

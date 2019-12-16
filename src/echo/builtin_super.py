@@ -62,11 +62,11 @@ class ESuper(EPyObject):
 
     @check_result
     def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
-        if name == '__thisclass__':
+        if name == '__thisclass__':  # AKA su->type
             return Result(self.type_)
-        if name == '__self_class__':
+        if name == '__self_class__':  # AKA su->obj_type
             return Result(self.obj_or_type_type)
-        if name == '__self__':
+        if name == '__self__':  # AKA su->obj
             return Result(self.obj_or_type)
         if name == '__class__':
             return Result(get_guest_builtin('super'))
@@ -76,6 +76,9 @@ class ESuper(EPyObject):
         # Look at everything succeeding 'type_' in the MRO order.
         i = mro.index(self.type_)
         mro = mro[i+1:]
+
+        log('super:ga',
+            f'self.type_ {self.type_} start_type {start_type} mro {mro}')
 
         for t in mro:
             if isinstance(t, EBuiltin):
@@ -93,9 +96,15 @@ class ESuper(EPyObject):
             if cls_attr.is_exception():
                 return cls_attr.get_exception()
             cls_attr = cls_attr.get_value()
-            if (not isinstance(self.obj_or_type, EClass)
-                    and cls_attr.hasattr('__get__')):
-                return invoke_desc(self.obj_or_type, cls_attr, ictx)
+            log('super:ga', f't: {t} cls_attr: {cls_attr}')
+            if cls_attr.hasattr_where('__get__') == AttrWhere.CLS:
+                fget = cls_attr.getattr('__get__', ictx)
+                if fget.is_exception():
+                    return fget
+                fget = fget.get_value()
+                o = (None if self.obj_or_type == start_type
+                     else self.obj_or_type)
+                return fget.invoke((o, start_type), {}, {}, ictx)
             return Result(cls_attr)
 
         return Result(ExceptionData(
@@ -127,13 +136,22 @@ def _do_super(args: Tuple[Any, ...],
         assert len(args) == 2, args
         type_, obj_or_type = args
 
-    log('super', f'type_: {type_} obj: {obj_or_type}')
+    def supercheck(type_, obj):
+        # obj can be a class or an instance of one
+        # - if class, must be subclass of type_
+        # - if instance, must be instance of type_
 
-    def supercheck():
-        if isinstance(obj_or_type, EClass):
-            return obj_or_type
-        assert isinstance(obj_or_type, EInstance)
-        return obj_or_type.get_type()
+        if isinstance(obj, EClass) and obj.is_subtype_of(type_):
+            return obj
 
-    obj_type = supercheck()
+        if obj.get_type().is_subtype_of(type_):
+            return obj.get_type()
+
+        # TODO, need to be able to handle where the get_type() is different
+        # from __class__ which is apparently used for proxies.
+        raise NotImplementedError
+
+    obj_type = supercheck(type_, obj_or_type)
+    log('super', f'type_: {type_} obj: {obj_or_type} => obj_type {obj_type}')
+
     return Result(ESuper(type_, obj_or_type, obj_type))

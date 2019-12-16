@@ -11,7 +11,9 @@ class OtherClass:
 
 
 # First graft the unbound method.
+assert type(MyClass.f) is type(lambda: None)
 OtherClass.f = MyClass.f
+assert type(OtherClass.f) is type(lambda: None)
 o = OtherClass()
 assert o.f() == 64
 
