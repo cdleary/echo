@@ -1,6 +1,6 @@
 import enum
 import textwrap
-from typing import Tuple, Text, Any, Sequence
+from typing import Tuple, Text, Any, Sequence, Optional
 
 
 INDENT_PER_LEVEL = 4
@@ -13,6 +13,7 @@ class StmtKind(enum.Enum):
     FN_DEF = 'fn-def'
     RETURN = 'return'
     PASS = 'pass'
+    IF = 'if'
 
 
 class NameDef:
@@ -34,6 +35,12 @@ class Stmt:
     @classmethod
     def make_pass(cls) -> 'Stmt':
         return cls(StmtKind.PASS, ())
+
+    @classmethod
+    def make_if(cls, test: 'Expr', consequent: 'Suite',
+                elifs: Tuple[Tuple['Expr', 'Suite'], ...],
+                alternate: Optional['Suite']) -> 'Stmt':
+        return cls(StmtKind.IF, (test, consequent, elifs, alternate))
 
     @classmethod
     def make_class_def(cls, name: NameDef, body: Tuple['Stmt', ...]) -> 'Stmt':
@@ -62,13 +69,13 @@ class Stmt:
         return f'{self.__class__.__name__}({self.kind}, {self.operands})'
 
     def _format(self) -> Text:
+        if self.kind == StmtKind.EXPR:
+            assert len(self.operands) == 1, self.operands
+            return self.operands[0].format()
         if self.kind == StmtKind.ASSIGN:
             assert len(self.operands) == 2, self.operands
             return '{} = {}'.format(self.operands[0],
                                     self.operands[1].format())
-        if self.kind == StmtKind.EXPR:
-            assert len(self.operands) == 1, self.operands
-            return '{}'.format(self.operands[0].format())
         if self.kind == StmtKind.CLASS_DEF:
             name, body = self.operands
             return ('class {}:\n'.format(name) +
@@ -83,23 +90,35 @@ class Stmt:
             body = ('\n' + indent_str).join(s.format() for s in body)
             args_str = ', '.join(a.format() for a in args)
             return f'def {name}({args_str}):\n{indent_str}{body}\n'
+        if self.kind == StmtKind.IF:
+            test, consequent, elifs, alternate = self.operands
+            consequent_str = consequent.format(INDENT_PER_LEVEL)
+            pieces = [f'if {test.format()}:\n{consequent_str}']
+            for elif_ in elifs:
+                suite_str = elif_[1].format(INDENT_PER_LEVEL)
+                pieces.append('elif {elif_[0]}:\n{suite_str}')
+            if alternate:
+                suite_str = alternate.format(INDENT_PER_LEVEL)
+                pieces.append('else:{suite_str}')
+            return ''.join(pieces)
         raise NotImplementedError(self)
 
     def format(self, indent: int = 0) -> Text:
         return textwrap.indent(self._format(), ' ' * indent)
 
 
-class Block:
+class Suite:
     def __init__(self, stmts: Sequence[Stmt]):
         self.stmts = tuple(stmts)
 
     def format(self, indent: int = 0):
-        return '\n'.join(s.format() for s in self.stmts) + '\n'
+        return '\n'.join(s.format(indent) for s in self.stmts) + '\n'
 
 
 class ExprKind(enum.Enum):
     INVOKE = 'invoke'
     DICT_LITERAL = 'dict-literal'
+    STR_LITERAL = 'str-literal'
     NAME_REF = 'name-ref'
     NONE_LITERAL = 'none-literal'
     GETATTR = 'getattr'
@@ -111,11 +130,16 @@ class Expr:
         return cls(ExprKind.DICT_LITERAL, operands=())
 
     @classmethod
+    def make_str(cls, s: Text):
+        return cls(ExprKind.STR_LITERAL, operands=(s,))
+
+    @classmethod
     def make_none(cls):
         return cls(ExprKind.NONE_LITERAL, operands=())
 
     @classmethod
     def make_invoke(cls, lhs: 'Expr', args: Tuple['Expr', ...]) -> 'Expr':
+        assert isinstance(args, tuple), args
         return cls(ExprKind.INVOKE, (lhs, args))
 
     @classmethod
@@ -140,6 +164,8 @@ class Expr:
             return '{}'
         if self.kind == ExprKind.NONE_LITERAL:
             return 'None'
+        if self.kind == ExprKind.STR_LITERAL:
+            return repr(self.operands[0])
         if self.kind == ExprKind.NAME_REF:
             name_def = self.operands[0]
             assert isinstance(name_def, NameDef), repr(name_def)

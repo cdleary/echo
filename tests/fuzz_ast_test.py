@@ -1,4 +1,4 @@
-from echo.fuzz.genseq import Stmt, Expr, Block, NameDef
+from echo.fuzz.genseq import Stmt, Expr, Suite, NameDef
 
 
 def test_assign_stmt():
@@ -10,7 +10,7 @@ def test_assign_stmt():
         Expr.make_invoke(
             Expr.make_getattr(Expr.make_name_ref(x), 'update'),
             (Expr.make_name_ref(y),)))
-    b = Block((s0, s1, s2))
+    b = Suite((s0, s1, s2))
     assert b.format() == """\
 x = {}
 y = {}
@@ -46,9 +46,23 @@ def test_invoke_class():
     s0 = Stmt.make_class_def(mc, (Stmt.make_pass(),))
     s1 = Stmt.make_assign(NameDef('o'),
                           Expr.make_invoke(Expr.make_name_ref(mc), ()))
-    b = Block((s0, s1))
+    b = Suite((s0, s1))
     assert b.format() == """\
 class MyClass:
     pass
 o = MyClass()
+"""
+
+
+def test_if_stmt():
+    test = Expr.make_none()
+    assert test.format() == 'None'
+    print_def = NameDef('print')
+    print_expr = Expr.make_invoke(Expr.make_name_ref(print_def),
+                                  (Expr.make_str('yay'),))
+    consequent = Suite((Stmt.make_expr(print_expr),))
+    stmt = Stmt.make_if(test, consequent, (), None)
+    assert stmt.format() == """\
+if None:
+    print('yay')
 """
