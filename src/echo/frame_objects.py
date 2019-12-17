@@ -347,6 +347,8 @@ class StatefulFrame:
     def _run_BREAK_LOOP(self, arg, argval):
         loop_block = self.block_stack[-1]
         assert loop_block.kind == BlockKind.SETUP_LOOP
+        while len(self.stack) > loop_block.level:
+            self._pop()
         self.pc = loop_block.handler
         return True
 
@@ -363,8 +365,6 @@ class StatefulFrame:
     @sets_pc
     def _run_POP_JUMP_IF_FALSE(self, arg, argval):
         v = self._pop_value()
-        if os.getenv('ECHO_DUMP_INSTS'):
-            print(':: value', v, file=sys.stderr)
         if v.is_falsy():
             log('bc:pjif', f'jumping on falsy: {v}')
             self.pc = arg
@@ -862,7 +862,7 @@ class StatefulFrame:
                 # different stack for block info.
                 'SETUP_EXCEPT', 'POP_EXCEPT', 'SETUP_FINALLY', 'END_FINALLY',
                 # This op causes the stack_effect call to error.
-                'EXTENDED_ARG',
+                'EXTENDED_ARG', 'BREAK_LOOP',
                 # These ops may or may not pop the stack.
                 'JUMP_IF_FALSE_OR_POP', 'JUMP_IF_TRUE_OR_POP', 'FOR_ITER',
                 ):
@@ -884,6 +884,4 @@ class StatefulFrame:
             bc_result = self._run_one_bytecode()
             if bc_result is None:
                 continue
-            if os.getenv('ECHO_DUMP_INSTS'):
-                print('=>', bc_result.get_value()[0].wrapped, file=sys.stderr)
             return bc_result

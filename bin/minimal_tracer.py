@@ -11,7 +11,8 @@ def note_trace(frame, event, arg):
     frame.f_trace = note_trace
     #print(repr(event), frame)
     if event == 'call':
-        print(repr(event), frame)
+        #print(repr(event), frame)
+        pass
     elif event == 'opcode':
         instructions = dis.get_instructions(frame.f_code)
         instruction = next(inst for inst in instructions
@@ -21,7 +22,8 @@ def note_trace(frame, event, arg):
             print('{}:{}'.format(filename, lineno))
         print(instruction)
     elif event == 'return':
-        print('=>', repr(arg), repr(type(arg)))
+        #print('=>', repr(arg), repr(type(arg)))
+        pass
     else:
         pass
     return note_trace
