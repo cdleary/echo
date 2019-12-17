@@ -12,5 +12,4 @@ assert 'FOO' in m
 assert 'F' in m
 assert isinstance(m['FOO'], MyFlag)
 assert isinstance(m['F'], MyFlag)
-# TODO(cdleary): 2019-12-13 Needs getattr support.
-#assert m['FOO'] is MyFlag.FOO
+assert m['FOO'] is MyFlag.FOO

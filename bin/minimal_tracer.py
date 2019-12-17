@@ -4,6 +4,8 @@ import dis
 import os
 import sys
 
+from echo import trace_util
+
 
 def note_trace(frame, event, arg):
     filename = frame.f_code.co_filename
@@ -20,7 +22,7 @@ def note_trace(frame, event, arg):
         if instruction.starts_line:
             lineno = frame.f_lineno
             print('{}:{}'.format(filename, lineno))
-        print(instruction)
+        print(trace_util.remove_at_hex(str(instruction)))
     elif event == 'return':
         #print('=>', repr(arg), repr(type(arg)))
         pass

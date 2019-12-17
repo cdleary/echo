@@ -19,6 +19,7 @@ from echo.eobjects import (
     do_getitem, do_setitem, do_hasattr, do_getattr,
     do_iter, do_next, do_tuple, do_delitem, do_setattr,
 )
+from echo import trace_util
 from echo.ecell import ECell
 from echo.emodule import EModule
 from echo.code_attributes import CodeAttributes
@@ -819,7 +820,7 @@ class StatefulFrame:
             if instruction.starts_line:
                 print(f'{self.code.co_filename}:{instruction.starts_line}',
                       file=sys.stderr)
-            print(instruction, file=sys.stderr)
+            print(trace_util.remove_at_hex(str(instruction)), file=sys.stderr)
 
         if instruction.starts_line is not None:
             self.line = instruction.starts_line
