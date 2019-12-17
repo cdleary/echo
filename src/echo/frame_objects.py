@@ -363,6 +363,8 @@ class StatefulFrame:
     @sets_pc
     def _run_POP_JUMP_IF_FALSE(self, arg, argval):
         v = self._pop_value()
+        if os.getenv('ECHO_DUMP_INSTS'):
+            print(':: value', v, file=sys.stderr)
         if v.is_falsy():
             log('bc:pjif', f'jumping on falsy: {v}')
             self.pc = arg
@@ -814,7 +816,10 @@ class StatefulFrame:
 
         log('bc:inst', instruction)
         if os.getenv('ECHO_DUMP_INSTS'):
-            print(instruction)
+            if instruction.starts_line:
+                print(f'{self.code.co_filename}:{instruction.starts_line}',
+                      file=sys.stderr)
+            print(instruction, file=sys.stderr)
 
         if instruction.starts_line is not None:
             self.line = instruction.starts_line
@@ -880,5 +885,5 @@ class StatefulFrame:
             if bc_result is None:
                 continue
             if os.getenv('ECHO_DUMP_INSTS'):
-                print('=>', bc_result.get_value()[0].wrapped)
+                print('=>', bc_result.get_value()[0].wrapped, file=sys.stderr)
             return bc_result

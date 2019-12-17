@@ -473,7 +473,7 @@ class EClass(EPyType):
                  metaclass=None, kwargs=None):
         self.name = name
         self.dict_ = dict_
-        self.bases = bases or ()
+        self.bases = bases or (get_guest_builtin('object'),)
         self.metaclass = metaclass
         self.kwargs = kwargs
         self.subclasses = weakref.WeakSet()
@@ -500,7 +500,8 @@ class EClass(EPyType):
         frontier = collections.deque([self])
         while frontier:
             cls = frontier.popleft()
-            for base in _get_bases(cls):
+            bases = _get_bases(cls)
+            for base in bases:
                 derives_from.append((cls, base))
                 frontier.append(base)
 
@@ -1040,12 +1041,8 @@ class EBuiltin(EPyType):
         cls._registry[name] = (f, t)
 
     def __repr__(self):
-        if self.name == 'object':
-            return "<eclass 'object'>"
-        if self.name == 'type':
-            return "<eclass 'type'>"
-        if self.name == 'super':
-            return "<eclass 'super'>"
+        if self.name in self.BUILTIN_TYPES:
+            return "<eclass '{}'>".format(self.name)
         return 'EBuiltin(name={!r}, bound_self={!r}, ...)'.format(
             self.name, self.bound_self)
 
