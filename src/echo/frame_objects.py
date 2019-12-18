@@ -341,7 +341,7 @@ class StatefulFrame:
 
     @sets_pc
     def _run_BREAK_LOOP(self, arg, argval):
-        loop_block = self.block_stack[-1]
+        loop_block = self.block_stack.pop()
         assert loop_block.kind == BlockKind.SETUP_LOOP
         while len(self.stack) > loop_block.level:
             self._pop()
@@ -837,6 +837,19 @@ class StatefulFrame:
             print('{:3d} {}'.format(
                 instruction.offset,
                 trace_util.remove_at_hex(str(instruction))), file=sys.stderr)
+            print(' ' * 8, ' stack ({}):'.format(len(self.stack)),
+                  file=sys.stderr)
+            for i, item in enumerate(reversed(self.stack)):
+                print(' ' * 8, '  TOS{}: {!r} :: {}'.format(i, type(item),
+                      trace_util.remove_at_hex(repr(item))), file=sys.stderr)
+
+            print(' ' * 8, 'f_iblock: {}'.format(len(self.block_stack)),
+                  file=sys.stderr)
+            for i, block_info in enumerate(self.block_stack):
+                print(' ' * 9, 'blockstack {}: type: {} handler: {} level: {}'
+                      .format(
+                        i, block_info.kind.value, block_info.handler,
+                        block_info.level), file=sys.stderr)
 
         if instruction.starts_line is not None:
             self.line = instruction.starts_line

@@ -3,6 +3,8 @@ import sys
 import types
 from typing import Any
 
+from echo import trace_util
+
 
 # pytype: disable=base-class-error
 class _PyTryBlock(ctypes.Structure):
@@ -91,12 +93,12 @@ class CtypeFrame:
         """
         return self.frame_ptr[self.offsets['f_stacktop']]
 
-    def print_block_stack(self):
+    def print_block_stack(self, printer):
         assert sys.version_info[:2] == (3, 7)
         f_iblock = ctypes.cast(
             self.frame_id,
             ctypes.POINTER(ctypes.c_uint))[112//self.UINT_SIZE_IN_BYTES]
-        print('f_iblock:', f_iblock, file=sys.stderr)
+        printer('f_iblock:', f_iblock)
 
         type_to_str = {
             257: 'EXCEPT_HANDLER',
@@ -112,10 +114,8 @@ class CtypeFrame:
             ptb = f_blockstack[i]
             type_str = type_to_str[ptb.b_type]
             handler = -1 if ptb.b_handler == 0xffffffff else ptb.b_handler
-            print(' blockstack %d: type: %s handler: %s level: %d' % (
-                    i, type_str, handler, ptb.b_level), file=sys.stderr)
-            block_stack.append(bytecode_trace.BlockStackEntry(
-                type_str, handler, ptb.b_level))
+            printer(' blockstack %d: type: %s handler: %s level: %d' % (
+                    i, type_str, handler, ptb.b_level))
 
     def get_tos_value(self, i=0):
         value = self.get_value_stack_as_ptr()[i]
@@ -163,7 +163,8 @@ class CtypeFrame:
                     r = repr(obj)
                 except Exception:
                     r = '<unreprable>'
-                printer('  TOS%d: %r ::' % (i, type(obj)), r, '::', id(obj))
+                printer('  TOS%d: %r ::' % (i, type(obj)),
+                        trace_util.remove_at_hex(r))  # , '::', id(obj))
                 if isinstance(obj, types.CodeType):
                     printer('    co_varnames: {!r}'.format(obj.co_varnames))
                     printer('    co_cellvars: {!r}'.format(obj.co_cellvars))
@@ -173,4 +174,4 @@ class CtypeFrame:
                             obj.__code__.co_cellvars))
                     printer('    co_freevars: {!r}'.format(
                             obj.__code__.co_freevars))
-        # self.print_block_stack()
+        self.print_block_stack(printer)
