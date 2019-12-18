@@ -726,6 +726,23 @@ def _do_len(
 
 
 @check_result
+def _do_min(
+        args: Tuple[Any, ...],
+        ictx: ICtx) -> Result[Any]:
+    if (not isinstance(args[0], EPyObject) and
+            not isinstance(args[1], EPyObject)):
+        return Result(min(args[0], args[1]))
+    do_lt = do_getattr((args[0], '__lt__',), {}, ictx)
+    if do_lt.is_exception():
+        return do_lt
+    do_lt = do_lt.get_value()
+    res = do_lt.invoke((args[1],), {}, {}, ictx)
+    if res.is_exception():
+        return res
+    return Result(args[0] if res.get_value() else args[1])
+
+
+@check_result
 def _do_isinstance(
         args: Tuple[Any, ...],
         ictx: ICtx) -> Result[bool]:
@@ -1033,7 +1050,8 @@ class EBuiltin(EPyType):
         'dict.fromkeys', 'dict.update', 'dict.setdefault',
         'dict.pop',
         # int
-        'int.__new__', 'int.__add__', 'int.__init__',
+        'int.__new__', 'int.__add__', 'int.__init__', 'int.__sub__',
+        'int.__lt__', 'int.__repr__',
     )
 
     _registry: Dict[Text, Tuple[Callable, Optional[type]]] = {}
@@ -1135,6 +1153,8 @@ class EBuiltin(EPyType):
             return Result(chr(*args))
         if self.name == 'len':
             return _do_len(args, ictx)
+        if self.name == 'min':
+            return _do_min(args, ictx)
         if self.name == 'isinstance':
             return _do_isinstance(args, ictx)
         if self.name == 'issubclass':
@@ -1185,7 +1205,7 @@ class EBuiltin(EPyType):
                 '__setitem__', '__delitem__', '__contains__'):
             return AttrWhere.SELF_SPECIAL
         if self.name == 'int' and name in (
-                '__add__', '__init__', '__repr__'):
+                '__add__', '__init__', '__repr__', '__sub__', '__lt__',):
             return AttrWhere.SELF_SPECIAL
         if (self.name in self.BUILTIN_TYPES
                 and name in ('__mro__', '__dict__',)):
@@ -1234,6 +1254,15 @@ class EBuiltin(EPyType):
                 return Result(get_guest_builtin('int.__repr__'))
             if name == '__str__':
                 return Result(get_guest_builtin('int.__str__'))
+            if name == '__sub__':
+                return Result(get_guest_builtin('int.__sub__'))
+            if name == '__lt__':
+                return Result(get_guest_builtin('int.__lt__'))
+            if name == '__dict__':
+                return Result({
+                    '__new__': get_guest_builtin('int.__new__'),
+                    '__repr__': get_guest_builtin('int.__repr__'),
+                })
 
         if self.name == 'Exception':
             if name == '__new__':
@@ -1334,6 +1363,10 @@ class EBuiltin(EPyType):
 @memoize
 def get_guest_builtin(name: Text) -> EBuiltin:
     return EBuiltin(name, None)
+
+
+def get_guest_builtin_self(name: Text, self: Any) -> EBuiltin:
+    return EBuiltin(name, self)
 
 
 class EPartial:
@@ -1454,6 +1487,8 @@ def do_getattr(args: Tuple[Any, ...],
     o, attr, *default = args
     if type(o) is tuple and attr == '__class__':
         return Result(get_guest_builtin('tuple'))
+    if type(o) is int and f'int.{attr}' in EBuiltin.BUILTIN_FNS:
+        return Result(get_guest_builtin_self(f'int.{attr}', o))
     if not isinstance(o, EPyObject):
         try:
             a = getattr(o, attr, *default)

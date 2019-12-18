@@ -83,6 +83,7 @@ def main() -> int:
     os.environ['ECHO_DUMP_INSTS'] = ''
     assert not import_routines.run_IMPORT_NAME('fake', 0, (), 'types', dict(globals_), ictx).is_exception()
     assert not import_routines.run_IMPORT_NAME('fake', 0, (), 'collections', dict(globals_), ictx).is_exception()
+    assert not import_routines.run_IMPORT_NAME('fake', 0, (), 'enum', dict(globals_), ictx).is_exception()
     os.environ['ECHO_DUMP_INSTS'] = prior
 
     try:

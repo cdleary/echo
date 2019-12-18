@@ -187,9 +187,6 @@ class StatefulFrame:
         log('fo:stack:pop()', repr(x))
         return x
 
-    def _pop_value(self) -> Value:
-        return Value(self._pop())
-
     def _pop_n(self, n: int, tos_is_0: bool = True) -> Tuple[Any, ...]:
         self.stack, result = (
             self.stack[:len(self.stack)-n], self.stack[len(self.stack)-n:])
@@ -199,9 +196,6 @@ class StatefulFrame:
 
     def _peek(self):
         return self.stack[-1]
-
-    def _peek_value(self) -> Value:
-        return Value(self._peek())
 
     def _get_global_or_builtin(self, name: Text) -> Any:
         try:
@@ -364,10 +358,23 @@ class StatefulFrame:
         self.pc += arg + self.pc_to_bc_width[self.pc]
         return True
 
+    def _is_truthy(self, o: Any) -> bool:
+        if not isinstance(o, EPyObject):
+            assert isinstance(o, (int, bool, str, set, tuple, dict, list,
+                                  type(None))), o
+            return bool(o)
+        if isinstance(o, EBuiltin):
+            log('fo:truthy', f'builtin o: {o}')
+            return True
+        raise NotImplementedError(o)
+
+    def _is_falsy(self, o: Any) -> bool:
+        return not self._is_truthy(o)
+
     @sets_pc
     def _run_POP_JUMP_IF_FALSE(self, arg, argval):
-        v = self._pop_value()
-        if v.is_falsy():
+        v = self._pop()
+        if self._is_falsy(v):
             log('bc:pjif', f'jumping on falsy: {v}')
             self.pc = arg
             return True
@@ -376,8 +383,8 @@ class StatefulFrame:
 
     @sets_pc
     def _run_POP_JUMP_IF_TRUE(self, arg, argval):
-        v = self._pop_value()
-        if v.is_truthy():
+        v = self._pop()
+        if self._is_truthy(v):
             log('bc:pjit', f'jumping on truthy: {v}')
             self.pc = arg
             return True
@@ -386,7 +393,7 @@ class StatefulFrame:
 
     @sets_pc
     def _run_JUMP_IF_FALSE_OR_POP(self, arg, argval):
-        if self._peek_value().is_falsy():
+        if self._is_falsy(self._peek()):
             self.pc = arg
             return True
         else:
@@ -395,7 +402,7 @@ class StatefulFrame:
 
     @sets_pc
     def _run_JUMP_IF_TRUE_OR_POP(self, arg, argval):
-        if self._peek_value().is_truthy():
+        if self._is_truthy(self._peek()):
             self.pc = arg
             return True
         else:
@@ -599,10 +606,10 @@ class StatefulFrame:
                                       self.exception_data)
 
     def _run_UNARY_NOT(self, arg, argval) -> None:
-        arg = self._pop_value()
-        self._push(arg.is_falsy())
+        arg = self._pop()
+        self._push(self._is_falsy(arg))
 
-    def _run_binary(self, opname):
+    def _run_binary(self, opname) -> Result[Any]:
         rhs = self._pop()
         lhs = self._pop()
         return interp_routines.run_binop(
@@ -641,15 +648,21 @@ class StatefulFrame:
     def _run_BINARY_FLOOR_DIVIDE(self, arg, argval):
         return self._run_binary('BINARY_FLOOR_DIVIDE')
 
-    def _run_INPLACE_ADD(self, arg, argval):
+    def _run_INPLACE(self, subopcode: Text, arg, argval) -> Result[Any]:
         rhs = self._pop()
         lhs = self._pop()
         if ({type(lhs), type(rhs)} <=
                 interp_routines.BUILTIN_VALUE_TYPES | {list}):
             return interp_routines.run_binop(
-                'BINARY_ADD', lhs, rhs, self.ictx)
+                'BINARY_' + subopcode, lhs, rhs, self.ictx)
         else:
             raise NotImplementedError(lhs, rhs)
+
+    def _run_INPLACE_OR(self, arg, argval):
+        return self._run_INPLACE('OR', arg, argval)
+
+    def _run_INPLACE_ADD(self, arg, argval):
+        return self._run_INPLACE('ADD', arg, argval)
 
     def _run_SETUP_EXCEPT(self, arg, argval):
         self.block_stack.append(BlockInfo(
@@ -829,13 +842,13 @@ class StatefulFrame:
             self.line = instruction.starts_line
 
         if instruction.opname == 'RETURN_VALUE':
-            v = self._pop_value()
+            v = Value(self._pop())
             log('bc:rv', repr(v))
             return Result((v, ReturnKind.RETURN))
 
         if instruction.opname == 'YIELD_VALUE':
             self.pc += self.pc_to_bc_width[self.pc]
-            return Result((self._peek_value(), ReturnKind.YIELD))
+            return Result((Value(self._peek()), ReturnKind.YIELD))
 
         f = getattr(self, '_run_{}'.format(instruction.opname))
 

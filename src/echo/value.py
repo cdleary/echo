@@ -12,12 +12,3 @@ class Value:
 
     def __repr__(self) -> Text:
         return f'Value({self.wrapped!r})'
-
-    def is_falsy(self) -> bool:
-        w = self.wrapped
-        if isinstance(w, (bool, int, str, set, type(None), tuple, list)):
-            return not bool(w)
-        raise NotImplementedError(w)
-
-    def is_truthy(self) -> bool:
-        return not self.is_falsy()

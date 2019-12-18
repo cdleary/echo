@@ -69,3 +69,39 @@ def _do_int_add(
     assert not kwargs
     assert isinstance(args[1], int)  # TODO
     return Result(_resolve(args[0]) + args[1])
+
+
+@register_builtin('int.__sub__')
+@check_result
+def _do_int_sub(
+        args: Tuple[Any, ...],
+        kwargs: Dict[Text, Any],
+        ictx: ICtx) -> Result[Any]:
+    assert len(args) == 2, args
+    assert not kwargs
+    assert isinstance(args[1], int)  # TODO
+    return Result(_resolve(args[0]) - args[1])
+
+
+@register_builtin('int.__lt__')
+@check_result
+def _do_int_lt(
+        args: Tuple[Any, ...],
+        kwargs: Dict[Text, Any],
+        ictx: ICtx) -> Result[Any]:
+    assert len(args) == 2, args
+    assert not kwargs
+    if not isinstance(args[1], int):
+        return Result(NotImplemented)
+    return Result(_resolve(args[0]) < args[1])
+
+
+@register_builtin('int.__repr__')
+@check_result
+def _do_int_repr(
+        args: Tuple[Any, ...],
+        kwargs: Dict[Text, Any],
+        ictx: ICtx) -> Result[Any]:
+    assert len(args) == 1, args
+    assert not kwargs
+    return Result(repr(_resolve(args[0])))

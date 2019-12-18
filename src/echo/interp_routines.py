@@ -50,6 +50,8 @@ GUEST_BUILTIN_NAMES = (
     'len',
     'list',
     'map',
+    'max',
+    'min',
     'next',
     'object',
     'property',
@@ -90,6 +92,7 @@ COMPARE_OPS = {
 BUILTIN_VALUE_TYPES = {
     int,
     float,
+    range,
     str,
     tuple,
     slice,
@@ -237,9 +240,8 @@ def compare(opname: Text, lhs, rhs, ictx: ICtx) -> Result[bool]:
         if r.is_exception():
             return r
         if opname == 'not in':
-            result = Value(r.get_value()).is_falsy()
-            log('ir:cmp', f'not in: lhs {lhs} rhs {rhs} => {result}')
-            return Result(result)
+            assert isinstance(r.get_value(), bool), r
+            return Result(not r.get_value())
         return r
 
     def is_set_of_strings(x: Any) -> bool:
