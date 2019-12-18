@@ -13,9 +13,9 @@ from echo.interp_context import ICtx
 
 
 class EEnumerate(EPyObject):
-    def __init__(self, iterator):
+    def __init__(self, iterator, start):
         self.iterator = iterator
-        self._count = itertools.count(0)
+        self._count = itertools.count(start)
 
     def get_type(self) -> 'EPyObject':
         return get_guest_builtin('enumerate')
@@ -46,8 +46,10 @@ class EEnumerate(EPyObject):
 def _do_enumerate(args: Tuple[Any, ...],
                   kwargs: Dict[Text, Any],
                   ictx: ICtx) -> Result[Any]:
+    assert len(args) == 1, args
+    start = kwargs.pop('start', 0)
     do_iter = get_guest_builtin('iter')
     it = do_iter.invoke((args[0],), {}, {}, ictx)
     if it.is_exception():
         return it
-    return Result(EEnumerate(it.get_value()))
+    return Result(EEnumerate(it.get_value(), start))

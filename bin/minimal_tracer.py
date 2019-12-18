@@ -60,6 +60,8 @@ def main():
     del sys.modules['sre_compile']
     del sys.modules['sre_parse']
     del sys.modules['sre_constants']
+    del sys.modules['types']
+    sys.modules.pop('collections')
     f = sys._getframe(0)
     code = compile(contents, os.path.realpath(path), 'exec')
     sys.settrace(note_trace)

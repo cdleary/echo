@@ -93,12 +93,11 @@ class CtypeFrame:
         """
         return self.frame_ptr[self.offsets['f_stacktop']]
 
-    def print_block_stack(self, printer):
+    def print_block_stack(self, printer) -> None:
         assert sys.version_info[:2] == (3, 7)
         f_iblock = ctypes.cast(
             self.frame_id,
             ctypes.POINTER(ctypes.c_uint))[112//self.UINT_SIZE_IN_BYTES]
-        printer('f_iblock:', f_iblock)
 
         type_to_str = {
             257: 'EXCEPT_HANDLER',
@@ -109,7 +108,9 @@ class CtypeFrame:
 
         f_blockstack = ctypes.cast(self.frame_id+120,
                                    ctypes.POINTER(_PyTryBlock))
-        block_stack = []
+        if not f_iblock:
+            return
+        printer('f_iblock:', f_iblock)
         for i in range(f_iblock):
             ptb = f_blockstack[i]
             type_str = type_to_str[ptb.b_type]
@@ -165,13 +166,13 @@ class CtypeFrame:
                     r = '<unreprable>'
                 printer('  TOS%d: %r ::' % (i, type(obj)),
                         trace_util.remove_at_hex(r))  # , '::', id(obj))
-                if isinstance(obj, types.CodeType):
-                    printer('    co_varnames: {!r}'.format(obj.co_varnames))
-                    printer('    co_cellvars: {!r}'.format(obj.co_cellvars))
-                if isinstance(obj, types.FunctionType):
-                    printer('    closure:     {!r}'.format(obj.__closure__))
-                    printer('    co_cellvars: {!r}'.format(
-                            obj.__code__.co_cellvars))
-                    printer('    co_freevars: {!r}'.format(
-                            obj.__code__.co_freevars))
+                # if isinstance(obj, types.CodeType):
+                #     printer('    co_varnames: {!r}'.format(obj.co_varnames))
+                #     printer('    co_cellvars: {!r}'.format(obj.co_cellvars))
+                # if isinstance(obj, types.FunctionType):
+                #     printer('    closure:     {!r}'.format(obj.__closure__))
+                #     printer('    co_cellvars: {!r}'.format(
+                #             obj.__code__.co_cellvars))
+                #     printer('    co_freevars: {!r}'.format(
+                #             obj.__code__.co_freevars))
         self.print_block_stack(printer)

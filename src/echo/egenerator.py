@@ -50,10 +50,18 @@ class EGenerator(EPyObject):
     def get_type(self) -> EPyObject:
         return EGeneratorType.singleton
 
+    def _iter(self, args, kwargs, locals_dict, ictx) -> Result[EPyObject]:
+        return Result(self)
+
     def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
+        if name == '__iter__':
+            return AttrWhere.CLS
         raise NotImplementedError
 
     def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
+        if name == '__iter__':
+            return Result(EMethod(NativeFunction(
+                self._iter, 'egenerator.__iter__'), bound_self=self))
         raise NotImplementedError
 
     def setattr(self, name: Text, value: Any) -> Any:

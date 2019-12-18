@@ -650,6 +650,9 @@ class GuestCoroutineType(EPyType):
     def __init__(self):
         self.dict_ = {}
 
+    def __repr__(self) -> Text:
+        return "<eclass 'coroutine'>"
+
     def get_mro(self) -> Tuple[EPyObject, ...]:
         return (self, get_guest_builtin('type'))
 
@@ -1034,21 +1037,24 @@ class EBuiltin(EPyType):
 
     BUILTIN_TYPES = (
         'object', 'type', 'dict', 'tuple', 'list', 'int', 'classmethod',
-        'staticmethod', 'property', 'Exception',
+        'staticmethod', 'property', 'Exception', 'super', 'enumerate',
     )
     BUILTIN_FNS = (
-        'len',
+        'len', '__build_class__', 'getattr', 'iter', 'reversed', 'zip',
+        'isinstance', 'issubclass', 'hasattr',
         # object
         'object.__init__', 'object.__str__', 'object.__setattr__',
-        'object.__format__', 'object.__reduce_ex__',
+        'object.__format__', 'object.__reduce_ex__', 'object.__ne__',
+        'object.__new__', 'object.__repr__',
         # type
-        'type.__init__', 'type.__str__',
+        'type.__init__', 'type.__str__', 'type.__new__', 'type.__subclasses__',
+        'type.mro',
         # dict
-        'dict.__eq__',
+        'dict.__eq__', 'dict.__init__',
         'dict.__setitem__', 'dict.__getitem__', 'dict.__delitem__',
         'dict.__contains__',
         'dict.fromkeys', 'dict.update', 'dict.setdefault',
-        'dict.pop',
+        'dict.pop', 'dict.get',
         # int
         'int.__new__', 'int.__add__', 'int.__init__', 'int.__sub__',
         'int.__lt__', 'int.__repr__',
