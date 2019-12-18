@@ -9,6 +9,8 @@ from echo import trace_util
 
 def note_trace(frame, event, arg):
     filename = frame.f_code.co_filename
+    if filename.startswith('<frozen'):
+        return
     frame.f_trace_opcodes = True
     frame.f_trace = note_trace
     #print(repr(event), frame)

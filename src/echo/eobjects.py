@@ -712,6 +712,20 @@ def _is_tuple_builtin(x) -> bool:
 
 
 @check_result
+def _do_len(
+        args: Tuple[Any, ...],
+        ictx: ICtx) -> Result[Any]:
+    assert len(args) == 1
+    if not isinstance(args[0], EPyObject):
+        return Result(len(args[0]))
+    do_len = args[0].getattr('__len__', ictx)
+    if do_len.is_exception():
+        return do_len
+    do_len = do_len.get_value()
+    return do_len.invoke((), {}, {}, ictx)
+
+
+@check_result
 def _do_isinstance(
         args: Tuple[Any, ...],
         ictx: ICtx) -> Result[bool]:
@@ -1006,8 +1020,10 @@ class EBuiltin(EPyType):
         'staticmethod', 'property', 'Exception',
     )
     BUILTIN_FNS = (
+        'len',
         # object
         'object.__init__', 'object.__str__', 'object.__setattr__',
+        'object.__format__', 'object.__reduce_ex__',
         # type
         'type.__init__', 'type.__str__',
         # dict
@@ -1117,6 +1133,8 @@ class EBuiltin(EPyType):
             return Result(reversed(*args))
         if self.name == 'chr':
             return Result(chr(*args))
+        if self.name == 'len':
+            return _do_len(args, ictx)
         if self.name == 'isinstance':
             return _do_isinstance(args, ictx)
         if self.name == 'issubclass':
@@ -1265,6 +1283,10 @@ class EBuiltin(EPyType):
                 return Result(get_guest_builtin('object.__str__'))
             if name == '__repr__':
                 return Result(get_guest_builtin('object.__repr__'))
+            if name == '__format__':
+                return Result(get_guest_builtin('object.__format__'))
+            if name == '__reduce_ex__':
+                return Result(get_guest_builtin('object.__reduce_ex__'))
             if name == '__subclasshook__':
                 return Result(get_guest_builtin('object.__subclasshook__'))
             if name == '__bases__':
