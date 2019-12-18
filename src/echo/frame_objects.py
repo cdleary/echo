@@ -176,7 +176,7 @@ class StatefulFrame:
         assert x is not dict
         assert not isinstance(x, Value), x
         assert x is not GuestCoroutine
-        log('fo:push()', repr(x))
+        log('fo:stack:push()', repr(x))
         self.stack.append(x)
 
     def _push_value(self, x: Value) -> None:
@@ -184,6 +184,7 @@ class StatefulFrame:
 
     def _pop(self) -> Any:
         x = self.stack.pop()
+        log('fo:stack:pop()', repr(x))
         return x
 
     def _pop_value(self) -> Value:
@@ -820,7 +821,9 @@ class StatefulFrame:
             if instruction.starts_line:
                 print(f'{self.code.co_filename}:{instruction.starts_line}',
                       file=sys.stderr)
-            print(trace_util.remove_at_hex(str(instruction)), file=sys.stderr)
+            print('{:3d} {}'.format(
+                instruction.offset,
+                trace_util.remove_at_hex(str(instruction))), file=sys.stderr)
 
         if instruction.starts_line is not None:
             self.line = instruction.starts_line

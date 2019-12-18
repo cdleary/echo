@@ -109,7 +109,10 @@ def _egetitem(x, y):
     if isinstance(x, dict):
         if y not in x:
             return ExceptionData(None, None, KeyError(y))
-    return operator.getitem(x, y)
+    try:
+        return operator.getitem(x, y)
+    except IndexError as e:
+        return ExceptionData(None, None, e)
 
 
 _BINARY_OPS = {
@@ -168,9 +171,13 @@ def builtins_get(builtins: Union[types.ModuleType, Dict], name: Text) -> Any:
 
 
 def exception_match(lhs, rhs, ictx: ICtx) -> Result[Any]:
-    log('ir:em', f'lhs {lhs} rhs {rhs}')
-    do_isinstance = get_guest_builtin('isinstance')
-    return do_isinstance.invoke((lhs, rhs), {}, {}, ictx)
+    if lhs is rhs:
+        r = Result(True)
+    else:
+        do_isinstance = get_guest_builtin('isinstance')
+        r = do_isinstance.invoke((lhs, rhs), {}, {}, ictx)
+    log('ir:em', f'lhs {lhs!r} rhs {rhs!r} => {r}')
+    return r
 
 
 @check_result

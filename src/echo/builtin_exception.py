@@ -13,14 +13,23 @@ from echo.interp_context import ICtx
 
 
 class EException(EPyObject):
+    def __init__(self, args: Tuple[Any]):
+        self.dict_ = {
+            'args': args,
+        }
+
     def get_type(self):
         return get_guest_builtin('Exception')
 
     def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
+        if name == 'args':
+            return AttrWhere.SELF_DICT
         return None
 
     @check_result
     def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
+        if name == 'args':
+            return Result(self.dict_['args'])
         return Result(ExceptionData(None, None, AttributeError(name)))
 
     def setattr(self, name: Text, value: Any) -> Result[None]:
@@ -32,12 +41,13 @@ def _do_exception_new(
         args: Tuple[Any, ...],
         kwargs: Dict[Text, Any],
         ictx: ICtx) -> Result[Any]:
-    assert len(args) == 1 and not kwargs, (args, kwargs)
+    assert 1 <= len(args) and not kwargs, (args, kwargs)
+    msg = args[1] if len(args) == 2 else None
     if isinstance(args[0], EClass):
         inst = EInstance(args[0])
         return Result(inst)
     if _is_exception_builtin(args[0]):
-        return Result(EException())
+        return Result(EException(tuple(args[1:])))
     raise NotImplementedError(args, kwargs)
 
 

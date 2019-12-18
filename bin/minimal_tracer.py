@@ -22,7 +22,7 @@ def note_trace(frame, event, arg):
         if instruction.starts_line:
             lineno = frame.f_lineno
             print('{}:{}'.format(filename, lineno))
-        print(trace_util.remove_at_hex(str(instruction)))
+        print('{:3d} {}'.format(instruction.offset, trace_util.remove_at_hex(str(instruction))))
     elif event == 'return':
         #print('=>', repr(arg), repr(type(arg)))
         pass

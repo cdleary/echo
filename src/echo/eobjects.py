@@ -359,6 +359,9 @@ class EInstance(EPyObject):
     def __repr__(self) -> Text:
         return '<{} eobject>'.format(self.cls.name)
 
+    def __len__(self):
+        raise NotImplementedError
+
     def get_type(self) -> Union['EClass', 'EBuiltin']:
         return self.cls
 
@@ -549,7 +552,8 @@ class EClass(EPyType):
             guest_instance = result.get_value()
             if not _do_isinstance((guest_instance, self), ictx).get_value():
                 return Result(guest_instance)
-        guest_instance = guest_instance or EInstance(self)
+        guest_instance = (EInstance(self) if guest_instance is None
+                          else guest_instance)
         if self.hasattr('__init__'):
             init_f = self.getattr('__init__', ictx).get_value()
             # TODO(cdleary, 2019-01-26) What does Python do when you return
@@ -712,6 +716,7 @@ def _do_isinstance(
         args: Tuple[Any, ...],
         ictx: ICtx) -> Result[bool]:
     assert len(args) == 2, args
+    log('eo:isinstance', f'args: {args}')
 
     if (isinstance(args[1], EClass) and
             args[1].hasattr('__instancecheck__')):
@@ -726,6 +731,10 @@ def _do_isinstance(
     for t in (bool, int, str, float, dict, list, tuple, set):
         if args[1] is t:
             return Result(isinstance(args[0], t))
+
+    if (isinstance(args[0], str) and isinstance(args[1], tuple)
+            and (get_guest_builtin('str') in args[1] or str in args[1])):
+        return Result(True)
 
     if args[1] is type:
         return Result(isinstance(args[0], (type, EClass)))
@@ -1516,6 +1525,7 @@ def do_iter(args: Tuple[Any, ...], ictx: ICtx) -> Result[Any]:
 
 TUPLE_ITERATOR = type(iter(()))
 STR_ITERATOR = type(iter(''))
+BYTES_ITERATOR = type(iter(b''))
 LIST_ITERATOR = type(iter([]))
 LIST_REV_ITERATOR = type(reversed([]))
 DICT_ITERATOR = type(iter({}))
@@ -1527,7 +1537,7 @@ ZIP_ITERATOR = type(iter(zip((), ())))
 BUILTIN_ITERATORS = (
     TUPLE_ITERATOR, LIST_ITERATOR, LIST_REV_ITERATOR, DICT_ITERATOR,
     RANGE_ITERATOR, DICT_KEY_ITERATOR, ZIP_ITERATOR, DICT_ITEM_ITERATOR,
-    STR_ITERATOR,
+    STR_ITERATOR, BYTES_ITERATOR,
     types.GeneratorType
 )
 
