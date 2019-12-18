@@ -55,6 +55,7 @@ def main():
     with open(path) as f:
         contents = f.read()
     globals_ = {'__name__': '__main__'}
+    del sys.modules['enum']
     del sys.modules['re']
     del sys.modules['sre_compile']
     del sys.modules['sre_parse']

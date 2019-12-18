@@ -4,9 +4,10 @@ import sys
 from typing import Text, Callable
 
 
-def _accepts(channel: Text) -> bool:
-    ECHO_DEBUG = os.getenv('ECHO_DEBUG', '')
+ECHO_DEBUG = os.getenv('ECHO_DEBUG', '')
 
+
+def _accepts(channel: Text) -> bool:
     if not ECHO_DEBUG:
         return False
     if ECHO_DEBUG in ('all', '1'):
