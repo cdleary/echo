@@ -188,7 +188,8 @@ def _do_call_sre_compile(
         new_code.append(coerced.get_value())
     try:
         _sre = get_sunder_sre()
-        return Result(_sre.compile(pattern, flags, new_code, groups, groupindex, indexgroup))
+        return Result(_sre.compile(pattern, flags, new_code, groups,
+                                   groupindex, indexgroup))
     except Exception as e:
         return Result(ExceptionData(None, None, e))
 

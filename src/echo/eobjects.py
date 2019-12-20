@@ -1213,7 +1213,8 @@ class EBuiltin(EPyType):
                 '__setitem__', '__delitem__', '__contains__'):
             return AttrWhere.SELF_SPECIAL
         if self.name == 'int' and name in (
-                '__add__', '__init__', '__repr__', '__sub__', '__lt__', '__int__',):
+                '__add__', '__init__', '__repr__', '__sub__', '__lt__',
+                '__int__',):
             return AttrWhere.SELF_SPECIAL
         if (self.name in self.BUILTIN_TYPES
                 and name in ('__mro__', '__dict__',)):
