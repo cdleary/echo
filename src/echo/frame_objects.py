@@ -246,9 +246,12 @@ class StatefulFrame:
         t = self._pop_n(count, tos_is_0=False)
         return Result(t)
 
-    def _run_BUILD_TUPLE_UNPACK(self, arg, argval):
+    def _run_BUILD_TUPLE_UNPACK(self, arg, argval) -> Result[Any]:
         iterables = self._pop_n(arg, tos_is_0=False)
         return Result(tuple(itertools.chain(*iterables)))
+
+    def _run_BUILD_TUPLE_UNPACK_WITH_CALL(self, arg, argval) -> Result[Any]:
+        return self._run_BUILD_TUPLE_UNPACK(arg, argval)
 
     def _run_BUILD_LIST(self, arg, argval):
         count = arg

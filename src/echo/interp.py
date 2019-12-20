@@ -5,6 +5,7 @@ import builtins
 import collections
 import dis
 import functools
+import importlib
 import logging
 import operator
 import os
@@ -31,7 +32,7 @@ from echo.eobjects import (
     EFunction, EBuiltin, EPyObject,
     EPartial, EClass, EMethod,
     EAsyncGenerator, ReturnKind,
-    NativeFunction
+    NativeFunction, get_guest_builtin,
 )
 from echo import interp_routines
 from echo.frame_objects import StatefulFrame, UnboundLocalSentinel
@@ -166,6 +167,32 @@ def _do_call_functools_partial(
     return Result(guest_partial)
 
 
+def get_sunder_sre() -> types.ModuleType:
+    return importlib.import_module('_sre')
+
+
+@check_result
+def _do_call_sre_compile(
+        args: Tuple[Any, ...],
+        kwargs: Optional[Dict[Text, Any]], ictx: ICtx) -> Result[Any]:
+    """Helper for calling `_sre.compile`."""
+    assert len(args) == 6 and not kwargs, (args, kwargs)
+    pattern, flags, code, groups, groupindex, indexgroup = args
+    new_code = []
+    assert isinstance(code, list), code
+    do_int = get_guest_builtin('int')
+    for elem in code:
+        coerced = do_int.invoke((elem,), {}, {}, ictx)
+        if coerced.is_exception():
+            return coerced
+        new_code.append(coerced.get_value())
+    try:
+        _sre = get_sunder_sre()
+        return Result(_sre.compile(pattern, flags, new_code, groups, groupindex, indexgroup))
+    except Exception as e:
+        return Result(ExceptionData(None, None, e))
+
+
 @check_result
 def do_call(f,
             args: Tuple[Any, ...],
@@ -211,6 +238,8 @@ def do_call(f,
     # don't need to consider it specially.
     elif f is functools.partial:
         return _do_call_functools_partial(args, kwargs)
+    elif f is get_sunder_sre().compile:
+        return _do_call_sre_compile(args, kwargs, ictx)
     elif isinstance(f, EPartial):
         return f.invoke(args, kwargs, locals_dict, ictx)
     elif isinstance(f, EBuiltin):

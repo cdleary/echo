@@ -26,6 +26,12 @@ def _do_int(
         args: Tuple[Any, ...],
         kwargs: Dict[Text, Any],
         ictx: ICtx) -> Result[Any]:
+    assert len(args) == 1 and not kwargs, (args, kwargs)
+    if isinstance(args[0], EPyObject):
+        int_res = args[0].getattr('__int__', ictx)
+        if int_res.is_exception():
+            return int_res
+        return int_res.get_value().invoke((), {}, {}, ictx)
     try:
         return Result(int(*args, **kwargs))
     except ValueError as e:
@@ -105,3 +111,25 @@ def _do_int_repr(
     assert len(args) == 1, args
     assert not kwargs
     return Result(repr(_resolve(args[0])))
+
+
+@register_builtin('int.__str__')
+@check_result
+def _do_int_str(
+        args: Tuple[Any, ...],
+        kwargs: Dict[Text, Any],
+        ictx: ICtx) -> Result[Any]:
+    assert len(args) == 1, args
+    assert not kwargs
+    return Result(str(_resolve(args[0])))
+
+
+@register_builtin('int.__int__')
+@check_result
+def _do_int_str(
+        args: Tuple[Any, ...],
+        kwargs: Dict[Text, Any],
+        ictx: ICtx) -> Result[Any]:
+    assert len(args) == 1, args
+    assert not kwargs
+    return Result(int(_resolve(args[0])))

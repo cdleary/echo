@@ -1041,7 +1041,7 @@ class EBuiltin(EPyType):
     )
     BUILTIN_FNS = (
         'len', '__build_class__', 'getattr', 'iter', 'reversed', 'zip',
-        'isinstance', 'issubclass', 'hasattr', 'any',
+        'isinstance', 'issubclass', 'hasattr', 'any', 'min',
         # object
         'object.__init__', 'object.__str__', 'object.__setattr__',
         'object.__format__', 'object.__reduce_ex__', 'object.__ne__',
@@ -1057,7 +1057,7 @@ class EBuiltin(EPyType):
         'dict.pop', 'dict.get',
         # int
         'int.__new__', 'int.__add__', 'int.__init__', 'int.__sub__',
-        'int.__lt__', 'int.__repr__',
+        'int.__lt__', 'int.__repr__', 'int.__str__', 'int.__int__',
     )
 
     _registry: Dict[Text, Tuple[Callable, Optional[type]]] = {}
@@ -1213,7 +1213,7 @@ class EBuiltin(EPyType):
                 '__setitem__', '__delitem__', '__contains__'):
             return AttrWhere.SELF_SPECIAL
         if self.name == 'int' and name in (
-                '__add__', '__init__', '__repr__', '__sub__', '__lt__',):
+                '__add__', '__init__', '__repr__', '__sub__', '__lt__', '__int__',):
             return AttrWhere.SELF_SPECIAL
         if (self.name in self.BUILTIN_TYPES
                 and name in ('__mro__', '__dict__',)):
@@ -1266,6 +1266,8 @@ class EBuiltin(EPyType):
                 return Result(get_guest_builtin('int.__sub__'))
             if name == '__lt__':
                 return Result(get_guest_builtin('int.__lt__'))
+            if name == '__int__':
+                return Result(get_guest_builtin('int.__int__'))
             if name == '__dict__':
                 return Result({
                     '__new__': get_guest_builtin('int.__new__'),
