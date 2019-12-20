@@ -36,6 +36,7 @@ GUEST_BUILTINS = {
     dict: {'keys', 'values', 'items', 'update'},
     str: {'format', 'join'},
 }
+opcodeno = 0
 
 
 # Use a sentinel value (this class object) to indicate when
@@ -359,14 +360,8 @@ class StatefulFrame:
         return True
 
     def _is_truthy(self, o: Any) -> bool:
-        if not isinstance(o, EPyObject):
-            assert isinstance(o, (int, bool, str, set, tuple, dict, list,
-                                  type(None))), o
-            return bool(o)
-        if isinstance(o, EBuiltin):
-            log('fo:truthy', f'builtin o: {o}')
-            return True
-        raise NotImplementedError(o)
+        do_bool = get_guest_builtin('bool')
+        return do_bool.invoke((o,), {}, {}, self.ictx).get_value()
 
     def _is_falsy(self, o: Any) -> bool:
         return not self._is_truthy(o)
@@ -821,6 +816,38 @@ class StatefulFrame:
     def _run_EXTENDED_ARG(self, arg, argval):
         pass  # The to-instruction decoding step already extended the args?
 
+    def _dump_inst(self, instruction: dis.Instruction) -> None:
+        global opcodeno
+        if instruction.starts_line:
+            print(f'{self.code.co_filename}:{instruction.starts_line}',
+                  file=sys.stderr)
+        print('{:5d} :: {:3d} {}'.format(
+            opcodeno,
+            instruction.offset,
+            trace_util.remove_at_hex(str(instruction))), file=sys.stderr)
+        opcodeno += 1
+        if (instruction.opname == 'EXTENDED_ARG' or
+                os.getenv('ECHO_DUMP_INSTS') == 'nostack'):
+            return
+        print(' ' * 8, ' stack ({}):'.format(len(self.stack)),
+              file=sys.stderr)
+        do_type = get_guest_builtin('type')
+        for i, item in enumerate(reversed(self.stack)):
+            item_type = do_type.invoke((item,), {}, {},
+                                       self.ictx).get_value()
+            print(' ' * 8, '  TOS{}: {!r} :: {}'.format(i, item_type,
+                  trace_util.remove_at_hex(repr(item))), file=sys.stderr)
+
+        if self.block_stack:
+            print(' ' * 8, 'f_iblock: {}'.format(len(self.block_stack)),
+                  file=sys.stderr)
+            for i, block_info in enumerate(self.block_stack):
+                print(' ' * 9,
+                      'blockstack {}: type: {} handler: {} level: {}'
+                      .format(
+                        i, block_info.kind.value, block_info.handler,
+                        block_info.level), file=sys.stderr)
+
     def _run_one_bytecode(self) -> Optional[Result[Tuple[Value, ReturnKind]]]:
         instruction = self.pc_to_instruction[self.pc]
         assert instruction is not None
@@ -831,30 +858,7 @@ class StatefulFrame:
 
         log('bc:inst', instruction)
         if os.getenv('ECHO_DUMP_INSTS'):
-            if instruction.starts_line:
-                print(f'{self.code.co_filename}:{instruction.starts_line}',
-                      file=sys.stderr)
-            print('{:3d} {}'.format(
-                instruction.offset,
-                trace_util.remove_at_hex(str(instruction))), file=sys.stderr)
-            print(' ' * 8, ' stack ({}):'.format(len(self.stack)),
-                  file=sys.stderr)
-            do_type = get_guest_builtin('type')
-            for i, item in enumerate(reversed(self.stack)):
-                item_type = do_type.invoke((item,), {}, {},
-                                           self.ictx).get_value()
-                print(' ' * 8, '  TOS{}: {!r} :: {}'.format(i, item_type,
-                      trace_util.remove_at_hex(repr(item))), file=sys.stderr)
-
-            if self.block_stack:
-                print(' ' * 8, 'f_iblock: {}'.format(len(self.block_stack)),
-                      file=sys.stderr)
-                for i, block_info in enumerate(self.block_stack):
-                    print(' ' * 9,
-                          'blockstack {}: type: {} handler: {} level: {}'
-                          .format(
-                            i, block_info.kind.value, block_info.handler,
-                            block_info.level), file=sys.stderr)
+            self._dump_inst(instruction)
 
         if instruction.starts_line is not None:
             self.line = instruction.starts_line

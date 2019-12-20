@@ -54,6 +54,7 @@ import echo.builtin_super
 import echo.builtin_tuple
 import echo.builtin_type
 import echo.builtin_enumerate
+import echo.builtin_predicates
 
 
 @check_result
@@ -217,10 +218,7 @@ def do_call(f,
     elif isinstance(f, EClass):
         return f.instantiate(args, kwargs, globals_=globals_, ictx=ictx)
     elif callable(f):
-        try:
-            return Result(f(*args, **kwargs))
-        except Exception as e:
-            return Result(ExceptionData(None, None, e))
+        return Result(f(*args, **kwargs))
     else:
         if isinstance(f, EPyObject):
             type_name = f.get_type().name

@@ -37,9 +37,7 @@ class EModule(EPyObject):
         self.globals_ = globals_
 
     def __repr__(self) -> Text:
-        return ('EModule(fully_qualified_name={!r}, '
-                'filename={!r}, ...)'.format(
-                    self.fully_qualified_name, self.filename))
+        return f'<module {self.fully_qualified_name!r} from {self.filename!r}>'
 
     def get_type(self) -> EPyObject:
         return EModuleType.singleton

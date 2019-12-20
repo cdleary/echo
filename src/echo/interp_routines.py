@@ -37,6 +37,7 @@ COMPARE_TO_SPECIAL = {
 }
 GUEST_BUILTIN_NAMES = (
     'Exception',
+    'any',
     'classmethod',
     'dict',
     'dir',

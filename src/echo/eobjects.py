@@ -1041,7 +1041,7 @@ class EBuiltin(EPyType):
     )
     BUILTIN_FNS = (
         'len', '__build_class__', 'getattr', 'iter', 'reversed', 'zip',
-        'isinstance', 'issubclass', 'hasattr',
+        'isinstance', 'issubclass', 'hasattr', 'any',
         # object
         'object.__init__', 'object.__str__', 'object.__setattr__',
         'object.__format__', 'object.__reduce_ex__', 'object.__ne__',
@@ -1092,6 +1092,8 @@ class EBuiltin(EPyType):
     def __repr__(self):
         if self.name in self.BUILTIN_TYPES:
             return "<eclass '{}'>".format(self.name)
+        if self.name in self.BUILTIN_FNS:
+            return f'<ebuilt-in function {self.name}>'
         return 'EBuiltin(name={!r}, bound_self={!r}, ...)'.format(
             self.name, self.bound_self)
 
