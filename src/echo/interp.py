@@ -249,6 +249,12 @@ def do_call(f,
         return f.instantiate(args, kwargs, globals_=globals_, ictx=ictx)
     elif callable(f):
         return Result(f(*args, **kwargs))
+    elif isinstance(f, EPyObject) and f.hasattr('__call__'):
+        f_call = f.getattr('__call__', ictx)
+        if f_call.is_exception():
+            return f_call
+        f_call = f_call.get_value()
+        return ictx.call(f_call, args, kwargs, locals_dict, globals_=globals_)
     else:
         if isinstance(f, EPyObject):
             type_name = f.get_type().name

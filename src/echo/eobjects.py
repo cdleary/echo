@@ -93,6 +93,8 @@ class EFunction(EPyObject):
         if name == '__get__':
             return Result(EMethod(NativeFunction(
                 self._get, 'efunction.__get__'), bound_self=self))
+        if name == '__call__':
+            return Result(self)
         try:
             return Result(self.dict_[name])
         except KeyError:
@@ -1041,14 +1043,14 @@ class EBuiltin(EPyType):
     )
     BUILTIN_FNS = (
         'len', '__build_class__', 'getattr', 'iter', 'reversed', 'zip',
-        'isinstance', 'issubclass', 'hasattr', 'any', 'min',
+        'isinstance', 'issubclass', 'hasattr', 'any', 'min', 'callable',
         # object
         'object.__init__', 'object.__str__', 'object.__setattr__',
         'object.__format__', 'object.__reduce_ex__', 'object.__ne__',
         'object.__new__', 'object.__repr__',
         # type
         'type.__init__', 'type.__str__', 'type.__new__', 'type.__subclasses__',
-        'type.mro',
+        'type.mro', 'type.__call__',
         # dict
         'dict.__eq__', 'dict.__init__',
         'dict.__setitem__', 'dict.__getitem__', 'dict.__delitem__',
@@ -1229,7 +1231,8 @@ class EBuiltin(EPyType):
         if self.name == 'object' and name in (
                 '__subclasshook__', '__bases__', '__setattr__'):
             return AttrWhere.SELF_SPECIAL
-        if self.name == 'type' and name in ('__subclasses__', 'mro'):
+        if self.name == 'type' and name in ('__subclasses__', 'mro',
+                                            '__call__'):
             return AttrWhere.SELF_SPECIAL
         if name == '__eq__':
             return AttrWhere.CLS
@@ -1314,6 +1317,10 @@ class EBuiltin(EPyType):
             return Result(EMethod(NativeFunction(
                 self._get, 'ebuiltin.__get__'), bound_self=self))
 
+        if (self.name in self.BUILTIN_FNS
+                and name == '__call__'):
+            return Result(self)
+
         if self.name == 'object':
             if name == '__new__':
                 return Result(get_guest_builtin('object.__new__'))
@@ -1345,6 +1352,8 @@ class EBuiltin(EPyType):
                 return Result(get_guest_builtin('type.__name__'))
             if name == '__repr__':
                 return Result(get_guest_builtin('type.__repr__'))
+            if name == '__call__':
+                return Result(get_guest_builtin('type.__call__'))
             if name == '__str__':
                 return Result(get_guest_builtin('type.__str__'))
             if name == '__subclasses__':

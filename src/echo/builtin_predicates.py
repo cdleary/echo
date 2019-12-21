@@ -52,3 +52,16 @@ def _do_any(args: Tuple[Any, ...],
         return res
 
     return Result(found)
+
+
+@register_builtin('callable')
+@check_result
+def _do_callable(args: Tuple[Any, ...],
+                 kwargs: Dict[Text, Any],
+                 ictx: ICtx) -> Result[Any]:
+    assert len(args) == 1 and not kwargs, (args, kwargs)
+    o = args[0]
+    if not isinstance(o, EPyObject):
+        return Result(callable(o))
+    do_hasattr = get_guest_builtin('hasattr')
+    return do_hasattr.invoke((o, '__call__'), {}, {}, ictx)
