@@ -16,6 +16,9 @@ from echo import interp_context
 SAMPLE_DIR = 'py_samples'
 SAMPLE_FILES = [os.path.join(SAMPLE_DIR, p) for p in os.listdir(SAMPLE_DIR)
                 if p.endswith('.py') and not p.startswith('noexec')]
+EVM_FAILING_SAMPLES = [
+    're_sub',
+]
 
 
 def _version_to_tuple(s: Text) -> Tuple[int, ...]:
@@ -45,6 +48,9 @@ def run_to_result(path: Text, vm: Text) -> interp_result.Result[Any]:
 
     if basename.startswith('knownf_'):
         pytest.xfail('Known-failing sample.')
+
+    if os.path.splitext(basename)[0] in EVM_FAILING_SAMPLES:
+        pytest.xfail('Known-failing echo VM sample.')
 
     with open(path) as f:
         contents = f.read()

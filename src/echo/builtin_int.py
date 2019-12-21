@@ -89,6 +89,17 @@ def _do_int_sub(
     return Result(_resolve(args[0]) - args[1])
 
 
+@register_builtin('int.__eq__')
+@check_result
+def _do_int_eq(
+        args: Tuple[Any, ...],
+        kwargs: Dict[Text, Any],
+        ictx: ICtx) -> Result[Any]:
+    assert len(args) == 2, args
+    assert not kwargs
+    return Result(_resolve(args[0]) == _resolve(args[1]))
+
+
 @register_builtin('int.__lt__')
 @check_result
 def _do_int_lt(

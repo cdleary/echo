@@ -824,6 +824,11 @@ def _do_isinstance(
         if args[0].get_type() == args[1]:
             return Result(True)
 
+    if (not isinstance(args[0], EPyObject) and
+            not isinstance(args[1], EPyObject) and
+            not isinstance(args[1], tuple)):
+        return Result(isinstance(args[0], args[1]))
+
     raise NotImplementedError(args)
 
 
@@ -1060,6 +1065,7 @@ class EBuiltin(EPyType):
         # int
         'int.__new__', 'int.__add__', 'int.__init__', 'int.__sub__',
         'int.__lt__', 'int.__repr__', 'int.__str__', 'int.__int__',
+        'int.__eq__',
     )
 
     _registry: Dict[Text, Tuple[Callable, Optional[type]]] = {}
@@ -1216,7 +1222,7 @@ class EBuiltin(EPyType):
             return AttrWhere.SELF_SPECIAL
         if self.name == 'int' and name in (
                 '__add__', '__init__', '__repr__', '__sub__', '__lt__',
-                '__int__',):
+                '__int__', '__eq__',):
             return AttrWhere.SELF_SPECIAL
         if (self.name in self.BUILTIN_TYPES
                 and name in ('__mro__', '__dict__',)):
@@ -1272,6 +1278,8 @@ class EBuiltin(EPyType):
                 return Result(get_guest_builtin('int.__lt__'))
             if name == '__int__':
                 return Result(get_guest_builtin('int.__int__'))
+            if name == '__eq__':
+                return Result(get_guest_builtin('int.__eq__'))
             if name == '__dict__':
                 return Result({
                     '__new__': get_guest_builtin('int.__new__'),

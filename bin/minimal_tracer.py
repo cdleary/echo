@@ -70,10 +70,10 @@ def main():
         contents = f.read()
     globals_ = {'__name__': '__main__'}
     #del sys.modules['enum']
-    del sys.modules['re']
-    del sys.modules['sre_compile']
-    del sys.modules['sre_parse']
-    del sys.modules['sre_constants']
+    #del sys.modules['re']
+    #del sys.modules['sre_compile']
+    #del sys.modules['sre_parse']
+    #del sys.modules['sre_constants']
     #del sys.modules['types']
     #sys.modules.pop('collections')
     f = sys._getframe(0)
