@@ -692,6 +692,10 @@ def _is_int_builtin(x) -> bool:
     return isinstance(x, EBuiltin) and x.name == 'int'
 
 
+def _is_bool_builtin(x) -> bool:
+    return isinstance(x, EBuiltin) and x.name == 'bool'
+
+
 def _is_list_builtin(x) -> bool:
     return isinstance(x, EBuiltin) and x.name == 'list'
 
@@ -808,6 +812,9 @@ def _do_isinstance(
     if _is_int_builtin(args[1]):
         return Result(isinstance(args[0], int))
 
+    if _is_bool_builtin(args[1]):
+        return Result(isinstance(args[0], bool))
+
     if _is_object_builtin(args[1]):
         return Result(True)  # Everything is an object.
 
@@ -828,6 +835,17 @@ def _do_isinstance(
             not isinstance(args[1], EPyObject) and
             not isinstance(args[1], tuple)):
         return Result(isinstance(args[0], args[1]))
+
+    if isinstance(args[1], tuple):
+        for item in args[1]:
+            res = _do_isinstance((args[0], item), ictx)
+            if res.is_exception():
+                return res
+            ii = res.get_value()
+            assert isinstance(ii, bool), ii
+            if ii:
+                return Result(True)
+        return Result(False)
 
     raise NotImplementedError(args)
 
@@ -1065,7 +1083,8 @@ class EBuiltin(EPyType):
         # int
         'int.__new__', 'int.__add__', 'int.__init__', 'int.__sub__',
         'int.__lt__', 'int.__repr__', 'int.__str__', 'int.__int__',
-        'int.__eq__',
+        'int.__eq__', 'int.__and__', 'int.__rand__', 'int.__mul__',
+        'int.__rmul__', 'int.__bool__',
     )
 
     _registry: Dict[Text, Tuple[Callable, Optional[type]]] = {}
@@ -1222,7 +1241,8 @@ class EBuiltin(EPyType):
             return AttrWhere.SELF_SPECIAL
         if self.name == 'int' and name in (
                 '__add__', '__init__', '__repr__', '__sub__', '__lt__',
-                '__int__', '__eq__',):
+                '__int__', '__eq__', '__and__', '__rand__', '__mul__',
+                '__rmul__', '__bool__',):
             return AttrWhere.SELF_SPECIAL
         if (self.name in self.BUILTIN_TYPES
                 and name in ('__mro__', '__dict__',)):
@@ -1278,6 +1298,16 @@ class EBuiltin(EPyType):
                 return Result(get_guest_builtin('int.__lt__'))
             if name == '__int__':
                 return Result(get_guest_builtin('int.__int__'))
+            if name == '__and__':
+                return Result(get_guest_builtin('int.__and__'))
+            if name == '__bool__':
+                return Result(get_guest_builtin('int.__bool__'))
+            if name == '__mul__':
+                return Result(get_guest_builtin('int.__mul__'))
+            if name == '__rmul__':
+                return Result(get_guest_builtin('int.__rmul__'))
+            if name == '__rand__':
+                return Result(get_guest_builtin('int.__rand__'))
             if name == '__eq__':
                 return Result(get_guest_builtin('int.__eq__'))
             if name == '__dict__':

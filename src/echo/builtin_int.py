@@ -74,7 +74,31 @@ def _do_int_add(
     assert len(args) == 2, args
     assert not kwargs
     assert isinstance(args[1], int)  # TODO
-    return Result(_resolve(args[0]) + args[1])
+    return Result(_resolve(args[0]) + _resolve(args[1]))
+
+
+@register_builtin('int.__bool__')
+@check_result
+def _do_int_add(
+        args: Tuple[Any, ...],
+        kwargs: Dict[Text, Any],
+        ictx: ICtx) -> Result[Any]:
+    assert len(args) == 1, args
+    assert not kwargs
+    return Result(bool(_resolve(args[0])))
+
+
+@register_builtin('int.__rmul__')
+@register_builtin('int.__mul__')
+@check_result
+def _do_int_mul(
+        args: Tuple[Any, ...],
+        kwargs: Dict[Text, Any],
+        ictx: ICtx) -> Result[Any]:
+    assert len(args) == 2, args
+    assert not kwargs
+    assert isinstance(args[1], int)  # TODO
+    return Result(_resolve(args[0]) * _resolve(args[1]))
 
 
 @register_builtin('int.__sub__')
@@ -87,6 +111,19 @@ def _do_int_sub(
     assert not kwargs
     assert isinstance(args[1], int)  # TODO
     return Result(_resolve(args[0]) - args[1])
+
+
+@register_builtin('int.__rand__')
+@register_builtin('int.__and__')
+@check_result
+def _do_int_and(
+        args: Tuple[Any, ...],
+        kwargs: Dict[Text, Any],
+        ictx: ICtx) -> Result[Any]:
+    assert len(args) == 2, args
+    assert not kwargs
+    assert isinstance(args[1], int)  # TODO
+    return Result(_resolve(args[0]) & args[1])
 
 
 @register_builtin('int.__eq__')

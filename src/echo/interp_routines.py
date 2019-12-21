@@ -27,6 +27,14 @@ OPNAME_TO_SPECIAL = {
     'BINARY_SUBTRACT': '__sub__',
     'BINARY_ADD': '__add__',
     'BINARY_SUBSCR': '__getitem__',
+    'BINARY_AND': '__and__',
+    'BINARY_MULTIPLY': '__mul__',
+}
+OPNAME_TO_SPECIAL_RHS = {
+    'BINARY_ADD': '__radd__',
+    'BINARY_SUBTRACT': '__rsub__',
+    'BINARY_MULTIPLY': '__rmul__',
+    'BINARY_AND': '__rand__',
 }
 COMPARE_TO_SPECIAL = {
     '==': '__eq__',
@@ -38,6 +46,7 @@ COMPARE_TO_SPECIAL = {
 GUEST_BUILTIN_NAMES = (
     'Exception',
     'any',
+    'bool',
     'callable',
     'classmethod',
     'dict',
@@ -158,6 +167,12 @@ def run_binop(opname: Text, lhs: Any, rhs: Any, ictx: ICtx) -> Result[Any]:
         if special_f.is_exception():
             raise NotImplementedError(special_f)
         return special_f.get_value().invoke((rhs,), {}, {}, ictx)
+
+    if opname in OPNAME_TO_SPECIAL_RHS and isinstance(rhs, EPyObject):
+        special_f = rhs.getattr(OPNAME_TO_SPECIAL_RHS[opname], ictx)
+        if special_f.is_exception():
+            raise NotImplementedError(special_f)
+        return special_f.get_value().invoke((lhs,), {}, {}, ictx)
 
     raise NotImplementedError(opname, lhs, rhs)
 
