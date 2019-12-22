@@ -23,6 +23,7 @@ EVM_FAILING_SAMPLES = [
     'simple_class_repr',
     'simple_repr_udt',
     'type_subclass_of_abc',
+    'import_textwrap',
 ]
 
 

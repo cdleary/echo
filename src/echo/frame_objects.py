@@ -824,6 +824,8 @@ class StatefulFrame:
         if instruction.starts_line:
             print(f'{self.code.co_filename}:{instruction.starts_line}',
                   file=sys.stderr)
+        if os.getenv('ECHO_DUMP_INSTS') == 'lines':
+            return
         print('{:5d} :: {:3d} {}'.format(
             opcodeno,
             instruction.offset,
