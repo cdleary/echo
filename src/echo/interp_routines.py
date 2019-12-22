@@ -212,24 +212,17 @@ def compare(opname: Text, lhs, rhs, ictx: ICtx) -> Result[bool]:
         return Result(False)
     if {type(lhs), type(rhs)} == {int, tuple} and opname == '==':
         return Result(False)
-    if (isinstance(lhs, (list, tuple)) and isinstance(rhs, (list, tuple))
-            and opname == '=='):
-        if len(lhs) != len(rhs):
-            return Result(False)
-        for e, f in zip(lhs, rhs):
-            e_result = compare(opname, e, f, ictx)
-            if e_result.is_exception():
-                return e_result
-            if not e_result.get_value():
-                return Result(False)
-        return Result(True)
 
     if isinstance(lhs, dict) and isinstance(rhs, dict) and opname == '==':
         f = get_guest_builtin('dict.__eq__')
         return f.invoke((lhs, rhs), {}, {}, ictx)
 
+    if isinstance(lhs, list) and isinstance(rhs, list) and opname == '==':
+        f = get_guest_builtin('list.__eq__')
+        return f.invoke((lhs, rhs), {}, {}, ictx)
+
     if opname in ('in', 'not in') and type(rhs) in (
-            tuple, list, dict, set, frozenset, type(os.environ),
+            tuple, dict, set, frozenset, type(os.environ),
             weakref.WeakSet):
         for e in rhs:
             e_result = compare('==', lhs, e, ictx)

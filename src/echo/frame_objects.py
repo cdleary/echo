@@ -115,6 +115,7 @@ class StatefulFrame:
         self.locals_ = locals_
         self.locals_dict = locals_dict
         self.globals_ = globals_
+        self.current_lineno = None  # type: Optional[int]
         self.exception_data = None  # type: Optional[ExceptionData]
         self.handling_exception_data = None  # type: Optional[ExceptionData]
         self.cellvars = cellvars
@@ -476,7 +477,8 @@ class StatefulFrame:
         kwargs = dict(zip(kwarg_stack[::2], kwarg_stack[1::2]))
         args = self._pop_n(argc, tos_is_0=False)
         f = self._pop()
-        log('fo:cf', f'f: {f} args: {args}')
+        log('bc:call', f'{self.code.co_filename}:{self.current_lineno} f: {f} '
+                       f'args: {args}')
         result = self.do_call_callback(
             f, args, kwargs, locals_dict=self.locals_dict,
             globals_=self.globals_, get_exception_data=self.get_exception_data)
@@ -858,6 +860,7 @@ class StatefulFrame:
         assert instruction is not None
 
         if instruction.starts_line:
+            self.current_lineno = instruction.starts_line
             log('bc:line',
                 f'{self.code.co_filename}:{instruction.starts_line}')
 

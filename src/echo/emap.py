@@ -24,11 +24,25 @@ class EMap(EPyObject):
     def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
         if name == '__get__':
             return Result(EMethod(NativeFunction(
-                self._get, 'eproperty.__get__'), bound_self=self))
+                self._get, 'emap.__get__'), bound_self=self))
+        if name == '__get__':
+            return Result(EMethod(NativeFunction(
+                self._iter, 'emap.__iter__'), bound_self=self))
         return Result(ExceptionData(None, name, AttributeError(name)))
 
     def setattr(self, name: Text, value: Any) -> Result[None]:
         raise NotImplementedError
+
+    def iter(self, ictx: ICtx) -> Result[Any]:
+        return Result(self)
+
+    def next(self, ictx: ICtx) -> Result[Any]:
+        do_next = get_guest_builtin('next')
+        res = do_next.invoke((self.it,), {}, {}, ictx)
+        if res.is_exception():
+            return res
+        v = res.get_value()
+        return self.f.invoke((v,), {}, {}, ictx)
 
 
 @check_result
@@ -40,7 +54,11 @@ def _do_map(
         raise NotImplementedError(kwargs)
     if len(args) != 2:
         raise NotImplementedError(args)
-    e = EMap(args[0], args[1])
+    do_iter = get_guest_builtin('iter')
+    it = do_iter.invoke((args[1],), {}, {}, ictx)
+    if it.is_exception():
+        return it
+    e = EMap(args[0], it.get_value())
     return Result(e)
 
 

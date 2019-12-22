@@ -455,7 +455,8 @@ def _get_bases(c: EClassOrBuiltin) -> Tuple[EPyObject, ...]:
     assert isinstance(c, (EClass, EBuiltin)), c
     if isinstance(c, EClass):
         return c.bases
-    if _is_type_builtin(c) or _is_dict_builtin(c) or _is_int_builtin(c):
+    if (_is_type_builtin(c) or _is_dict_builtin(c) or _is_int_builtin(c) or
+            is_list_builtin(c)):
         return (get_guest_builtin('object'),)
     if _is_object_builtin(c):
         return ()
@@ -696,7 +697,7 @@ def _is_bool_builtin(x) -> bool:
     return isinstance(x, EBuiltin) and x.name == 'bool'
 
 
-def _is_list_builtin(x) -> bool:
+def is_list_builtin(x) -> bool:
     return isinstance(x, EBuiltin) and x.name == 'list'
 
 
@@ -814,7 +815,7 @@ def _do_isinstance(
     if _is_dict_builtin(args[1]):
         return Result(isinstance(args[0], dict))
 
-    if _is_list_builtin(args[1]):
+    if is_list_builtin(args[1]):
         return Result(isinstance(args[0], list))
 
     if _is_int_builtin(args[1]):
@@ -1095,6 +1096,9 @@ class EBuiltin(EPyType):
         'int.__rmul__', 'int.__bool__',
         # int cmp
         'int.__eq__', 'int.__lt__', 'int.__ge__', 'int.__le__', 'int.__gt__',
+        # list
+        'list.__new__', 'list.__init__', 'list.__eq__', 'list.append',
+        'list.extend', 'list.clear', 'list.__contains__', 'list.__iter__',
     )
 
     _registry: Dict[Text, Tuple[Callable, Optional[type]]] = {}
@@ -1181,15 +1185,6 @@ class EBuiltin(EPyType):
             return Result(self.bound_self.format(*args))
         if self.name == 'str.join':
             return Result(self.bound_self.join(*args))
-        if self.name == 'list.append':
-            return Result(self.bound_self.append(*args))
-        if self.name == 'list.insert':
-            return Result(self.bound_self.insert(*args))
-        if self.name == 'list.remove':
-            try:
-                return Result(self.bound_self.remove(*args))
-            except ValueError as e:
-                return Result(ExceptionData(None, None, e))
         if self.name == 'zip':
             return Result(zip(*args))
         if self.name == 'reversed':
@@ -1248,6 +1243,10 @@ class EBuiltin(EPyType):
         if self.name == 'dict' and name in (
                 'update', 'setdefault', 'pop', 'get', '__eq__', '__getitem__',
                 '__setitem__', '__delitem__', '__contains__'):
+            return AttrWhere.SELF_SPECIAL
+        if self.name == 'list' and name in (
+                'append', 'extend', 'clear', '__eq__', '__getitem__',
+                '__setitem__', '__delitem__', '__contains__', '__iter__'):
             return AttrWhere.SELF_SPECIAL
         if self.name == 'int' and name in (
                 '__add__', '__init__', '__repr__', '__sub__', '__lt__',
@@ -1337,6 +1336,24 @@ class EBuiltin(EPyType):
                 return Result(get_guest_builtin('Exception.__new__'))
             if name == '__init__':
                 return Result(get_guest_builtin('Exception.__init__'))
+
+        if self.name == 'list':
+            if name == '__new__':
+                return Result(get_guest_builtin('list.__new__'))
+            if name == '__init__':
+                return Result(get_guest_builtin('list.__init__'))
+            if name == '__eq__':
+                return Result(get_guest_builtin('list.__eq__'))
+            if name == '__contains__':
+                return Result(get_guest_builtin('list.__contains__'))
+            if name == '__iter__':
+                return Result(get_guest_builtin('list.__iter__'))
+            if name == 'append':
+                return Result(get_guest_builtin('list.append'))
+            if name == 'clear':
+                return Result(get_guest_builtin('list.clear'))
+            if name == 'extend':
+                return Result(get_guest_builtin('list.extend'))
 
         if self.name == 'dict':
             if name == '__new__':
@@ -1682,4 +1699,10 @@ def do_next(args: Tuple[Any, ...], ictx: ICtx) -> Result[Any]:
             return Result(next(g))
         except StopIteration as e:
             return Result(ExceptionData(None, None, e))
+    if isinstance(g, EPyObject) and g.hasattr('__next__'):
+        f = g.getattr('__next__', ictx)
+        if f.is_exception():
+            return f
+        f = f.get_value()
+        return f.invoke((), {}, {}, ictx)
     return g.next(ictx)

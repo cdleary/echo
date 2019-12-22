@@ -10,6 +10,7 @@ from echo.eobjects import (
     do_iter, do_next,
 )
 from echo.interp_context import ICtx
+from echo import iteration_helpers
 
 
 @register_builtin('tuple')
@@ -21,14 +22,14 @@ def _do_tuple(args: Tuple[Any, ...],
     if len(args) == 1 and isinstance(args[0], EPyObject):
         it = args[0]
         items = []
-        while True:
-            r = do_next((it,), ictx)
-            if (r.is_exception() and
-                    isinstance(r.get_exception().exception, StopIteration)):
-                break
-            if r.is_exception():
-                return r
-            items.append(r.get_value())
+
+        def cb(item) -> Result[bool]:
+            items.append(item)
+            return Result(True)
+
+        res = iteration_helpers.foreach(it, cb, ictx)
+        if res.is_exception():
+            return res
 
         return Result(tuple(items))
 

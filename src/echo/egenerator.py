@@ -54,7 +54,7 @@ class EGenerator(EPyObject):
         return Result(self)
 
     def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
-        if name == '__iter__':
+        if name in ('__iter__', '__next__'):
             return AttrWhere.CLS
         raise NotImplementedError
 
@@ -62,6 +62,9 @@ class EGenerator(EPyObject):
         if name == '__iter__':
             return Result(EMethod(NativeFunction(
                 self._iter, 'egenerator.__iter__'), bound_self=self))
+        if name == '__next__':
+            return Result(EMethod(NativeFunction(
+                self._next, 'egenerator.__next__'), bound_self=self))
         raise NotImplementedError
 
     def setattr(self, name: Text, value: Any) -> Any:
@@ -79,3 +82,8 @@ class EGenerator(EPyObject):
 
         assert v.wrapped is None, v
         return Result(ExceptionData(None, None, StopIteration()))
+
+    def _next(self, args, kwargs, globals_, ictx):
+        assert len(args) == 1 and not kwargs, (args, kwargs)
+        assert args[0] is self
+        return self.next(ictx)
