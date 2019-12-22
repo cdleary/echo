@@ -71,6 +71,7 @@ GUEST_BUILTIN_NAMES = (
     'repr',
     'reversed',
     'staticmethod',
+    'str',
     'super',
     'tuple',
     'type',

@@ -7,10 +7,12 @@ from echo.eobjects import (
     get_guest_builtin,
 )
 from echo.interp_context import ICtx
+from echo.elog import log
 
 
 class EMap(EPyObject):
     def __init__(self, f: EFunction, it):
+        log('emap:new', f'f: {f} it: {it}')
         self.f = f
         self.it = it
 

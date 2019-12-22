@@ -55,6 +55,7 @@ def resolve_args(attrs: code_attributes.CodeAttributes,
     log('ar:attrs', f'starargs:       {attrs.starargs}')
     log('ar:attrs', f'starkwargs:     {attrs.starkwargs}')
     log('ar:attrs', f'varnames:       {attrs.varnames}')
+    log('ar:attrs', f'kwarg_defaults: {kwarg_defaults}')
 
     # The functionality of this method is to populate these arg slots
     # appropriately.
@@ -88,7 +89,8 @@ def resolve_args(attrs: code_attributes.CodeAttributes,
 
     # Check for keyword-only arguments that were not provided.
     if attrs.kwonlyargcount:
-        start, limit = -attrs.kwonlyargcount, len(attrs.varnames)
+        start, limit = (attrs.total_argcount-attrs.kwonlyargcount,
+                        attrs.total_argcount)
         if attrs.starargs:
             start -= 1
             limit -= 1

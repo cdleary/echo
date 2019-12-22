@@ -942,20 +942,6 @@ def _do_repr(args: Tuple[Any, ...], ictx: ICtx) -> Result[Any]:
 
 
 @check_result
-def _do_str(args: Tuple[Any, ...], ictx: ICtx) -> Result[Any]:
-    assert len(args) == 1, args
-    o = args[0]
-    if not isinstance(o, EPyObject):
-        return Result(repr(o))
-    frepr = o.getattr('__str__')
-    if frepr.is_exception():
-        return frepr
-    frepr = frepr.get_value()
-    globals_ = frepr.getattr('__globals__')
-    return ictx.call(frepr, args=(), globals_=globals_)
-
-
-@check_result
 def _do_object(args: Tuple[Any, ...]) -> Result[Any]:
     assert len(args) == 0, args
     return Result(EInstance(cls=get_guest_builtin('object')))
@@ -1072,6 +1058,7 @@ class EBuiltin(EPyType):
     BUILTIN_TYPES = (
         'object', 'type', 'dict', 'tuple', 'list', 'int', 'classmethod',
         'staticmethod', 'property', 'Exception', 'super', 'enumerate',
+        'str',
     )
     BUILTIN_FNS = (
         'len', '__build_class__', 'getattr', 'iter', 'reversed', 'zip',
@@ -1083,6 +1070,8 @@ class EBuiltin(EPyType):
         # type
         'type.__init__', 'type.__str__', 'type.__new__', 'type.__subclasses__',
         'type.mro', 'type.__call__',
+        # str
+        'str.maketrans', 'str.join',
         # dict
         'dict.__eq__', 'dict.__init__',
         'dict.__setitem__', 'dict.__getitem__', 'dict.__delitem__',
@@ -1183,8 +1172,6 @@ class EBuiltin(EPyType):
             return Result(self.bound_self.items())
         if self.name == 'str.format':
             return Result(self.bound_self.format(*args))
-        if self.name == 'str.join':
-            return Result(self.bound_self.join(*args))
         if self.name == 'zip':
             return Result(zip(*args))
         if self.name == 'reversed':
@@ -1223,8 +1210,6 @@ class EBuiltin(EPyType):
             return do_hasattr(args, ictx)
         if self.name == 'repr':
             return _do_repr(args, ictx)
-        if self.name == 'str':
-            return _do_str(args, ictx)
         if self.name == 'object':
             return _do_object(args)
         if self.name == 'dir':
@@ -1252,6 +1237,8 @@ class EBuiltin(EPyType):
                 '__add__', '__init__', '__repr__', '__sub__', '__lt__',
                 '__int__', '__eq__', '__and__', '__rand__', '__mul__',
                 '__rmul__', '__bool__', '__ge__', '__le__', '__gt__'):
+            return AttrWhere.SELF_SPECIAL
+        if self.name == 'str' and name in ('maketrans',):
             return AttrWhere.SELF_SPECIAL
         if (self.name in self.BUILTIN_TYPES
                 and name in ('__mro__', '__dict__',)):
@@ -1289,6 +1276,12 @@ class EBuiltin(EPyType):
     def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
         if name == '__self__' and self.bound_self is not None:
             return Result(self.bound_self)
+
+        if self.name == 'str':
+            if name == 'maketrans':
+                return Result(get_guest_builtin('str.maketrans'))
+            if name == 'join':
+                return Result(get_guest_builtin('str.join'))
 
         if self.name == 'int':
             if name == '__new__':
@@ -1578,8 +1571,10 @@ def do_getattr(args: Tuple[Any, ...],
     o, attr, *default = args
     if type(o) is tuple and attr == '__class__':
         return Result(get_guest_builtin('tuple'))
-    if type(o) is int and f'int.{attr}' in EBuiltin.BUILTIN_FNS:
-        return Result(get_guest_builtin_self(f'int.{attr}', o))
+    clsname = o.__class__.__name__
+    if (type(o) in (int, str, tuple)
+            and f'{clsname}.{attr}' in EBuiltin.BUILTIN_FNS):
+        return Result(get_guest_builtin_self(f'{clsname}.{attr}', o))
     if not isinstance(o, EPyObject):
         try:
             a = getattr(o, attr, *default)

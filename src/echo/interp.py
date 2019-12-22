@@ -51,6 +51,7 @@ import echo.builtin_dict
 import echo.builtin_exception
 import echo.builtin_int
 import echo.builtin_list
+import echo.builtin_str
 import echo.builtin_super
 import echo.builtin_tuple
 import echo.builtin_type
