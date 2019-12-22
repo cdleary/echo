@@ -26,12 +26,20 @@ def _do_bool_call(args: Tuple[Any, ...],
     if isinstance(o, EBuiltin):
         log('fo:truthy', f'builtin o: {o}')
         return Result(True)
-    if isinstance(o, EPyObject) and o.get_type().hasattr('__bool__'):
-        f = o.getattr('__bool__', ictx)
-        if f.is_exception():
-            return f
-        f = f.get_value()
-        return f.invoke((), {}, {}, ictx)
+    if isinstance(o, EPyObject):
+        if o.get_type().hasattr('__bool__'):
+            f = o.getattr('__bool__', ictx)
+            if f.is_exception():
+                return f
+            f = f.get_value()
+            return f.invoke((), {}, {}, ictx)
+
+        do_len = get_guest_builtin('len')
+        res = do_len.invoke((o,), {}, {}, ictx)
+        if res.is_exception():
+            return res
+        v = res.get_value()
+        return Result(bool(v))
 
     raise NotImplementedError(o)
 

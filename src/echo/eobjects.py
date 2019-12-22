@@ -731,7 +731,15 @@ def _do_len(
     if do_len.is_exception():
         return do_len
     do_len = do_len.get_value()
-    return do_len.invoke((), {}, {}, ictx)
+    res = do_len.invoke((), {}, {}, ictx)
+    if res.is_exception():
+        return res
+    v = res.get_value()
+    assert isinstance(v, int)  # For now.
+    if v < 0:
+        return Result(ExceptionData(
+            None, None, ValueError('__len__() should return >= 0')))
+    return Result(v)
 
 
 @check_result
