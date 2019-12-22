@@ -17,7 +17,12 @@ SAMPLE_DIR = 'py_samples'
 SAMPLE_FILES = [os.path.join(SAMPLE_DIR, p) for p in os.listdir(SAMPLE_DIR)
                 if p.endswith('.py') and not p.startswith('noexec')]
 EVM_FAILING_SAMPLES = [
-    # None.
+    'bad_class_kwarg',
+    'import_numpy',
+    'prepare_hook_user_type',
+    'simple_class_repr',
+    'simple_repr_udt',
+    'type_subclass_of_abc',
 ]
 
 
