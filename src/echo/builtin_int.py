@@ -1,4 +1,5 @@
 from typing import Text, Tuple, Any, Dict, Optional
+import operator
 
 from echo.elog import log
 from echo.epy_object import EPyObject
@@ -126,30 +127,6 @@ def _do_int_and(
     return Result(_resolve(args[0]) & args[1])
 
 
-@register_builtin('int.__eq__')
-@check_result
-def _do_int_eq(
-        args: Tuple[Any, ...],
-        kwargs: Dict[Text, Any],
-        ictx: ICtx) -> Result[Any]:
-    assert len(args) == 2, args
-    assert not kwargs
-    return Result(_resolve(args[0]) == _resolve(args[1]))
-
-
-@register_builtin('int.__lt__')
-@check_result
-def _do_int_lt(
-        args: Tuple[Any, ...],
-        kwargs: Dict[Text, Any],
-        ictx: ICtx) -> Result[Any]:
-    assert len(args) == 2, args
-    assert not kwargs
-    if not isinstance(args[1], int):
-        return Result(NotImplemented)
-    return Result(_resolve(args[0]) < args[1])
-
-
 @register_builtin('int.__repr__')
 @check_result
 def _do_int_repr(
@@ -181,3 +158,36 @@ def _do_int_str(
     assert len(args) == 1, args
     assert not kwargs
     return Result(int(_resolve(args[0])))
+
+
+_COMPARE_OP_DATA = [
+    ('__eq__', operator.eq),
+    ('__lt__', operator.lt),
+    ('__ge__', operator.ge),
+    ('__le__', operator.le),
+    ('__gt__', operator.gt),
+]
+
+
+def _make_fcmp(name, op):
+    def do_compare(
+            args: Tuple[Any, ...],
+            kwargs: Dict[Text, Any],
+            ictx: ICtx) -> Result[Any]:
+        assert len(args) == 2, args
+        assert not kwargs
+        try:
+            rhs = _resolve(args[1])
+        except KeyError:
+            return Result(NotImplemented)
+        return Result(op(_resolve(args[0]), rhs))
+    return do_compare
+
+
+def _register_compare_ops():
+    for name, op in _COMPARE_OP_DATA:
+        f = _make_fcmp(name, op)
+        register_builtin(f'int.{name}')(f)
+
+
+_register_compare_ops()

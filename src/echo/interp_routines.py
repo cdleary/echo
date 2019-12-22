@@ -40,6 +40,8 @@ COMPARE_TO_SPECIAL = {
     '==': '__eq__',
     '<': '__lt__',
     '>': '__gt__',
+    '>=': '__ge__',
+    '<=': '__le__',
     'in': '__contains__',
     'not in': '__contains__',
 }
@@ -222,7 +224,7 @@ def compare(opname: Text, lhs, rhs, ictx: ICtx) -> Result[bool]:
                 return Result(False)
         return Result(True)
 
-    if isinstance(lhs, dict) and isinstance(rhs, dict):
+    if isinstance(lhs, dict) and isinstance(rhs, dict) and opname == '==':
         f = get_guest_builtin('dict.__eq__')
         return f.invoke((lhs, rhs), {}, {}, ictx)
 
@@ -305,6 +307,10 @@ def compare(opname: Text, lhs, rhs, ictx: ICtx) -> Result[bool]:
     if (opname == '==' and isinstance(lhs, EFunction)
             and isinstance(rhs, EFunction)):
         return Result(lhs is rhs)
+
+    if isinstance(lhs, int) and opname in COMPARE_TO_SPECIAL:
+        fcmp = get_guest_builtin('int.{}'.format(COMPARE_TO_SPECIAL[opname]))
+        return fcmp.invoke((lhs, rhs), {}, {}, ictx)
 
     raise NotImplementedError(opname, lhs, rhs)
 

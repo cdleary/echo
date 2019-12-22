@@ -1090,9 +1090,11 @@ class EBuiltin(EPyType):
         'dict.pop', 'dict.get',
         # int
         'int.__new__', 'int.__add__', 'int.__init__', 'int.__sub__',
-        'int.__lt__', 'int.__repr__', 'int.__str__', 'int.__int__',
-        'int.__eq__', 'int.__and__', 'int.__rand__', 'int.__mul__',
+        'int.__repr__', 'int.__str__', 'int.__int__',
+        'int.__and__', 'int.__rand__', 'int.__mul__',
         'int.__rmul__', 'int.__bool__',
+        # int cmp
+        'int.__eq__', 'int.__lt__', 'int.__ge__', 'int.__le__', 'int.__gt__',
     )
 
     _registry: Dict[Text, Tuple[Callable, Optional[type]]] = {}
@@ -1250,7 +1252,7 @@ class EBuiltin(EPyType):
         if self.name == 'int' and name in (
                 '__add__', '__init__', '__repr__', '__sub__', '__lt__',
                 '__int__', '__eq__', '__and__', '__rand__', '__mul__',
-                '__rmul__', '__bool__',):
+                '__rmul__', '__bool__', '__ge__', '__le__', '__gt__'):
             return AttrWhere.SELF_SPECIAL
         if (self.name in self.BUILTIN_TYPES
                 and name in ('__mro__', '__dict__',)):
@@ -1318,6 +1320,12 @@ class EBuiltin(EPyType):
                 return Result(get_guest_builtin('int.__rand__'))
             if name == '__eq__':
                 return Result(get_guest_builtin('int.__eq__'))
+            if name == '__ge__':
+                return Result(get_guest_builtin('int.__ge__'))
+            if name == '__le__':
+                return Result(get_guest_builtin('int.__le__'))
+            if name == '__gt__':
+                return Result(get_guest_builtin('int.__gt__'))
             if name == '__dict__':
                 return Result({
                     '__new__': get_guest_builtin('int.__new__'),

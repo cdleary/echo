@@ -12,4 +12,10 @@ assert i * 2 == 84, (i*2)
 assert 2 * i == 84
 assert bool(i) is True, bool(i)
 
+assert (i >= 41) is True
+assert (i >  41) is True
+assert (i <= 43) is True
+assert (i <  43) is True
+assert (i == 42) is True
+
 assert i < 43
