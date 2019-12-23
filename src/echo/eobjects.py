@@ -942,86 +942,6 @@ def _do_repr(args: Tuple[Any, ...], ictx: ICtx) -> Result[Any]:
 
 
 @check_result
-def _do_object(args: Tuple[Any, ...]) -> Result[Any]:
-    assert len(args) == 0, args
-    return Result(EInstance(cls=get_guest_builtin('object')))
-
-
-@check_result
-def _do_object_subclasshook(
-        args: Tuple[Any, ...],
-        kwargs: Dict[Text, Any],
-        ictx: ICtx) -> Result[Any]:
-    return Result(NotImplemented)
-
-
-@check_result
-def _do_object_eq(
-        args: Tuple[Any, ...],
-        kwargs: Dict[Text, Any],
-        ictx: ICtx) -> Result[Any]:
-    assert not kwargs
-    assert len(args) == 2, args
-    lhs, rhs = args
-    return Result(NotImplemented)
-
-
-@check_result
-def _do_object_new(
-        args: Tuple[Any, ...],
-        kwargs: Dict[Text, Any],
-        ictx: ICtx) -> Result[Any]:
-    assert len(args) >= 1, args
-    assert isinstance(args[0], (EClass, EBuiltin)), args
-    return Result(EInstance(args[0]))
-
-
-@check_result
-def _do_object_init(
-        args: Tuple[Any, ...],
-        kwargs: Dict[Text, Any],
-        ictx: ICtx) -> Result[Any]:
-    assert len(args) >= 1, args
-    assert isinstance(args[0], (EInstance)), args
-    return Result(None)
-
-
-@check_result
-def _do_object_repr(
-        args: Tuple[Any, ...],
-        kwargs: Dict[Text, Any],
-        ictx: ICtx) -> Result[Any]:
-    assert len(args) == 1 and not kwargs, (args, kwargs)
-    raise NotImplementedError(args[0])
-
-
-@check_result
-def _do_object_ne(
-        args: Tuple[Any, ...],
-        kwargs: Dict[Text, Any],
-        ictx: ICtx) -> Result[Any]:
-    assert not kwargs
-    lhs, rhs = args
-    return Result(NotImplemented)
-
-
-@check_result
-def _do_object_setattr(
-        args: Tuple[Any, ...],
-        kwargs: Dict[Text, Any],
-        ictx: ICtx) -> Result[Any]:
-    assert len(args) == 3, args
-    assert not kwargs
-    o, name, value = args
-    log('eo:object_setattr', f'o {o} name {name} value {value}')
-    if isinstance(o, (EInstance, EClass)):
-        o.dict_[name] = value
-    else:
-        raise NotImplementedError
-    return Result(None)
-
-
-@check_result
 def _do_dir(args: Tuple[Any, ...],
             kwargs: Dict[Text, Any],
             ictx: ICtx) -> Result[Any]:
@@ -1186,22 +1106,6 @@ class EBuiltin(EPyType):
             return _do_isinstance(args, ictx)
         if self.name == 'issubclass':
             return _do_issubclass(args, ictx)
-        if self.name == 'object.__subclasshook__':
-            return _do_object_subclasshook(args, kwargs, ictx)
-        if self.name == 'object.__new__':
-            return _do_object_new(args, kwargs, ictx)
-        if self.name == 'object.__init__':
-            return _do_object_init(args, kwargs, ictx)
-        if self.name == 'object.__repr__':
-            if self.bound_self is not None:
-                args = (self.bound_self,) + args
-            return _do_object_repr(args, kwargs, ictx)
-        if self.name == 'object.__eq__':
-            return _do_object_eq(args, kwargs, ictx)
-        if self.name == 'object.__ne__':
-            return _do_object_ne(args, kwargs, ictx)
-        if self.name == 'object.__setattr__':
-            return _do_object_setattr(args, kwargs, ictx)
         if self.name == 'iter':
             return do_iter(args, ictx)
         if self.name == 'next':
@@ -1210,8 +1114,6 @@ class EBuiltin(EPyType):
             return do_hasattr(args, ictx)
         if self.name == 'repr':
             return _do_repr(args, ictx)
-        if self.name == 'object':
-            return _do_object(args)
         if self.name == 'dir':
             return _do_dir(args, kwargs, ictx)
         if self.name == 'getattr':
@@ -1251,7 +1153,7 @@ class EBuiltin(EPyType):
                              '__name__')):
             return AttrWhere.SELF_SPECIAL
         if self.name == 'object' and name in (
-                '__subclasshook__', '__bases__', '__setattr__'):
+                '__subclasshook__', '__bases__', '__setattr__', '__repr__',):
             return AttrWhere.SELF_SPECIAL
         if self.name == 'type' and name in ('__subclasses__', 'mro',
                                             '__call__'):

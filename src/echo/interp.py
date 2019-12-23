@@ -57,6 +57,7 @@ import echo.builtin_tuple
 import echo.builtin_type
 import echo.builtin_enumerate
 import echo.builtin_predicates
+import echo.builtin_object
 
 
 @check_result
