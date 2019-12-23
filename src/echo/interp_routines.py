@@ -322,19 +322,24 @@ def _name_is_from_metaclass(cls: EClass, name: Text) -> bool:
 
 @debugged('ir:mrs')
 def method_requires_self(obj: Any, name: Text, value: Any) -> bool:
+    if isinstance(value, EBuiltin) and value.bound_self is not None:
+        return False
     if isinstance(obj, EPyObject):
         type_ = obj.get_type()
         if not type_.has_standard_getattr():
             return False
         where = obj.hasattr_where(name)
         log('ir:mrs',
-            f'attr {name} on {obj} (type {type_}) is {where} (value {value})')
+            f'attr {name} on {obj!r} (type {type_}) is {where} '
+            f'(value {value})')
         assert where is not None
         return where == AttrWhere.CLS and not isinstance(value, EMethod)
 
-    return (
+    result = (
         hasattr(type(obj), name)
         and not isinstance(value, (types.BuiltinMethodType, types.MethodType)))
+    log('ir:mrs', f'attr {name} on {obj!r} type {type(obj)} => {result}')
+    return result
 
 
 def cprint(msg, color, file=sys.stderr, end='\n') -> None:

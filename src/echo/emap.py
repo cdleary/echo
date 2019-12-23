@@ -44,7 +44,7 @@ class EMap(EPyObject):
         if res.is_exception():
             return res
         v = res.get_value()
-        return self.f.invoke((v,), {}, {}, ictx)
+        return ictx.call(self.f, (v,), {}, {})
 
 
 @check_result

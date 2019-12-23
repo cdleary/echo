@@ -1045,7 +1045,7 @@ class EBuiltin(EPyType):
     def __repr__(self):
         if self.name in self.BUILTIN_TYPES:
             return "<eclass '{}'>".format(self.name)
-        if self.name in self.BUILTIN_FNS:
+        if self.name in self.BUILTIN_FNS and not self.bound_self:
             return f'<ebuilt-in function {self.name}>'
         return 'EBuiltin(name={!r}, bound_self={!r}, ...)'.format(
             self.name, self.bound_self)

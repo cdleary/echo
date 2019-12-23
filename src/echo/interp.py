@@ -203,9 +203,9 @@ def do_call(f,
             locals_dict: Dict[Text, Any],
             *,
             ictx: ICtx,
-            globals_: Dict[Text, Any],
             get_exception_data: Optional[
                 Callable[[], Optional[ExceptionData]]] = None,
+            globals_: Dict[Text, Any] = None,
             in_function: bool = True
             ) -> Result[Any]:
     log('interp:do_call', f'f: {f} args: {args} kwargs: {kwargs}')
@@ -236,11 +236,6 @@ def do_call(f,
     elif isinstance(f, (types.MethodType, types.FunctionType)):
         # Builtin object method.
         return Result(f(*args, **kwargs))
-    # TODO(cdleary, 2019-01-22): Consider using an import hook to avoid
-    # the C-extension version of functools from being imported so we
-    # don't need to consider it specially.
-    elif f is functools.partial:
-        return _do_call_functools_partial(args, kwargs)
     elif f is get_sunder_sre().compile:
         return _do_call_sre_compile(args, kwargs, ictx)
     elif isinstance(f, EPartial):
