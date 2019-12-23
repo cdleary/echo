@@ -54,6 +54,16 @@ def _do_type_str(
     raise NotImplementedError(args)
 
 
+@register_builtin('type.__repr__')
+@check_result
+def _do_type_repr(
+        args: Tuple[Any, ...],
+        kwargs: Dict[Text, Any],
+        ictx: ICtx) -> Result[Any]:
+    assert len(args) == 1 and not kwargs, (args, kwargs)
+    return Result(repr(args[0]))
+
+
 @register_builtin('type.mro')
 @check_result
 def _do_type_mro(

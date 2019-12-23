@@ -99,5 +99,3 @@ def _do_object_setattr(
     else:
         raise NotImplementedError
     return Result(None)
-
-

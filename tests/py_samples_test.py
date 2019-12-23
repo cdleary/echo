@@ -20,7 +20,6 @@ EVM_FAILING_SAMPLES = [
     'bad_class_kwarg',
     'import_numpy',
     'prepare_hook_user_type',
-    'simple_class_repr',
     'simple_repr_udt',
     'type_subclass_of_abc',
     'import_textwrap',

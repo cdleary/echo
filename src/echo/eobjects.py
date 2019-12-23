@@ -289,6 +289,8 @@ def _type_getattro(type_: 'EClass', name: Text, ictx: ICtx) -> Result[Any]:
         return Result(type_.metaclass or get_guest_builtin('type'))
     if name == '__bases__':
         return Result(type_.bases)
+    if name == '__repr__':
+        return invoke_desc(type_, get_guest_builtin('type.__repr__'), ictx)
 
     metatype = type_.get_type()
     meta_attr = _find_name_in_mro(metatype, name, ictx)
@@ -989,7 +991,7 @@ class EBuiltin(EPyType):
         'object.__new__', 'object.__repr__',
         # type
         'type.__init__', 'type.__str__', 'type.__new__', 'type.__subclasses__',
-        'type.mro', 'type.__call__',
+        'type.mro', 'type.__call__', 'type.__repr__',
         # str
         'str.maketrans', 'str.join',
         # dict
@@ -1156,7 +1158,7 @@ class EBuiltin(EPyType):
                 '__subclasshook__', '__bases__', '__setattr__', '__repr__',):
             return AttrWhere.SELF_SPECIAL
         if self.name == 'type' and name in ('__subclasses__', 'mro',
-                                            '__call__'):
+                                            '__call__', '__repr__',):
             return AttrWhere.SELF_SPECIAL
         if name == '__eq__':
             return AttrWhere.CLS
