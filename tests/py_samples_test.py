@@ -27,6 +27,7 @@ EVM_FAILING_SAMPLES = [
     'namedtuple_sample',
     'import_re',
     're_sub',
+    'import_warnings_module',
 ]
 
 
@@ -46,34 +47,13 @@ def test_is_prefix_of() -> None:
     assert _is_prefix_of((3, 7), (3, 7, 2))
 
 
-def run_to_result(path: Text, vm: Text) -> interp_result.Result[Any]:
-    basename = os.path.basename(path)
-    fullpath = os.path.realpath(path)
-    dirpath = os.path.dirname(fullpath)
-
-    if vm == 'cpy':
-        subp.check_call(['python', path])
-        return interp_result.Result(None)
-
-    if basename.startswith('knownf_'):
-        pytest.xfail('Known-failing sample.')
-
-    if os.path.splitext(basename)[0] in EVM_FAILING_SAMPLES:
-        pytest.xfail('Known-failing echo VM sample.')
-
+def _run_to_result(path: Text):
     with open(path) as f:
         contents = f.read()
 
-    leader = '# knownf: '
-    if contents.startswith(leader):
-        line0 = contents.splitlines()[0]
-        versions = [_version_to_tuple(x)
-                    for x in line0[len(leader):].split(', ')]
-        for version in versions:
-            if _is_prefix_of(version, sys.version_info):
-                pytest.xfail('Version marked as known-failing.')
-
     globals_ = dict(globals())
+    fullpath = os.path.realpath(path)
+    dirpath = os.path.dirname(fullpath)
     globals_['__file__'] = fullpath
     fully_qualified_name = '__main__'
     state = interp.InterpreterState(dirpath)
@@ -87,6 +67,32 @@ def run_to_result(path: Text, vm: Text) -> interp_result.Result[Any]:
         print(result.get_exception().exception)
         pprint.pprint(result.get_exception().traceback, width=120)
     return result
+
+
+def run_to_result(path: Text, vm: Text) -> interp_result.Result[Any]:
+    basename = os.path.basename(path)
+
+    if vm == 'cpy':
+        subp.check_call(['python', path])
+        return interp_result.Result(None)
+
+    xfail = os.path.splitext(basename)[0] in EVM_FAILING_SAMPLES
+
+    def note_failure():
+        if xfail:
+            pytest.xfail('Known-failing echo VM sample.')
+        else:
+            raise ValueError('Expected failure, but did not fail.')
+
+    try:
+        r = _run_to_result(path)
+    except Exception as e:
+        note_failure()
+        raise
+    else:
+        if r.is_exception():
+            note_failure()
+        return r
 
 
 PROD = itertools.product(('evm', 'cpy'), SAMPLE_FILES)
