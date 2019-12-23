@@ -50,7 +50,7 @@ def test_sample_import_manual_procedure(fs):
     search_paths = ['/root']
 
     interp_state = InterpreterState(script_directory='/')
-    ictx = ICtx(interp_state, interp.interp, interp.do_call)
+    ictx = ICtx(interp_state, interp.interp, interp.do_call, None)
 
     assert _find_absolute_import_path(
         'foo', search_paths).get_value() == '/root/foo/__init__.py'
@@ -76,7 +76,7 @@ def test_sample_import_name(fs):
     fs.create_file('/root/foo/bar/baz.py', contents='data=42')
 
     interp_state = InterpreterState(script_directory='/')
-    ictx = ICtx(interp_state, interp.interp, interp.do_call)
+    ictx = ICtx(interp_state, interp.interp, interp.do_call, None)
 
     result = _import_name(
         'foo.bar.baz', level=0, fromlist=('data',),
@@ -103,6 +103,6 @@ def func():
     fs.create_file('/some_mod.py', contents=some_mod_text)
 
     interp_state = InterpreterState(script_directory='/')
-    ictx = ICtx(interp_state, interp.interp, interp.do_call)
+    ictx = ICtx(interp_state, interp.interp, interp.do_call, None)
     assert not interp.import_path(
         'my_script.py', '__main__', '__main__', ictx).is_exception()

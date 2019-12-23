@@ -124,10 +124,6 @@ class StatefulFrame:
         self.ictx = ictx
         self.in_function = in_function
 
-        # TODO(cdleary, 2019-01-21): Investigate why this "builtins" ref is
-        # sometimes a dict and other times a module?
-        self.builtins = sys.modules['builtins']  # globals_['__builtins__']
-
         self.interp_callback = wrap_with_push(
             self, ictx.interp_state, ictx.interp_callback)
         self.do_call_callback = wrap_with_push(
@@ -199,12 +195,16 @@ class StatefulFrame:
     def _peek(self):
         return self.stack[-1]
 
-    def _get_global_or_builtin(self, name: Text) -> Any:
+    def _get_global_or_builtin(self, name: Text) -> Result[Any]:
         try:
-            return self.globals_[name]
+            return Result(self.globals_[name])
         except KeyError:
             pass
-        return interp_routines.builtins_get(self.builtins, name)
+        res = self.ictx.get_ebuiltins().getattr(name, self.ictx)
+        if not res.is_exception():
+            return res
+        return Result(ExceptionData(
+            None, None, NameError(f'name {name!r} is not defined')))
 
     def _run_FORMAT_VALUE(self, arg, argval) -> Result[str]:
         fmt_spec = ''
@@ -574,7 +574,7 @@ class StatefulFrame:
     def _run_LOAD_GLOBAL(self, arg, argval):
         namei = arg
         name = self.names[namei]
-        return Result(self._get_global_or_builtin(name))
+        return self._get_global_or_builtin(name)
 
     def _run_LOAD_NAME(self, arg, argval):
         if self.in_function:
@@ -586,7 +586,7 @@ class StatefulFrame:
             else:
                 return Result(self.locals_[arg])
         try:
-            return Result(self._get_global_or_builtin(argval))
+            return self._get_global_or_builtin(argval)
         except AttributeError:
             msg = 'name {!r} is not defined'.format(argval)
             return Result(ExceptionData(

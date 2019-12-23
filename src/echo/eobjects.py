@@ -984,7 +984,8 @@ class EBuiltin(EPyType):
         'str',
     )
     BUILTIN_FNS = (
-        'len', '__build_class__', 'getattr', 'iter', 'reversed', 'zip',
+        'len', '__build_class__', 'getattr', 'setattr', 'iter', 'reversed',
+        'zip',
         'isinstance', 'issubclass', 'hasattr', 'any', 'min', 'callable',
         # object
         'object.__init__', 'object.__str__', 'object.__setattr__',
@@ -1122,6 +1123,8 @@ class EBuiltin(EPyType):
         if self.name == 'dir':
             return _do_dir(args, kwargs, ictx)
         if self.name == 'getattr':
+            return do_getattr(args, kwargs, ictx)
+        if self.name == 'setattr':
             return do_getattr(args, kwargs, ictx)
         if self.name in self._registry:
             if self.bound_self is not None:
@@ -1515,7 +1518,7 @@ def do_setattr(args: Tuple[Any, ...],
         sys.path = ictx.interp_state.paths = value
         return Result(None)
     else:
-        raise NotImplementedError(obj, value)
+        raise NotImplementedError(obj, name, value)
 
 
 @check_result

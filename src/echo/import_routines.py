@@ -1,4 +1,3 @@
-import builtins
 import functools
 import logging
 import os
@@ -17,7 +16,7 @@ from termcolor import cprint
 
 DEBUG_PRINT_IMPORTS = bool(os.getenv('DEBUG_PRINT_IMPORTS', False))
 SPECIAL_MODULES = (
-    'os', 'sys', 'itertools', 'builtins', 'time',
+    'os', 'sys', 'itertools', 'time',
     '_weakref', '_weakrefset', '_thread', 'errno', '_sre',
 )
 
@@ -75,7 +74,7 @@ def _import_module_at_path(
     assert isinstance(module_code, CodeType), module_code
 
     globals_ = {
-        '__builtins__': builtins,
+        '__builtins__': ictx.get_ebuiltins(),
         '__name__': fully_qualified_name,
         '__file__': path,
     }

@@ -186,14 +186,6 @@ def code_to_str(c: types.CodeType) -> Text:
     return 'Code({})'.format(guts)
 
 
-def builtins_get(builtins: Union[types.ModuleType, Dict], name: Text) -> Any:
-    if name in GUEST_BUILTIN_NAMES:
-        return get_guest_builtin(name)
-    if isinstance(builtins, types.ModuleType):
-        return getattr(builtins, name)
-    return builtins[name]
-
-
 def exception_match(lhs, rhs, ictx: ICtx) -> Result[Any]:
     if lhs is rhs:
         r = Result(True)

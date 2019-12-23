@@ -11,6 +11,8 @@ import pytest
 from echo import interp
 from echo import interp_result
 from echo import interp_context
+from echo import ebuiltins
+from echo import emodule
 
 
 SAMPLE_DIR = 'py_samples'
@@ -52,15 +54,15 @@ def _run_to_result(path: Text):
     with open(path) as f:
         contents = f.read()
 
-    globals_ = dict(globals())
     fullpath = os.path.realpath(path)
     dirpath = os.path.dirname(fullpath)
-    globals_['__file__'] = fullpath
     fully_qualified_name = '__main__'
     state = interp.InterpreterState(dirpath)
     state.paths += sys.path[1:]
 
-    ictx = interp_context.ICtx(state, interp.interp, interp.do_call)
+    builtins = emodule.EModule(
+        'builtins', filename='<built-in>', globals_=ebuiltins.make_ebuiltins())
+    ictx = interp_context.ICtx(state, interp.interp, interp.do_call, builtins)
 
     result = interp.import_path(path, fully_qualified_name,
                                 fully_qualified_name, ictx)

@@ -1,7 +1,6 @@
 """(Metacircular) interpreter loop implementation."""
 
 import abc
-import builtins
 import collections
 import dis
 import functools
@@ -37,6 +36,7 @@ from echo.eobjects import (
 from echo import interp_routines
 from echo.frame_objects import StatefulFrame, UnboundLocalSentinel
 from echo.value import Value
+from echo import ebuiltins
 
 # These register builtins.
 from echo.estaticmethod import EStaticMethod
@@ -263,11 +263,14 @@ def do_call(f,
 
 
 def run_function(f: types.FunctionType, *args: Tuple[Any, ...],
+                 builtins: EModule = None,
                  globals_: Optional[Dict[Text, Any]] = None) -> Any:
     """Interprets f in the echo interpreter, returns unwrapped result."""
     state = InterpreterState(script_directory=None)
-    globals_ = globals_ or globals()
-    ictx = ICtx(state, interp, do_call)
+    globals_ = globals_ or {}
+    builtins = builtins or EModule(
+        'builtins', filename='<built-in>', globals_=ebuiltins.make_ebuiltins())
+    ictx = ICtx(state, interp, do_call, builtins)
     result = interp(get_code(f), globals_=globals_, defaults=f.__defaults__,
                     args=args, name=f.__name__, ictx=ictx)
     return result.get_value()
