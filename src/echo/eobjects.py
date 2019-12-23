@@ -289,8 +289,8 @@ def _type_getattro(type_: 'EClass', name: Text, ictx: ICtx) -> Result[Any]:
         return Result(type_.metaclass or get_guest_builtin('type'))
     if name == '__bases__':
         return Result(type_.bases)
-    if name == '__repr__':
-        return invoke_desc(type_, get_guest_builtin('type.__repr__'), ictx)
+    if name == '__name__':
+        return Result(type_.name)
 
     metatype = type_.get_type()
     meta_attr = _find_name_in_mro(metatype, name, ictx)
@@ -577,7 +577,8 @@ class EClass(EPyType):
     def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
         if name in self.dict_:
             return AttrWhere.SELF_DICT
-        if name in ('__class__', '__bases__', '__mro__', '__dict__'):
+        if name in ('__class__', '__bases__', '__mro__', '__dict__',
+                    '__name__'):
             return AttrWhere.SELF_SPECIAL
         if self.get_type().hasattr(name):
             return AttrWhere.CLS
@@ -933,13 +934,13 @@ def _do_repr(args: Tuple[Any, ...], ictx: ICtx) -> Result[Any]:
     o = args[0]
     if not isinstance(o, EPyObject):
         return Result(repr(o))
-    frepr = o.getattr('__repr__', ictx)
+    frepr = o.get_type().getattr('__repr__', ictx)
     if frepr.is_exception():
         return frepr
     frepr = frepr.get_value()
     log('eo:do_repr()', f'o: {o} frepr: {frepr}')
     globals_ = frepr.globals_
-    return ictx.call(frepr, args=(), kwargs={}, locals_dict={},
+    return ictx.call(frepr, args=(o,), kwargs={}, locals_dict={},
                      globals_=globals_)
 
 

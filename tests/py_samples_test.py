@@ -80,8 +80,6 @@ def run_to_result(path: Text, vm: Text) -> interp_result.Result[Any]:
     def note_failure():
         if xfail:
             pytest.xfail('Known-failing echo VM sample.')
-        else:
-            raise ValueError('Expected failure, but did not fail.')
 
     try:
         r = _run_to_result(path)
