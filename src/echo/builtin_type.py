@@ -93,8 +93,8 @@ def _do_type_subclasses(
 
 @register_builtin('type')
 @check_result
-def do_type(args: Tuple[Any, ...], kwargs: Dict[Text, Any],
-            ictx: ICtx) -> Result[Any]:
+def _do_type_call(args: Tuple[Any, ...], kwargs: Dict[Text, Any],
+                  ictx: ICtx) -> Result[Any]:
     assert not kwargs, kwargs
     assert isinstance(args, tuple), args
     log('go:type()', f'args: {args}')
@@ -110,6 +110,8 @@ def do_type(args: Tuple[Any, ...], kwargs: Dict[Text, Any],
             return Result(get_guest_builtin('tuple'))
         if res is int:
             return Result(get_guest_builtin('int'))
+        if res is str:
+            return Result(get_guest_builtin('str'))
         if res is dict:
             return Result(get_guest_builtin('dict'))
         return Result(res)

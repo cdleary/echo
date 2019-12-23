@@ -27,6 +27,8 @@ EVM_FAILING_SAMPLES = [
     'import_re',
     're_sub',
     'import_warnings_module',
+    'functools_lru_cache',
+    'functools_partial',
 ]
 
 

@@ -120,32 +120,12 @@ def test_closed_over_argument():
     assert run_function(main) == 44
 
 
-def test_functools_partial():
-    def main():
-        import functools
-
-        def add(x, y): return x + y
-        curried = functools.partial(add, 1)
-        return curried(41)
-
-    assert run_function(main) == 42
-
-
 def test_print_dict_keys():
     def main():
         x = dict(a=1, b=2)
         return str(sorted(list(x.keys())))
 
     assert run_function(main) == "['a', 'b']"
-
-
-def test_functools_function_global_keys():
-    def main():
-        import functools
-        return ('partial' in list(functools.wraps.__globals__.keys()) and
-                'partial' in list(functools.update_wrapper.__globals__.keys()))
-
-    assert run_function(main) is True
 
 
 def test_tuple_unpack():
