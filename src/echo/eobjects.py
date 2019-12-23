@@ -1513,22 +1513,6 @@ def do_setattr(args: Tuple[Any, ...],
 
 
 @check_result
-def do_dict(args: Tuple[Any, ...],
-            kwargs: Dict[Text, Any],
-            ictx: ICtx) -> Result[Any]:
-    f = get_guest_builtin('dict')
-    return f.invoke(args, kwargs, {}, ictx)
-
-
-@check_result
-def do_tuple(args: Tuple[Any, ...],
-             kwargs: Dict[Text, Any],
-             ictx: ICtx) -> Result[Any]:
-    f = get_guest_builtin('tuple')
-    return f.invoke(args, kwargs, {}, ictx)
-
-
-@check_result
 def invoke_desc(self, cls_attr: EPyObject, ictx: ICtx) -> Result[Any]:
     assert cls_attr.hasattr('__get__')
 

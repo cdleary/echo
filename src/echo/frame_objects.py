@@ -17,7 +17,7 @@ from echo.eobjects import (
     ReturnKind, EBuiltin, EFunction, EPyObject,
     GuestCoroutine, EInstance, get_guest_builtin,
     do_getitem, do_setitem, do_hasattr, do_getattr,
-    do_iter, do_next, do_tuple, do_delitem, do_setattr,
+    do_iter, do_next, do_delitem, do_setattr,
 )
 from echo import trace_util
 from echo.ecell import ECell
@@ -756,7 +756,8 @@ class StatefulFrame:
             kwargs = None
         callargs = self._pop()
         if not isinstance(callargs, tuple):
-            callargs = do_tuple((callargs,), {}, self.ictx)
+            do_tuple = get_guest_builtin('tuple')
+            callargs = do_tuple.invoke((callargs,), {}, {}, self.ictx)
             if callargs.is_exception():
                 return callargs
             callargs = callargs.get_value()
