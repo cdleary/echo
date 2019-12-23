@@ -206,6 +206,33 @@ class StatefulFrame:
             pass
         return interp_routines.builtins_get(self.builtins, name)
 
+    def _run_FORMAT_VALUE(self, arg, argval) -> Result[str]:
+        fmt_spec = ''
+        if (arg & 0x4) == 4:  # Pop fmt_spec from the stack and use it.
+            fmt_spec = self._pop()
+
+        value = self._pop()
+        if (arg & 0x3) == 0:  # Value is formatted as-is.
+            pass
+        elif (arg & 0x3) == 1:  # Call str on value before formatting.
+            s = get_guest_builtin('str')
+            res = s.invoke((value,), {}, {}, self.ictx)
+            if res.is_exception():
+                return res
+            value = res.get_value()
+        elif (arg & 0x3) == 2:  # Call repr on value before formatting.
+            s = get_guest_builtin('repr')
+            res = s.invoke((value,), {}, {}, self.ictx)
+            if res.is_exception():
+                return res
+            value = res.get_value()
+
+        return Result(format(value, fmt_spec))
+
+    def _run_BUILD_STRING(self, arg, argval) -> Result[str]:
+        pieces = self._pop_n(arg, tos_is_0=False)
+        return Result(''.join(pieces))
+
     def _run_POP_TOP(self, arg, argval):
         self._pop()
 

@@ -1011,6 +1011,8 @@ class EBuiltin(EPyType):
         # list
         'list.__new__', 'list.__init__', 'list.__eq__', 'list.append',
         'list.extend', 'list.clear', 'list.__contains__', 'list.__iter__',
+        # tuple
+        'tuple.__new__',
     )
 
     _registry: Dict[Text, Tuple[Callable, Optional[type]]] = {}
@@ -1234,6 +1236,10 @@ class EBuiltin(EPyType):
                 return Result(get_guest_builtin('Exception.__new__'))
             if name == '__init__':
                 return Result(get_guest_builtin('Exception.__init__'))
+
+        if self.name == 'tuple':
+            if name == '__new__':
+                return Result(get_guest_builtin('tuple.__new__'))
 
         if self.name == 'list':
             if name == '__new__':

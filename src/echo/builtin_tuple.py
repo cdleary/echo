@@ -14,6 +14,7 @@ from echo import iteration_helpers
 
 
 @register_builtin('tuple')
+@register_builtin('tuple.__new__')
 @check_result
 def _do_tuple(args: Tuple[Any, ...],
               kwargs: Dict[Text, Any],
