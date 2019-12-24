@@ -401,17 +401,18 @@ class StatefulFrame:
 
     def _run_SETUP_WITH(self, arg, argval) -> Result[Any]:
         mgr = self._peek()
-        enter = mgr.getattr('__enter__', self.ictx)
+        do_getattr = get_guest_builtin('getattr')
+        enter = do_getattr.invoke((mgr, '__enter__'), {}, {}, self.ictx)
         if enter.is_exception():
             return enter
         enter = enter.get_value()
-        exit = mgr.getattr('__exit__', self.ictx)
+        exit = do_getattr.invoke((mgr, '__exit__'), {}, {}, self.ictx)
         if exit.is_exception():
             return exit
         exit = exit.get_value()
         self._pop()
         self._push(exit)
-        res = enter.invoke((), {}, {}, self.ictx)
+        res = self.ictx.call(enter, (), {}, {})
         if res.is_exception():
             return res
         self._run_SETUP_FINALLY(arg, argval)

@@ -29,8 +29,6 @@ EVM_FAILING_SAMPLES = [
     'import_re',
     're_sub',
     'import_warnings_module',
-    'functools_lru_cache',
-    'functools_partial',
 ]
 
 
@@ -93,6 +91,8 @@ def run_to_result(path: Text, vm: Text) -> interp_result.Result[Any]:
     else:
         if r.is_exception():
             note_failure()
+        if xfail:
+            raise ValueError('Expected failure, but passed!')
         return r
 
 
