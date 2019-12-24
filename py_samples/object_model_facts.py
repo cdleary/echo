@@ -19,3 +19,5 @@ assert not object.__bases__
 
 # None is an object.
 assert isinstance(None, object)
+
+assert (int == frozenset) is False

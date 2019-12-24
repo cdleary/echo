@@ -69,7 +69,7 @@ class EFunction(EPyObject):
     def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
         if name in self.dict_:
             return AttrWhere.SELF_DICT
-        if name in ('__class__',):
+        if name in ('__class__', '__dict__',):
             return AttrWhere.SELF_SPECIAL
         if name in ('__get__',):
             return AttrWhere.CLS
@@ -90,6 +90,8 @@ class EFunction(EPyObject):
     def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
         if name == '__class__':
             return Result(EFunctionType.singleton)
+        if name == '__dict__':
+            return Result(self.dict_)
         if name == '__get__':
             return Result(EMethod(NativeFunction(
                 self._get, 'efunction.__get__'), bound_self=self))

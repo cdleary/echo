@@ -298,6 +298,9 @@ def compare(opname: Text, lhs, rhs, ictx: ICtx) -> Result[bool]:
         fcmp = get_guest_builtin('int.{}'.format(COMPARE_TO_SPECIAL[opname]))
         return fcmp.invoke((lhs, rhs), {}, {}, ictx)
 
+    if isinstance(lhs, EBuiltin) and isinstance(rhs, type):
+        return Result(False)
+
     raise NotImplementedError(opname, lhs, rhs)
 
 

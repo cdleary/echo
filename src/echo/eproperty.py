@@ -11,14 +11,15 @@ from echo.interp_context import ICtx
 
 
 class EProperty(EPyObject):
-    def __init__(self, fget: EFunction):
+    def __init__(self, fget: EFunction, doc: Optional[Text]):
         self.fget = fget
+        self.doc = doc
 
     def get_type(self) -> EPyObject:
         return get_guest_builtin('property')
 
     def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
-        if name in ('__get__', '__set__'):
+        if name in ('__get__', '__set__', '__doc__'):
             return AttrWhere.SELF_SPECIAL
         return None
 
@@ -40,6 +41,8 @@ class EProperty(EPyObject):
         if name == '__get__':
             return Result(EMethod(NativeFunction(
                 self._get, 'eproperty.__get__'), bound_self=self))
+        if name == '__doc__':
+            return Result(self.doc)
         return Result(ExceptionData(None, name, AttributeError(name)))
 
     def setattr(self, name: Text, value: Any) -> Result[None]:
@@ -49,13 +52,11 @@ class EProperty(EPyObject):
 @check_result
 def _do_property(
         args: Tuple[Any, ...],
-        kwargs: Optional[Dict[Text, Any]],
+        kwargs: Dict[Text, Any],
         ictx: ICtx) -> Result[Any]:
-    if kwargs:
-        raise NotImplementedError(kwargs)
-    if len(args) != 1:
-        raise NotImplementedError(args)
-    guest_property = EProperty(args[0])
+    doc = kwargs.pop('doc', None)
+    assert len(args) == 1 and not kwargs, (args, kwargs)
+    guest_property = EProperty(args[0], doc=doc)
     return Result(guest_property)
 
 
