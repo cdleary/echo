@@ -26,7 +26,6 @@ EVM_FAILING_SAMPLES = [
     'type_subclass_of_abc',
     'import_textwrap',
     'namedtuple_sample',
-    'import_warnings_module',
 ]
 
 

@@ -15,7 +15,8 @@ NotImplemented StopIteration
 print globals abs ord chr
 NameError AttributeError KeyError TypeError IndexError ImportError
 NotImplementedError ValueError
-Warning DeprecationWarning""".split())
+Warning PendingDeprecationWarning ImportWarning ResourceWarning
+UserWarning DeprecationWarning""".split())
 
 
 def make_ebuiltins() -> Dict[Text, Any]:
