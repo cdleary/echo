@@ -91,7 +91,7 @@ def run_to_result(path: Text, vm: Text) -> interp_result.Result[Any]:
     else:
         if r.is_exception():
             note_failure()
-        if xfail:
+        elif xfail:
             raise ValueError('Expected failure, but passed!')
         return r
 
