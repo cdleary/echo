@@ -18,7 +18,7 @@ from typing import (
     Callable,
 )
 
-from echo.common import dis_to_str, get_code
+from echo.common import dis_to_str, get_code, none_filler
 from echo.elog import log
 from echo.interp_result import Result, ExceptionData, check_result
 from echo.interp_context import ICtx
@@ -31,7 +31,7 @@ from echo.eobjects import (
     EFunction, EBuiltin, EPyObject,
     EPartial, EClass, EMethod,
     EAsyncGenerator, ReturnKind,
-    NativeFunction, get_guest_builtin,
+    NativeFunction, get_guest_builtin, register_builtin,
 )
 from echo import interp_routines
 from echo.frame_objects import StatefulFrame, UnboundLocalSentinel
@@ -281,3 +281,19 @@ def import_path(path: Text, module_name: Text, fully_qualified_name: Text,
     result = import_routines.import_path(
         path, module_name, fully_qualified_name, ictx)
     return result
+
+
+@check_result
+@register_builtin('exec')
+def _do_exec(args: Tuple[Any, ...],
+             kwargs: Dict[Text, Any],
+             ictx: ICtx) -> Result[None]:
+    assert 1 <= len(args) <= 3 and not kwargs, (args, kwargs)
+    source, globals_, locals_ = none_filler(args, 3)
+    assert isinstance(source, str), type(source)
+    code = compile(source, 'exec-source', 'exec')
+    res = interp(code, globals_=globals_, ictx=ictx, name='exec',
+                 locals_dict=locals, in_function=False)
+    if res.is_exception():
+        return res
+    return Result(None)

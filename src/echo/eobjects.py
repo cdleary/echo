@@ -441,15 +441,6 @@ class EInstance(EPyObject):
         return Result(None)
 
 
-def register_builtin(
-        name: Text,
-        type_: Optional[type] = None) -> Callable[[Callable], Callable]:
-    def fregister(f: Callable) -> Callable:
-        EBuiltin.register(name, f, type_)
-        return f
-    return fregister
-
-
 EClassOrBuiltin = Union['EClass', 'EBuiltin']
 
 
@@ -1356,6 +1347,15 @@ class EBuiltin(EPyType):
 
     def setattr(self, name: Text, value: Any) -> Any:
         raise NotImplementedError(self, name, value)
+
+
+def register_builtin(
+        name: Text,
+        type_: Optional[type] = None) -> Callable[[Callable], Callable]:
+    def fregister(f: Callable) -> Callable:
+        EBuiltin.register(name, f, type_)
+        return f
+    return fregister
 
 
 @memoize

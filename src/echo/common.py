@@ -1,9 +1,10 @@
 """Commonly used utility functions."""
 
 import dis
+import itertools
 import functools
 import types
-from typing import Any, Text
+from typing import Any, Text, Iterable, Sequence, Tuple
 from io import StringIO
 
 
@@ -29,3 +30,7 @@ def memoize(f):
         return result
 
     return wrapper
+
+
+def none_filler(it: Sequence[Any], count: int) -> Tuple[Any, ...]:
+    return tuple(it) + tuple(None for _ in range(count-len(it)))

@@ -5,7 +5,7 @@ from echo.eobjects import get_guest_builtin
 
 BUILTINS = tuple("""len str int bool super type object list dict tuple
 property staticmethod classmethod
-map iter next enumerate any all
+map iter next enumerate any all exec
 hasattr getattr setattr isinstance issubclass repr callable min max dir
 BaseException Exception
 """.split())
