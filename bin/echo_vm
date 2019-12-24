@@ -20,6 +20,8 @@ import types
 from typing import Any
 
 from echo import interp
+from echo import ebuiltins
+from echo import emodule
 from echo import interp_context
 from echo import import_routines
 from echo import bytecode_trace
@@ -53,13 +55,11 @@ def main() -> int:
     if opts.log_level:
         logging.basicConfig(level=getattr(logging, opts.log_level))
 
-    globals_ = dict(globals())
-
     if opts.c:
         state = interp.InterpreterState(os.getcwd())
         module_code = compile(opts.c, '<text>', 'exec')
         ictx = interp_context.ICtx(state, interp.interp, interp.do_call)
-        result = ictx.interp_callback(module_code, globals_=globals_, in_function=False,
+        result = ictx.interp_callback(module_code, globals_={}, in_function=False,
                              name='__main__', ictx=ictx)
         return _handle_result(result)
 
@@ -71,20 +71,22 @@ def main() -> int:
     sys.argv = rest
 
     fullpath = os.path.realpath(args[0])
+    globals_ = {}
     globals_['__file__'] = fullpath
 
     state = interp.InterpreterState(os.path.dirname(fullpath))
     state.paths = sys.path[1:] + state.paths
     fully_qualified = '__main__'
 
-    ictx = interp_context.ICtx(state, interp.interp, interp.do_call)
+    builtins = emodule.EModule('builtins', filename='<built-in>', globals_=ebuiltins.make_ebuiltins())
+    ictx = interp_context.ICtx(state, interp.interp, interp.do_call, builtins)
 
     prior = os.environ.get('ECHO_DUMP_INSTS', '')
     os.environ['ECHO_DUMP_INSTS'] = ''
-    assert not import_routines.run_IMPORT_NAME('fake', 0, (), 'types', dict(globals_), ictx).is_exception()
-    assert not import_routines.run_IMPORT_NAME('fake', 0, (), 'collections', dict(globals_), ictx).is_exception()
-    assert not import_routines.run_IMPORT_NAME('fake', 0, (), 'enum', dict(globals_), ictx).is_exception()
-    assert not import_routines.run_IMPORT_NAME('fake', 0, (), 're', dict(globals_), ictx).is_exception()
+    assert not import_routines.run_IMPORT_NAME('fake', 0, (), 'types', dict(__name__='types'), ictx).is_exception()
+    #assert not import_routines.run_IMPORT_NAME('fake', 0, (), 'collections', {}, ictx).is_exception()
+    #assert not import_routines.run_IMPORT_NAME('fake', 0, (), 'enum', {}, ictx).is_exception()
+    #assert not import_routines.run_IMPORT_NAME('fake', 0, (), 're', {}, ictx).is_exception()
     os.environ['ECHO_DUMP_INSTS'] = prior
 
     try:

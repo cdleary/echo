@@ -866,6 +866,10 @@ def _do_issubclass(
     if args[0] is args[1] and isinstance(args[0], EBuiltin):
         return Result(True)
 
+    if (type(args[0]) is type and issubclass(args[0], BaseException) and
+            args[1] is get_guest_builtin('BaseException')):
+        return Result(True)
+
     if (isinstance(args[1], EPyObject) and
             args[1].hasattr('__subclasscheck__')):
         scc = args[1].getattr('__subclasscheck__', ictx)

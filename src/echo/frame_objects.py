@@ -38,6 +38,16 @@ GUEST_BUILTINS = {
 }
 opcodeno = 0
 
+WHY_NOT = 0x01        # No error.
+WHY_EXCEPTION = 0x02  # Exception occurred.
+WHY_RETURN = 0x08     # 'return' statement.
+WHY_BREAK = 0x10      # 'break' statement.
+WHY_CONTINUE = 0x20   # 'continue' statement.
+WHY_YIELD = 0x40      # 'yield' operator.
+WHY_SILENCED = 0x80   # Exception silenced by 'with'.
+ALL_WHYS = set([WHY_NOT, WHY_EXCEPTION, WHY_RETURN, WHY_BREAK, WHY_CONTINUE,
+                WHY_YIELD, WHY_SILENCED])
+
 
 # Use a sentinel value (this class object) to indicate when
 # UnboundLocalErrors have occurred.
@@ -133,11 +143,13 @@ class StatefulFrame:
     def interp_state(self):
         return self.ictx.interp_state
 
-    def _handle_exception(self):
+    def _handle_exception(self, exception_data: ExceptionData) -> bool:
         """Returns whether the exception was handled in this function."""
         # Pop until we see an except block, or there's no block stack left.
+        log('fo:he', f'handling exception; block stack: {self.block_stack}')
         while (self.block_stack and
-               self.block_stack[-1].kind != BlockKind.SETUP_EXCEPT):
+               self.block_stack[-1].kind not in (BlockKind.SETUP_EXCEPT,
+                                                 BlockKind.SETUP_FINALLY)):
             self.block_stack.pop()
 
         if (self.block_stack and
@@ -157,13 +169,29 @@ class StatefulFrame:
             self.handling_exception_data, self.exception_data = (
                 self.exception_data, None)
             return True
-        elif not any(entry.kind == BlockKind.SETUP_EXCEPT
-                     for entry in self.block_stack):
-            return False  # Definitely unhandled.
-        else:
-            # Need to pop block stack entries appropriately, then handle the
-            # exception.
-            raise NotImplementedError(self.block_stack)
+
+        if (self.block_stack and
+                self.block_stack[-1].kind == BlockKind.SETUP_FINALLY):
+            log('fo:he', f'handling finally: {self.block_stack[-1]}')
+            self.pc = self.block_stack[-1].handler
+            while len(self.stack) > self.block_stack[-1].level:
+                self._pop()
+            self._push(UnboundLocalSentinel)
+            self._push(UnboundLocalSentinel)
+            self._push(None)
+            self._push(exception_data.traceback)
+            self._push(exception_data.exception)
+            do_type = get_guest_builtin('type')
+            self._push(do_type.invoke((exception_data.exception,), {}, {},
+                                      self.ictx).get_value())
+            # The block stack entry transmorgifies into an EXCEPT_HANDLER.
+            self.block_stack[-1].kind = BlockKind.EXCEPT_HANDLER
+            self.block_stack[-1].handler = -1
+            self.handling_exception_data, self.exception_data = (
+                self.exception_data, None)
+            return True
+
+        return False
 
     def _push(self, x: Any) -> None:
         assert not isinstance(x, Result), x
@@ -370,6 +398,62 @@ class StatefulFrame:
     def sets_pc(f):
         f._sets_pc = True
         return f
+
+    def _run_SETUP_WITH(self, arg, argval) -> Result[Any]:
+        mgr = self._peek()
+        enter = mgr.getattr('__enter__', self.ictx)
+        if enter.is_exception():
+            return enter
+        enter = enter.get_value()
+        exit = mgr.getattr('__exit__', self.ictx)
+        if exit.is_exception():
+            return exit
+        exit = exit.get_value()
+        self._pop()
+        self._push(exit)
+        res = enter.invoke((), {}, {}, self.ictx)
+        if res.is_exception():
+            return res
+        self._run_SETUP_FINALLY(arg, argval)
+        return Result(res.get_value())
+
+    def _run_WITH_CLEANUP_START(self, arg, argval) -> Result[Any]:
+        exc = self._peek()
+        log('fo:wcs', f'exc: {exc!r}')
+        val = tb = None
+        if exc is None:
+            self._pop()
+            exit_func = self._pop()
+            self._push(None)
+        elif isinstance(exc, int):
+            self._pop()
+            raise NotImplementedError
+        else:
+            val, tb, tp2, exc2, tb2 = reversed(self.stack[-6:-1])
+            log('fo:wcs', f'val: {val!r} tb: {tb!r} stack: {self.stack}')
+            exit_func = self.stack[-7]
+            self.stack[-7] = tb2
+            self.stack[-6] = exc2
+            self.stack[-5] = tp2
+            self.stack[-4] = UnboundLocalSentinel
+            self.block_stack[-1].level -= 1
+
+        assert tb is not UnboundLocalSentinel
+        res = self.ictx.call(exit_func, (exc, val, tb), {}, {})
+        if res.is_exception():
+            return res
+        self._push(exc)
+        return res
+
+    def _run_WITH_CLEANUP_FINISH(self, arg, argval) -> None:
+        res = self._pop()
+        exc = self._pop()
+        if res is True:
+            self._push(WHY_SILENCED)
+        elif res is None:
+            pass
+        else:
+            raise NotImplementedError
 
     @sets_pc
     def _run_BREAK_LOOP(self, arg, argval):
@@ -623,14 +707,27 @@ class StatefulFrame:
                 argval, lhs, rhs, self.ictx)
 
     def _run_END_FINALLY(self, arg, argval):
-        # From the Python docs: "The interpreter recalls whether the
-        # exception has to be re-raised, or whether the function returns,
-        # and continues with the outer-next block."
-        if self.exception_data is None:
+        status = self._pop()
+        do_issubclass = get_guest_builtin('issubclass')
+        if isinstance(status, int):
+            why = status
+            assert why not in (WHY_YIELD, WHY_EXCEPTION), why
+            if why in (WHY_RETURN, WHY_CONTINUE):
+                retval = self._pop()
+            if why == WHY_SILENCED:
+                b = self.block_stack.pop()
+                while len(self.stack) > b.level:
+                    self._pop()
+                why = WHY_NOT
+        elif do_issubclass.invoke((status, get_guest_builtin('BaseException')),
+                                  {}, {}, self.ictx).get_value():
+            exc = self._pop()
+            tb = self._pop()
+            why = WHY_EXCEPTION
+        elif status is None:
             pass
         else:
-            raise NotImplementedError(self.handling_exception_data,
-                                      self.exception_data)
+            raise NotImplementedError
 
     def _run_UNARY_NOT(self, arg, argval) -> None:
         arg = self._pop()
@@ -922,7 +1019,7 @@ class StatefulFrame:
                 self.exception_data = result.get_exception()
                 self.exception_data.traceback.append(
                     (self.code.co_filename, self.line))
-                if self._handle_exception():
+                if self._handle_exception(result.get_exception()):
                     return None
                 else:
                     return result
@@ -936,6 +1033,7 @@ class StatefulFrame:
                 # These opcodes claim a value-stack effect, but we use a
                 # different stack for block info.
                 'SETUP_EXCEPT', 'POP_EXCEPT', 'SETUP_FINALLY', 'END_FINALLY',
+                'SETUP_WITH', 'WITH_CLEANUP_START', 'WITH_CLEANUP_FINISH',
                 # This op causes the stack_effect call to error.
                 'EXTENDED_ARG', 'BREAK_LOOP',
                 # These ops may or may not pop the stack.
