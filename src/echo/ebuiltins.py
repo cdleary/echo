@@ -12,7 +12,7 @@ BaseException Exception
 PASSTHRU = tuple("""range slice float reversed set frozenset zip sorted
 bytearray memoryview bytes
 NotImplemented StopIteration
-print globals abs
+print globals abs ord chr
 NameError AttributeError KeyError TypeError IndexError ImportError
 NotImplementedError ValueError
 Warning DeprecationWarning""".split())
