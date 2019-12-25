@@ -451,7 +451,7 @@ def _get_bases(c: EClassOrBuiltin) -> Tuple[EPyObject, ...]:
     if isinstance(c, EClass):
         return c.bases
     if (_is_type_builtin(c) or _is_dict_builtin(c) or _is_int_builtin(c) or
-            is_list_builtin(c)):
+            is_list_builtin(c) or is_tuple_builtin(c)):
         return (get_guest_builtin('object'),)
     if _is_object_builtin(c):
         return ()
@@ -713,7 +713,7 @@ def _is_str_builtin(x) -> bool:
     return isinstance(x, EBuiltin) and x.name == 'str'
 
 
-def _is_tuple_builtin(x) -> bool:
+def is_tuple_builtin(x) -> bool:
     return isinstance(x, EBuiltin) and x.name == 'tuple'
 
 
@@ -788,7 +788,7 @@ def _do_isinstance(
         # TODO(leary) How does the real type builtin make it here?
         return Result(isinstance(args[0], args[1]))
 
-    if _is_tuple_builtin(args[1]):
+    if is_tuple_builtin(args[1]):
         if not isinstance(args[0], EPyObject):
             return Result(isinstance(args[0], tuple))
         raise NotImplementedError(args)
@@ -1010,7 +1010,7 @@ class EBuiltin(EPyType):
         'list.__new__', 'list.__init__', 'list.__eq__', 'list.append',
         'list.extend', 'list.clear', 'list.__contains__', 'list.__iter__',
         # tuple
-        'tuple.__new__',
+        'tuple.__new__', 'tuple.__eq__',
     )
 
     _registry: Dict[Text, Tuple[Callable, Optional[type]]] = {}
@@ -1240,6 +1240,8 @@ class EBuiltin(EPyType):
         if self.name == 'tuple':
             if name == '__new__':
                 return Result(get_guest_builtin('tuple.__new__'))
+            if name == '__eq__':
+                return Result(get_guest_builtin('tuple.__eq__'))
 
         if self.name == 'list':
             if name == '__new__':

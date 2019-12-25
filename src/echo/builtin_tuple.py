@@ -6,7 +6,7 @@ from echo.interp_result import Result, check_result
 from echo import interp_routines
 from echo.eobjects import (
     EFunction, EMethod, NativeFunction, EBuiltin, EClass, EInstance,
-    register_builtin, _is_dict_builtin, get_guest_builtin,
+    register_builtin, is_tuple_builtin, get_guest_builtin,
     do_iter, do_next,
 )
 from echo.interp_context import ICtx
@@ -14,7 +14,6 @@ from echo import iteration_helpers
 
 
 @register_builtin('tuple')
-@register_builtin('tuple.__new__')
 @check_result
 def _do_tuple(args: Tuple[Any, ...],
               kwargs: Dict[Text, Any],
@@ -35,3 +34,36 @@ def _do_tuple(args: Tuple[Any, ...],
         return Result(tuple(items))
 
     return Result(tuple(*args, **kwargs))
+
+
+@register_builtin('tuple.__new__')
+@check_result
+def _do_tuple_new(args: Tuple[Any, ...],
+                  kwargs: Dict[Text, Any],
+                  ictx: ICtx) -> Result[Any]:
+    assert len(args) == 1 and not kwargs, (args, kwargs)
+    if isinstance(args[0], EClass):
+        inst = EInstance(args[0])
+        inst.builtin_storage[tuple] = ()
+        return Result(inst)
+    if is_tuple_builtin(args[0]):
+        return Result(())
+    raise NotImplementedError(args, kwargs)
+
+
+def _resolve(x: Any) -> Tuple:
+    if isinstance(x, EPyObject):
+        return x.builtin_storage[tuple]
+    if isinstance(x, tuple):
+        return x
+    # Raise type error.
+    raise NotImplementedError(x)
+
+
+@register_builtin('tuple.__eq__')
+@check_result
+def _do_tuple_eq(args: Tuple[Any, ...],
+                 kwargs: Dict[Text, Any],
+                 ictx: ICtx) -> Result[Any]:
+    assert len(args) == 2 and not kwargs, (args, kwargs)
+    return Result(_resolve(args[0]) == _resolve(args[1]))
