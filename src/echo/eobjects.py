@@ -1010,7 +1010,7 @@ class EBuiltin(EPyType):
         'list.__new__', 'list.__init__', 'list.__eq__', 'list.append',
         'list.extend', 'list.clear', 'list.__contains__', 'list.__iter__',
         # tuple
-        'tuple.__new__', 'tuple.__eq__',
+        'tuple.__new__', 'tuple.__eq__', 'tuple.__lt__',
     )
 
     _registry: Dict[Text, Tuple[Callable, Optional[type]]] = {}
@@ -1145,6 +1145,9 @@ class EBuiltin(EPyType):
                 '__int__', '__eq__', '__and__', '__rand__', '__mul__',
                 '__rmul__', '__bool__', '__ge__', '__le__', '__gt__'):
             return AttrWhere.SELF_SPECIAL
+        if self.name == 'tuple' and name in (
+                '__lt__',):
+            return AttrWhere.SELF_SPECIAL
         if self.name == 'str' and name in ('maketrans',):
             return AttrWhere.SELF_SPECIAL
         if (self.name in self.BUILTIN_TYPES
@@ -1240,8 +1243,12 @@ class EBuiltin(EPyType):
         if self.name == 'tuple':
             if name == '__new__':
                 return Result(get_guest_builtin('tuple.__new__'))
+            if name == '__init__':
+                return Result(get_guest_builtin('tuple.__init__'))
             if name == '__eq__':
                 return Result(get_guest_builtin('tuple.__eq__'))
+            if name == '__lt__':
+                return Result(get_guest_builtin('tuple.__lt__'))
 
         if self.name == 'list':
             if name == '__new__':

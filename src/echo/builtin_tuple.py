@@ -41,14 +41,29 @@ def _do_tuple(args: Tuple[Any, ...],
 def _do_tuple_new(args: Tuple[Any, ...],
                   kwargs: Dict[Text, Any],
                   ictx: ICtx) -> Result[Any]:
-    assert len(args) == 1 and not kwargs, (args, kwargs)
+    assert 1 <= len(args) <= 2 and not kwargs, (args, kwargs)
+    do_tuple = get_guest_builtin('tuple')
+    data = ()
+    if len(args) == 2:
+        res = do_tuple.invoke((args[1],), {}, {}, ictx)
+        if res.is_exception():
+            return res
+        data = res.get_value()
     if isinstance(args[0], EClass):
         inst = EInstance(args[0])
-        inst.builtin_storage[tuple] = ()
+        inst.builtin_storage[tuple] = data
         return Result(inst)
     if is_tuple_builtin(args[0]):
-        return Result(())
+        return Result(data)
     raise NotImplementedError(args, kwargs)
+
+
+@register_builtin('tuple.__init__')
+@check_result
+def _do_tuple_new(args: Tuple[Any, ...],
+                  kwargs: Dict[Text, Any],
+                  ictx: ICtx) -> Result[Any]:
+    return Result(None)
 
 
 def _resolve(x: Any) -> Tuple:
@@ -67,3 +82,12 @@ def _do_tuple_eq(args: Tuple[Any, ...],
                  ictx: ICtx) -> Result[Any]:
     assert len(args) == 2 and not kwargs, (args, kwargs)
     return Result(_resolve(args[0]) == _resolve(args[1]))
+
+
+@register_builtin('tuple.__lt__')
+@check_result
+def _do_tuple_lt(args: Tuple[Any, ...],
+                 kwargs: Dict[Text, Any],
+                 ictx: ICtx) -> Result[Any]:
+    assert len(args) == 2 and not kwargs, (args, kwargs)
+    return Result(_resolve(args[0]) < _resolve(args[1]))
