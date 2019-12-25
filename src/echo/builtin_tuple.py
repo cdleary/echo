@@ -7,7 +7,6 @@ from echo import interp_routines
 from echo.eobjects import (
     EFunction, EMethod, NativeFunction, EBuiltin, EClass, EInstance,
     register_builtin, is_tuple_builtin, get_guest_builtin,
-    do_iter, do_next,
 )
 from echo.interp_context import ICtx
 from echo import iteration_helpers

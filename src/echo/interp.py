@@ -50,6 +50,7 @@ import echo.builtin_build_class
 import echo.builtin_dict
 import echo.builtin_exception
 import echo.builtin_int
+import echo.builtin_iter
 import echo.builtin_list
 import echo.builtin_str
 import echo.builtin_super

@@ -17,7 +17,7 @@ from echo.eobjects import (
     ReturnKind, EBuiltin, EFunction, EPyObject,
     GuestCoroutine, EInstance, get_guest_builtin,
     do_getitem, do_setitem, do_hasattr, do_getattr,
-    do_iter, do_next, do_delitem, do_setattr,
+    do_delitem, do_setattr,
 )
 from echo import trace_util
 from echo.ecell import ECell
@@ -291,8 +291,9 @@ class StatefulFrame:
     def _run_LOAD_CONST(self, arg, argval):
         return Result(self.consts[arg])
 
-    def _run_GET_ITER(self, arg, argval):
-        return do_iter((self._pop(),), self.ictx)
+    def _run_GET_ITER(self, arg, argval) -> Result[Any]:
+        do_iter = get_guest_builtin('iter')
+        return do_iter.invoke((self._pop(),), {}, {}, self.ictx)
 
     def _run_LOAD_BUILD_CLASS(self, arg, argval):
         return Result(get_guest_builtin('__build_class__'))
@@ -523,7 +524,8 @@ class StatefulFrame:
     @sets_pc
     def _run_FOR_ITER(self, arg, argval):
         o = self._peek()
-        r = do_next((o,), self.ictx)
+        do_next = get_guest_builtin('next')
+        r = do_next.invoke((o,), {}, {}, self.ictx)
         log('bc:for_iter', f'o: {o} r: {r}')
         if (r.is_exception()
                 and isinstance(r.get_exception().exception, StopIteration)):
@@ -910,19 +912,21 @@ class StatefulFrame:
 
     def _run_UNPACK_EX(self, arg, argval):
         tos = self._pop()
-        it = do_iter((tos,), self.ictx)
+        do_iter = get_guest_builtin('iter')
+        it = do_iter.invoke((tos,), {}, {}, self.ictx)
         if it.is_exception():
             return it
         it = it.get_value()
         stack_values = []
+        do_next = get_guest_builtin('next')
         for _ in range(arg):
-            r = do_next((it,), self.ictx)
+            r = do_next.invoke((it,), {}, {}, self.ictx)
             if r.is_exception():
                 return r
             stack_values.append(r.get_value())
         rest = []
         while True:
-            r = do_next((it,), self.ictx)
+            r = do_next.invoke((it,), {}, {}, self.ictx)
             if (r.is_exception()
                     and isinstance(r.get_exception().exception,
                                    StopIteration)):
