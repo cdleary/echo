@@ -145,3 +145,23 @@ def _do_list_iter(
     assert len(args) == 1 and not kwargs, (args, kwargs)
     lhs = _resolve(args[0])
     return Result(iter(lhs))
+
+
+@register_builtin('list.__setitem__')
+def _do_list_setitem(
+        args: Tuple[Any, ...],
+        kwargs: Dict[Text, Any],
+        ictx: ICtx) -> Result[Any]:
+    assert len(args) == 3 and not kwargs, (args, kwargs)
+    lst, name, value = args
+    lst = _resolve(lst)
+
+    if isinstance(name, slice):
+        do_list = get_guest_builtin('list')
+        res = do_list.invoke((value,), {}, {}, ictx)
+        if res.is_exception():
+            return value
+        value = res.get_value()
+
+    lst[name] = value
+    return Result(None)

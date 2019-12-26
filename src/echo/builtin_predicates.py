@@ -80,3 +80,43 @@ def _do_callable(args: Tuple[Any, ...],
         return Result(callable(o))
     do_hasattr = get_guest_builtin('hasattr')
     return do_hasattr.invoke((o, '__call__'), {}, {}, ictx)
+
+
+@register_builtin('min')
+@check_result
+def _do_min(
+        args: Tuple[Any, ...],
+        kwargs: Dict[Text, Any],
+        ictx: ICtx) -> Result[Any]:
+    if (not isinstance(args[0], EPyObject) and
+            not isinstance(args[1], EPyObject)):
+        return Result(min(args[0], args[1]))
+    do_getattr = get_guest_builtin('getattr')
+    do_lt = do_getattr.invoke((args[0], '__lt__',), {}, {}, ictx)
+    if do_lt.is_exception():
+        return do_lt
+    do_lt = do_lt.get_value()
+    res = do_lt.invoke((args[1],), {}, {}, ictx)
+    if res.is_exception():
+        return res
+    return Result(args[0] if res.get_value() else args[1])
+
+
+@register_builtin('max')
+@check_result
+def _do_max(
+        args: Tuple[Any, ...],
+        kwargs: Dict[Text, Any],
+        ictx: ICtx) -> Result[Any]:
+    if (not isinstance(args[0], EPyObject) and
+            not isinstance(args[1], EPyObject)):
+        return Result(max(args[0], args[1]))
+    do_getattr = get_guest_builtin('getattr')
+    do_lt = do_getattr.invoke((args[0], '__lt__',), {}, {}, ictx)
+    if do_lt.is_exception():
+        return do_lt
+    do_lt = do_lt.get_value()
+    res = do_lt.invoke((args[1],), {}, {}, ictx)
+    if res.is_exception():
+        return res
+    return Result(args[1] if res.get_value() else args[0])

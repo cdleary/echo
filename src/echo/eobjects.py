@@ -741,23 +741,6 @@ def _do_len(
 
 
 @check_result
-def _do_min(
-        args: Tuple[Any, ...],
-        ictx: ICtx) -> Result[Any]:
-    if (not isinstance(args[0], EPyObject) and
-            not isinstance(args[1], EPyObject)):
-        return Result(min(args[0], args[1]))
-    do_lt = do_getattr((args[0], '__lt__',), {}, ictx)
-    if do_lt.is_exception():
-        return do_lt
-    do_lt = do_lt.get_value()
-    res = do_lt.invoke((args[1],), {}, {}, ictx)
-    if res.is_exception():
-        return res
-    return Result(args[0] if res.get_value() else args[1])
-
-
-@check_result
 def _do_isinstance(
         args: Tuple[Any, ...],
         ictx: ICtx) -> Result[bool]:
@@ -977,7 +960,7 @@ class EBuiltin(EPyType):
     BUILTIN_FNS = (
         'len', '__build_class__', 'getattr', 'setattr', 'iter', 'reversed',
         'zip', 'next',
-        'isinstance', 'issubclass', 'hasattr', 'any', 'min', 'callable',
+        'isinstance', 'issubclass', 'hasattr', 'any', 'min', 'max', 'callable',
         # object
         'object.__init__', 'object.__str__', 'object.__setattr__',
         'object.__format__', 'object.__reduce_ex__', 'object.__ne__',
@@ -1003,6 +986,7 @@ class EBuiltin(EPyType):
         # list
         'list.__new__', 'list.__init__', 'list.__eq__', 'list.append',
         'list.extend', 'list.clear', 'list.__contains__', 'list.__iter__',
+        'list.__setitem__',
         # tuple
         'tuple.__new__', 'tuple.__eq__', 'tuple.__lt__',
     )
@@ -1097,8 +1081,6 @@ class EBuiltin(EPyType):
             return Result(chr(*args))
         if self.name == 'len':
             return _do_len(args, ictx)
-        if self.name == 'min':
-            return _do_min(args, ictx)
         if self.name == 'isinstance':
             return _do_isinstance(args, ictx)
         if self.name == 'issubclass':
@@ -1430,17 +1412,14 @@ def do_getitem(args: Tuple[Any, ...], ictx: ICtx) -> Result[Any]:
 def do_setitem(args: Tuple[Any, ...], ictx: ICtx) -> Result[None]:
     assert len(args) == 3, args
     o, name, value = args
-    log('eo:do_setitem()', f'o: {o} name: {name} value: {value}')
-    if not isinstance(o, EPyObject):
-        operator.setitem(o, name, value)
-        return Result(None)
-    if o.hasattr('__setitem__'):
-        f = o.getattr('__setitem__', ictx).get_value()
-        res = ictx.call(f, (args[1], args[2]), {}, {}, globals_=f.globals_)
+    hsi = do_hasattr((o, '__setitem__'), ictx).get_value()
+    if hsi:
+        f = do_getattr((o, '__setitem__'), {}, ictx).get_value()
+        res = ictx.call(f, (name, value), {}, {})
         if res.is_exception():
             return res
         return Result(None)
-    raise NotImplementedError(o, name)
+    raise NotImplementedError(o, name, value)
 
 
 @check_result
@@ -1491,7 +1470,7 @@ def do_getattr(args: Tuple[Any, ...],
     if type(o) is tuple and attr == '__class__':
         return Result(get_guest_builtin('tuple'))
     clsname = o.__class__.__name__
-    if (type(o) in (int, str, tuple)
+    if (type(o) in (int, str, tuple, list)
             and f'{clsname}.{attr}' in EBuiltin.BUILTIN_FNS):
         return Result(get_guest_builtin_self(f'{clsname}.{attr}', o))
     if not isinstance(o, EPyObject):
