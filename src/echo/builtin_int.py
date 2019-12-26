@@ -78,6 +78,18 @@ def _do_int_add(
     return Result(_resolve(args[0]) + _resolve(args[1]))
 
 
+@register_builtin('int.__radd__')
+@check_result
+def _do_int_add(
+        args: Tuple[Any, ...],
+        kwargs: Dict[Text, Any],
+        ictx: ICtx) -> Result[Any]:
+    assert len(args) == 2, args
+    assert not kwargs
+    assert isinstance(args[1], int)  # TODO
+    return Result(_resolve(args[1]) + _resolve(args[0]))
+
+
 @register_builtin('int.__bool__')
 @check_result
 def _do_int_add(

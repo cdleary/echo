@@ -962,12 +962,17 @@ class EBuiltin(EPyType):
         'zip', 'next',
         'isinstance', 'issubclass', 'hasattr', 'any', 'min', 'max', 'callable',
         # object
-        'object.__init__', 'object.__str__', 'object.__setattr__',
-        'object.__format__', 'object.__reduce_ex__', 'object.__ne__',
-        'object.__new__', 'object.__repr__',
+        'object.__new__', 'object.__init__',
+        'object.__str__',
+        'object.__repr__',
+        'object.__setattr__',
+        'object.__format__', 'object.__reduce_ex__',
+        'object.__ne__',
         # type
-        'type.__init__', 'type.__str__', 'type.__new__', 'type.__subclasses__',
-        'type.mro', 'type.__call__', 'type.__repr__',
+        'type.__new__', 'type.__init__',
+        'type.__str__', 'type.__repr__',
+        'type.__subclasses__',
+        'type.mro', 'type.__call__',
         # str
         'str.maketrans', 'str.join',
         # dict
@@ -977,18 +982,23 @@ class EBuiltin(EPyType):
         'dict.fromkeys', 'dict.update', 'dict.setdefault',
         'dict.pop', 'dict.get',
         # int
-        'int.__new__', 'int.__add__', 'int.__init__', 'int.__sub__',
-        'int.__repr__', 'int.__str__', 'int.__int__',
-        'int.__and__', 'int.__rand__', 'int.__mul__',
-        'int.__rmul__', 'int.__bool__',
+        'int.__new__', 'int.__init__',
+        'int.__add__', 'int.__radd__',
+        'int.__sub__', 'int.__rsub__',
+        'int.__and__', 'int.__rand__',
+        'int.__mul__', 'int.__rmul__',
+        'int.__bool__', 'int.__repr__', 'int.__str__', 'int.__int__',
         # int cmp
         'int.__eq__', 'int.__lt__', 'int.__ge__', 'int.__le__', 'int.__gt__',
         # list
-        'list.__new__', 'list.__init__', 'list.__eq__', 'list.append',
-        'list.extend', 'list.clear', 'list.__contains__', 'list.__iter__',
+        'list.__new__', 'list.__init__',
+        'list.__eq__',
+        'list.append', 'list.extend', 'list.clear',
+        'list.__contains__', 'list.__iter__',
         'list.__setitem__',
         # tuple
-        'tuple.__new__', 'tuple.__eq__', 'tuple.__lt__',
+        'tuple.__new__', 'tuple.__init__',
+        'tuple.__eq__', 'tuple.__lt__',
     )
 
     _registry: Dict[Text, Tuple[Callable, Optional[type]]] = {}
@@ -1113,7 +1123,8 @@ class EBuiltin(EPyType):
                 '__setitem__', '__delitem__', '__contains__', '__iter__'):
             return AttrWhere.SELF_SPECIAL
         if self.name == 'int' and name in (
-                '__add__', '__init__', '__repr__', '__sub__', '__lt__',
+                '__add__', '__radd__',
+                '__init__', '__repr__', '__sub__', '__lt__',
                 '__int__', '__eq__', '__and__', '__rand__', '__mul__',
                 '__rmul__', '__bool__', '__ge__', '__le__', '__gt__'):
             return AttrWhere.SELF_SPECIAL
@@ -1165,41 +1176,13 @@ class EBuiltin(EPyType):
             if name == 'join':
                 return Result(get_guest_builtin('str.join'))
 
+        if self.name in ('str', 'int', 'tuple', 'list', 'type', 'dict',
+                         'object'):
+            fullname = f'{self.name}.{name}'
+            if fullname in self.BUILTIN_FNS:
+                return Result(get_guest_builtin(fullname))
+
         if self.name == 'int':
-            if name == '__new__':
-                return Result(get_guest_builtin('int.__new__'))
-            if name == '__add__':
-                return Result(get_guest_builtin('int.__add__'))
-            if name == '__init__':
-                return Result(get_guest_builtin('int.__init__'))
-            if name == '__repr__':
-                return Result(get_guest_builtin('int.__repr__'))
-            if name == '__str__':
-                return Result(get_guest_builtin('int.__str__'))
-            if name == '__sub__':
-                return Result(get_guest_builtin('int.__sub__'))
-            if name == '__lt__':
-                return Result(get_guest_builtin('int.__lt__'))
-            if name == '__int__':
-                return Result(get_guest_builtin('int.__int__'))
-            if name == '__and__':
-                return Result(get_guest_builtin('int.__and__'))
-            if name == '__bool__':
-                return Result(get_guest_builtin('int.__bool__'))
-            if name == '__mul__':
-                return Result(get_guest_builtin('int.__mul__'))
-            if name == '__rmul__':
-                return Result(get_guest_builtin('int.__rmul__'))
-            if name == '__rand__':
-                return Result(get_guest_builtin('int.__rand__'))
-            if name == '__eq__':
-                return Result(get_guest_builtin('int.__eq__'))
-            if name == '__ge__':
-                return Result(get_guest_builtin('int.__ge__'))
-            if name == '__le__':
-                return Result(get_guest_builtin('int.__le__'))
-            if name == '__gt__':
-                return Result(get_guest_builtin('int.__gt__'))
             if name == '__dict__':
                 return Result({
                     '__new__': get_guest_builtin('int.__new__'),
@@ -1212,61 +1195,13 @@ class EBuiltin(EPyType):
             if name == '__init__':
                 return Result(get_guest_builtin('Exception.__init__'))
 
-        if self.name == 'tuple':
-            if name == '__new__':
-                return Result(get_guest_builtin('tuple.__new__'))
-            if name == '__init__':
-                return Result(get_guest_builtin('tuple.__init__'))
-            if name == '__eq__':
-                return Result(get_guest_builtin('tuple.__eq__'))
-            if name == '__lt__':
-                return Result(get_guest_builtin('tuple.__lt__'))
-
-        if self.name == 'list':
-            if name == '__new__':
-                return Result(get_guest_builtin('list.__new__'))
-            if name == '__init__':
-                return Result(get_guest_builtin('list.__init__'))
-            if name == '__eq__':
-                return Result(get_guest_builtin('list.__eq__'))
-            if name == '__contains__':
-                return Result(get_guest_builtin('list.__contains__'))
-            if name == '__iter__':
-                return Result(get_guest_builtin('list.__iter__'))
-            if name == 'append':
-                return Result(get_guest_builtin('list.append'))
-            if name == 'clear':
-                return Result(get_guest_builtin('list.clear'))
-            if name == 'extend':
-                return Result(get_guest_builtin('list.extend'))
-
         if self.name == 'dict':
             if name == '__new__':
                 return Result(get_guest_builtin('dict.__new__'))
-            if name == '__init__':
-                return Result(get_guest_builtin('dict.__init__'))
-            if name == '__eq__':
-                return Result(get_guest_builtin('dict.__eq__'))
-            if name == '__getitem__':
-                return Result(get_guest_builtin('dict.__getitem__'))
-            if name == '__setitem__':
-                return Result(get_guest_builtin('dict.__setitem__'))
-            if name == '__contains__':
-                return Result(get_guest_builtin('dict.__contains__'))
-            if name == '__delitem__':
-                return Result(get_guest_builtin('dict.__delitem__'))
-            if name == 'update':
-                return Result(get_guest_builtin('dict.update'))
             if name == '__dict__':
                 return Result({
                     'fromkeys': get_guest_builtin('dict.fromkeys'),
                 })
-            if name == 'setdefault':
-                return Result(get_guest_builtin('dict.setdefault'))
-            if name == 'pop':
-                return Result(get_guest_builtin('dict.pop'))
-            if name == 'get':
-                return Result(get_guest_builtin('dict.get'))
 
         if (self.name in self.BUILTIN_FNS
                 and name == '__get__'):
@@ -1278,14 +1213,6 @@ class EBuiltin(EPyType):
             return Result(self)
 
         if self.name == 'object':
-            if name == '__new__':
-                return Result(get_guest_builtin('object.__new__'))
-            if name == '__init__':
-                return Result(get_guest_builtin('object.__init__'))
-            if name == '__str__':
-                return Result(get_guest_builtin('object.__str__'))
-            if name == '__repr__':
-                return Result(get_guest_builtin('object.__repr__'))
             if name == '__format__':
                 return Result(get_guest_builtin('object.__format__'))
             if name == '__reduce_ex__':
@@ -1296,26 +1223,10 @@ class EBuiltin(EPyType):
                 return Result(())
             if name == '__dict__':  # Fake it for now.
                 return Result({})
-            if name == '__setattr__':
-                return Result(get_guest_builtin('object.__setattr__'))
 
         if self.name == 'type':
-            if name == '__new__':
-                return Result(get_guest_builtin('type.__new__'))
-            if name == '__init__':
-                return Result(get_guest_builtin('type.__init__'))
             if name == '__name__':
                 return Result(get_guest_builtin('type.__name__'))
-            if name == '__repr__':
-                return Result(get_guest_builtin('type.__repr__'))
-            if name == '__call__':
-                return Result(get_guest_builtin('type.__call__'))
-            if name == '__str__':
-                return Result(get_guest_builtin('type.__str__'))
-            if name == '__subclasses__':
-                return Result(get_guest_builtin('type.__subclasses__'))
-            if name == 'mro':
-                return Result(get_guest_builtin('type.mro'))
             if name == '__dict__':  # Fake it for now.
                 return Result({})
 
