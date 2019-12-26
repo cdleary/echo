@@ -976,7 +976,7 @@ class EBuiltin(EPyType):
     )
     BUILTIN_FNS = (
         'len', '__build_class__', 'getattr', 'setattr', 'iter', 'reversed',
-        'zip',
+        'zip', 'next',
         'isinstance', 'issubclass', 'hasattr', 'any', 'min', 'callable',
         # object
         'object.__init__', 'object.__str__', 'object.__setattr__',

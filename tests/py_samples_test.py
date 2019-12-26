@@ -25,7 +25,6 @@ EVM_FAILING_SAMPLES = [
     'simple_repr_udt',
     'type_subclass_of_abc',
     'import_textwrap',
-    'sequence_iteration',
     'setitem_slice_udt',
 ]
 

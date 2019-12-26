@@ -3,7 +3,7 @@ import weakref
 from typing import Text, Tuple, Any, Dict, Optional
 
 from echo.elog import log
-from echo.epy_object import EPyObject
+from echo.epy_object import EPyObject, AttrWhere, EPyType
 from echo.interp_result import Result, ExceptionData, check_result
 from echo import interp_routines
 from echo.eobjects import (
@@ -18,6 +18,81 @@ _ITER_BUILTIN_TYPES = (
     type({}.items()), list, type(reversed([])), type(range(0, 0)),
     set, type(zip((), ())), frozenset, weakref.WeakSet, dict,
 )
+
+
+class SeqIterType(EPyType):
+    def __init__(self):
+        self._dict = {}
+
+    def __repr__(self) -> Text:
+        return "<eclass 'iterator'>"
+
+    def get_type(self) -> EPyObject:
+        return get_guest_builtin('type')
+
+    def get_mro(self) -> Tuple[EPyObject, ...]:
+        return (self, get_guest_builtin('object'))
+
+    def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
+        if name == '__mro__':
+            return Result(self.get_mro())
+        if name == '__dict__':
+            return Result(self._dict)
+        raise NotImplementedError(self, name)
+
+    def setattr(self, name: Text, value: Any) -> Any:
+        raise NotImplementedError
+
+    def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
+        if name in ('__mro__', '__dict__'):
+            return AttrWhere.SELF_SPECIAL
+        return None
+
+
+SeqIterType.singleton = SeqIterType()
+
+
+class SeqIter(EPyObject):
+    def __init__(self, subject: EPyObject):
+        self.subject = subject
+        self.next_index = 0
+
+    def get_type(self) -> EPyObject:
+        return SeqIterType.singleton
+
+    def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
+        if name == '__next__':
+            return Result(EMethod(
+                NativeFunction(self.next, 'seqiter.__next__'),
+                bound_self=self))
+        raise NotImplementedError(self, name)
+
+    def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
+        if name == '__next__':
+            return AttrWhere.SELF_SPECIAL
+        return None
+
+    def setattr(self, name: Text, value: Any) -> Any:
+        raise NotImplementedError(self, name, value)
+
+    def next(self, args: Tuple[Any, ...],
+             kwargs: Dict[Text, Any],
+             locals_dict: Dict[Text, Any],
+             ictx: ICtx) -> Result[Any]:
+        assert len(args) == 1 and not kwargs, (args, kwargs)
+        gi = self.subject.getattr('__getitem__', ictx)
+        if gi.is_exception():
+            return gi
+        gi = gi.get_value()
+        res = gi.invoke((self.next_index,), {}, {}, ictx)
+        if (res.is_exception() and
+                isinstance(res.get_exception().exception,
+                           (IndexError, StopIteration))):
+            return Result(ExceptionData(None, None, StopIteration()))
+        if res.is_exception():
+            return res
+        self.next_index += 1
+        return res
 
 
 @register_builtin('iter')
@@ -37,8 +112,16 @@ def _do_iter(args: Tuple[Any, ...],
         iter_f = iter_f.get_value()
         return iter_f.invoke((), {}, {}, ictx)
 
-    if isinstance(args[0], EPyObject) and hasattr(args[0], 'iter'):
-        return args[0].iter(ictx)
+    if isinstance(args[0], EPyObject):
+        if hasattr(args[0], 'iter'):
+            return args[0].iter(ictx)
+
+        if args[0].hasattr('__getitem__'):
+            return Result(SeqIter(args[0]))
+
+        type_name = args[0].get_type().name
+        return Result(ExceptionData(
+            None, None, TypeError(f'{type_name!r} object is not iterable')))
 
     raise NotImplementedError(args[0], type(args[0]))
 

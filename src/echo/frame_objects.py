@@ -55,6 +55,13 @@ class UnboundLocalSentinel:
     pass
 
 
+# For nulls that appear in the CPython stack we push a sentinel value that
+# means the same thing.
+class StackNullSentinel:
+    def __repr__(self):
+        return '<null>'
+
+
 # Indicates we should not push the result of executing some bytecode onto the
 # stack, but allows us to use our normal result type for signaling errors.
 class NoStackPushSentinel:
@@ -152,6 +159,8 @@ class StatefulFrame:
                                                  BlockKind.SETUP_FINALLY)):
             self.block_stack.pop()
 
+        do_type = get_guest_builtin('type')
+
         if (self.block_stack and
                 self.block_stack[-1].kind == BlockKind.SETUP_EXCEPT):
             # We wound up at an except block, pop back to the right value-stack
@@ -160,9 +169,13 @@ class StatefulFrame:
             while len(self.stack) > self.block_stack[-1].level:
                 self._pop()
             assert isinstance(self.exception_data, ExceptionData)
+            self._push(StackNullSentinel)
+            self._push(StackNullSentinel)
+            self._push(None)
             self._push(self.exception_data.traceback)
             self._push(self.exception_data.exception)
-            self._push(self.exception_data.exception)
+            self._push(do_type.invoke((self.exception_data.exception,), {}, {},
+                                      self.ictx).get_value())
             # The block stack entry transmorgifies into an EXCEPT_HANDLER.
             self.block_stack[-1].kind = BlockKind.EXCEPT_HANDLER
             self.block_stack[-1].handler = -1
@@ -176,12 +189,11 @@ class StatefulFrame:
             self.pc = self.block_stack[-1].handler
             while len(self.stack) > self.block_stack[-1].level:
                 self._pop()
-            self._push(UnboundLocalSentinel)
-            self._push(UnboundLocalSentinel)
+            self._push(StackNullSentinel)
+            self._push(StackNullSentinel)
             self._push(None)
             self._push(exception_data.traceback)
             self._push(exception_data.exception)
-            do_type = get_guest_builtin('type')
             self._push(do_type.invoke((exception_data.exception,), {}, {},
                                       self.ictx).get_value())
             # The block stack entry transmorgifies into an EXCEPT_HANDLER.
@@ -361,6 +373,8 @@ class StatefulFrame:
         assert popped.kind in (BlockKind.SETUP_EXCEPT,
                                BlockKind.EXCEPT_HANDLER), (
             'Popped non-except block.', popped)
+        while len(self.stack) > popped.level:
+            self._pop()
 
     def _run_SETUP_FINALLY(self, arg, argval):
         # "Pushes a try block from a try-except clause onto the block stack.
@@ -437,10 +451,10 @@ class StatefulFrame:
             self.stack[-7] = tb2
             self.stack[-6] = exc2
             self.stack[-5] = tp2
-            self.stack[-4] = UnboundLocalSentinel
+            self.stack[-4] = StackNullSentinel
             self.block_stack[-1].level -= 1
 
-        assert tb is not UnboundLocalSentinel
+        assert tb is not StackNullSentinel
         res = self.ictx.call(exit_func, (exc, val, tb), {}, {})
         if res.is_exception():
             return res
@@ -730,7 +744,7 @@ class StatefulFrame:
         elif status is None:
             pass
         else:
-            raise NotImplementedError
+            raise NotImplementedError(repr(status))
 
     def _run_UNARY_NOT(self, arg, argval) -> None:
         arg = self._pop()
@@ -856,7 +870,7 @@ class StatefulFrame:
                     obj=obj, name=argval, value=attr_result.get_value())):
             self._push(obj)
         else:
-            self._push(UnboundLocalSentinel)
+            self._push(StackNullSentinel)
 
     def _run_CALL_METHOD(self, arg, argval):
         # Note: new in 3.7. See also _run_LOAD_METHOD
@@ -866,7 +880,7 @@ class StatefulFrame:
         args = self._pop_n(positional_argc, tos_is_0=False)
         self_value = self._pop()
         method = self._pop()
-        if self_value is not UnboundLocalSentinel:
+        if self_value is not StackNullSentinel:
             args = (self_value,) + args
         log('bc:cm', f'method: {method}')
         log('bc:cm', f'args: {args}')
@@ -972,8 +986,11 @@ class StatefulFrame:
         for i, item in enumerate(reversed(self.stack)):
             item_type = do_type.invoke((item,), {}, {},
                                        self.ictx).get_value()
-            print(' ' * 8, '  TOS{}: {!r} :: {}'.format(i, item_type,
-                  trace_util.remove_at_hex(repr(item))), file=sys.stderr)
+            s = '{!r} :: {}'.format(
+                item_type, trace_util.remove_at_hex(repr(item)))
+            if item is StackNullSentinel:
+                s = '<null>'
+            print(' ' * 8, '  TOS{}: {}'.format(i, s), file=sys.stderr)
 
         if self.block_stack:
             print(' ' * 8, 'f_iblock: {}'.format(len(self.block_stack)),
