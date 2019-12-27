@@ -24,7 +24,6 @@ EVM_FAILING_SAMPLES = [
     'prepare_hook_user_type',
     'simple_repr_udt',
     'type_subclass_of_abc',
-    'import_textwrap',
 ]
 
 

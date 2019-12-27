@@ -176,6 +176,7 @@ def _do_int_str(
 
 _COMPARE_OP_DATA = [
     ('__eq__', operator.eq),
+    ('__ne__', operator.ne),
     ('__lt__', operator.lt),
     ('__ge__', operator.ge),
     ('__le__', operator.le),

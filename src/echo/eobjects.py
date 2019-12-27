@@ -989,7 +989,8 @@ class EBuiltin(EPyType):
         'int.__mul__', 'int.__rmul__',
         'int.__bool__', 'int.__repr__', 'int.__str__', 'int.__int__',
         # int cmp
-        'int.__eq__', 'int.__lt__', 'int.__ge__', 'int.__le__', 'int.__gt__',
+        'int.__eq__', 'int.__ne__', 'int.__lt__', 'int.__ge__', 'int.__le__',
+        'int.__gt__',
         # list
         'list.__new__', 'list.__init__',
         'list.__eq__',

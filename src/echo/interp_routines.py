@@ -38,6 +38,7 @@ OPNAME_TO_SPECIAL_RHS = {
 }
 COMPARE_TO_SPECIAL = {
     '==': '__eq__',
+    '!=': '__ne__',
     '<': '__lt__',
     '>': '__gt__',
     '>=': '__ge__',

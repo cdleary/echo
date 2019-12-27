@@ -17,5 +17,6 @@ assert (i >  41) is True
 assert (i <= 43) is True
 assert (i <  43) is True
 assert (i == 42) is True
+assert (i != 42) is False
 
 assert i < 43
