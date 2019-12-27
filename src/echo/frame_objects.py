@@ -385,8 +385,13 @@ class StatefulFrame:
             len(self.stack)))
 
     def _run_DELETE_NAME(self, arg, argval):
+        log('fo:dn', f'argval: {argval} code.co_names: {self.code.co_names} '
+                     f'locals: {self.locals_} globals: {self.globals_}')
         if self.in_function:
-            self.locals_[arg] = UnboundLocalSentinel
+            if self.locals_dict is not None:
+                del self.locals_dict[argval]
+            else:
+                self.locals_[arg] = UnboundLocalSentinel
         else:
             del self.globals_[argval]
 
@@ -749,6 +754,14 @@ class StatefulFrame:
     def _run_UNARY_NOT(self, arg, argval) -> None:
         arg = self._pop()
         self._push(self._is_falsy(arg))
+
+    def _run_UNARY_INVERT(self, arg, argval) -> Result[Any]:
+        arg = self._pop()
+        return interp_routines.run_unop('UNARY_INVERT', arg, self.ictx)
+
+    def _run_UNARY_NEGATIVE(self, arg, argval) -> Result[Any]:
+        arg = self._pop()
+        return interp_routines.run_unop('UNARY_NEGATIVE', arg, self.ictx)
 
     def _run_binary(self, opname) -> Result[Any]:
         rhs = self._pop()

@@ -27,12 +27,14 @@ def _do_int(
         args: Tuple[Any, ...],
         kwargs: Dict[Text, Any],
         ictx: ICtx) -> Result[Any]:
-    assert len(args) == 1 and not kwargs, (args, kwargs)
+    assert 1 <= len(args) <= 2 and not kwargs, (args, kwargs)
     if isinstance(args[0], EPyObject):
+        assert len(args) == 1 and not kwargs, (args, kwargs)
         int_res = args[0].getattr('__int__', ictx)
         if int_res.is_exception():
             return int_res
         return int_res.get_value().invoke((), {}, {}, ictx)
+
     try:
         return Result(int(*args, **kwargs))
     except ValueError as e:

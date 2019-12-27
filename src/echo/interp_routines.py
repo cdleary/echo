@@ -146,6 +146,18 @@ _BINARY_OPS = {
     'BINARY_TRUE_DIVIDE': operator.truediv,
     'BINARY_FLOOR_DIVIDE': operator.floordiv,
 }
+_UNARY_OPS = {
+    'UNARY_INVERT': operator.invert,
+    'UNARY_NEGATIVE': operator.neg,
+}
+
+
+@check_result
+def run_unop(opname: Text, arg: Any, ictx: ICtx) -> Result[Any]:
+    op = _UNARY_OPS[opname]
+    if type(arg) in BUILTIN_VALUE_TYPES:
+        return Result(op(arg))
+    raise NotImplementedError(opname)
 
 
 @check_result
@@ -155,7 +167,7 @@ def run_binop(opname: Text, lhs: Any, rhs: Any, ictx: ICtx) -> Result[Any]:
         raise NotImplementedError(opname, lhs, rhs)
 
     if {type(lhs), type(rhs)} <= BUILTIN_VALUE_TYPES or (
-            type(lhs) in (list, dict, types.MappingProxyType)
+            type(lhs) in (list, dict, types.MappingProxyType, bytearray)
             and opname == 'BINARY_SUBSCR') or (
             type(lhs) == type(rhs) == list and opname == 'BINARY_ADD') or (
             type(lhs) == list and type(rhs) == int
