@@ -39,6 +39,7 @@ GUEST_BUILTINS = {
 }
 opcodeno = 0
 
+
 class WhyStatus(Enum):
     WHY_NOT = 0x01        # No error.
     WHY_EXCEPTION = 0x02  # Exception occurred.
@@ -47,9 +48,6 @@ class WhyStatus(Enum):
     WHY_CONTINUE = 0x20   # 'continue' statement.
     WHY_YIELD = 0x40      # 'yield' operator.
     WHY_SILENCED = 0x80   # Exception silenced by 'with'.
-
-#ALL_WHYS = set([WHY_NOT, WHY_EXCEPTION, WHY_RETURN, WHY_BREAK, WHY_CONTINUE,
-#                WHY_YIELD, WHY_SILENCED])
 
 
 # Use a sentinel value (this class object) to indicate when
@@ -181,7 +179,8 @@ class StatefulFrame:
         if val is StackNullSentinel:
             exception_data = None
         else:
-            exception_data = ExceptionData(parameter=ty, exception=val, traceback=tb)
+            exception_data = ExceptionData(parameter=ty, exception=val,
+                                           traceback=tb)
         log('fo:ueh', f'new exception data: {exception_data}')
         self.ictx.exc_info = exception_data
 
@@ -192,8 +191,8 @@ class StatefulFrame:
         while self.block_stack:
             if (self.block_stack[-1].kind in (BlockKind.SETUP_EXCEPT,
                                               BlockKind.SETUP_FINALLY)):
-                # We wound up at an except block, pop back to the right value-stack
-                # depth and start running the handler.
+                # We wound up at an except block, pop back to the right
+                # value-stack depth and start running the handler.
                 self.pc = self.block_stack[-1].handler
                 while len(self.stack) > self.block_stack[-1].level:
                     self._pop()
@@ -752,13 +751,11 @@ class StatefulFrame:
                 return
 
             raise NotImplementedError(status)
-            assert why not in (WhyStatus.WHY_YIELD, WhyStatus.WHY_EXCEPTION), why
-            if why in (WhyStatus.WHY_RETURN, WhyStatus.WHY_CONTINUE):
-                retval = self._pop()
         elif self._eissubclass(status, get_guest_builtin('BaseException')):
             exc = self._pop()
             tb = self._pop()
-            exception_data = ExceptionData(traceback=tb, parameter=status, exception=exc)
+            exception_data = ExceptionData(traceback=tb, parameter=status,
+                                           exception=exc)
             log('bc:ef', f'END_FINALLY exception_data {exception_data!r}')
             return Result(exception_data)
         elif status is None:
@@ -997,7 +994,8 @@ class StatefulFrame:
     def _dump_inst(self, instruction: dis.Instruction) -> None:
         global opcodeno
         if instruction.starts_line:
-            print(f'{self.code.co_filename}:{instruction.starts_line} :: {self.code.co_name}',
+            print(f'{self.code.co_filename}:{instruction.starts_line}'
+                  f' :: {self.code.co_name}',
                   file=sys.stderr)
         if os.getenv('ECHO_DUMP_INSTS') == 'lines':
             return

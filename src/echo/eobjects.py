@@ -491,8 +491,8 @@ class EClass(EPyType):
 
     def __repr__(self) -> Text:
         if isinstance(self.dict_, dict) and '__module__' in self.dict_:
-            return '<{}class \'{}.{}\'>'.format(E_PREFIX,
-                self.dict_['__module__'], self.name)
+            return '<{}class \'{}.{}\'>'.format(
+                E_PREFIX, self.dict_['__module__'], self.name)
         return '<class \'{}\">'.format(E_PREFIX, self.name)
 
     def get_type(self) -> 'EClass':
@@ -774,7 +774,8 @@ def _do_isinstance(
         # TODO(leary) How does the real type builtin make it here?
         return Result(isinstance(args[0], args[1]))
 
-    if isinstance(args[0], BaseException) and args[1] is get_guest_builtin('BaseException'):
+    if (isinstance(args[0], BaseException) and
+            args[1] is get_guest_builtin('BaseException')):
         return Result(True)
 
     if is_tuple_builtin(args[1]):
@@ -820,7 +821,7 @@ def _do_isinstance(
         return Result(type(args[0]) in args[1].get_mro())
 
     if (isinstance(args[0], EPyObject) and
-        isinstance(args[1], EPyType)):
+            isinstance(args[1], EPyType)):
         return Result(args[1] in args[0].get_type().get_mro())
 
     if isinstance(args[0], EPyObject):
