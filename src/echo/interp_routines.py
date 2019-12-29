@@ -113,6 +113,7 @@ BUILTIN_VALUE_TYPES = {
     slice,
     set,
     type(None),
+    type(sys.version_info),
 }
 CODE_ATTRS = [
     'co_argcount', 'co_cellvars', 'co_code', 'co_consts', 'co_filename',

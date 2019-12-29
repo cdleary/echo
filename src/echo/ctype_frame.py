@@ -153,7 +153,7 @@ class CtypeFrame:
                     obj = self._id2obj(value)
                     printer('  LP{}: {!r} :: {!r}'.format(i, type(obj), obj))
 
-        printer(' stack (%d):' % stack_items)
+        printer(' stack (%d):%s' % (stack_items, ' empty' if not stack_items else ''))
         for i in range(stack_items):
             stack_value = self.get_value_stack_as_ptr()[stack_items-i-1]
             if stack_value == 0:

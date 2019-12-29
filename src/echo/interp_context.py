@@ -13,6 +13,7 @@ class ICtx:
         interp_state.sys_modules['builtins'] = ebuiltins
         self.ebuiltins = ebuiltins
         self.desc_count = 0
+        self.exc_info = None
 
     def call(self, *args, **kwargs):
         return self.do_call_callback(*args, **kwargs, ictx=self)

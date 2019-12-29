@@ -14,7 +14,7 @@ bytearray memoryview bytes
 NotImplemented StopIteration
 print globals abs ord chr
 NameError AttributeError KeyError TypeError IndexError ImportError
-NotImplementedError ValueError
+NotImplementedError ValueError AssertionError
 Warning PendingDeprecationWarning ImportWarning ResourceWarning
 UserWarning DeprecationWarning""".split())
 

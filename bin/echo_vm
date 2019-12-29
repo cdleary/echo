@@ -83,10 +83,11 @@ def main() -> int:
 
     prior = os.environ.get('ECHO_DUMP_INSTS', '')
     os.environ['ECHO_DUMP_INSTS'] = ''
-    assert not import_routines.run_IMPORT_NAME('fake', 0, (), 'types', dict(__name__='types'), ictx).is_exception()
-    #assert not import_routines.run_IMPORT_NAME('fake', 0, (), 'collections', {}, ictx).is_exception()
-    #assert not import_routines.run_IMPORT_NAME('fake', 0, (), 'enum', {}, ictx).is_exception()
-    #assert not import_routines.run_IMPORT_NAME('fake', 0, (), 're', {}, ictx).is_exception()
+    #assert not import_routines.run_IMPORT_NAME('fake', 0, (), 'types', dict(__name__='types'), ictx).is_exception()
+    #assert not import_routines.run_IMPORT_NAME('fake', 0, (), 'collections', dict(__name__='collections'), ictx).is_exception()
+    #assert not import_routines.run_IMPORT_NAME('fake', 0, (), 'enum', dict(__name__='enum'), ictx).is_exception()
+    #assert not import_routines.run_IMPORT_NAME('fake', 0, (), 're', dict(__name__='re'), ictx).is_exception()
+    #assert not import_routines.run_IMPORT_NAME('fake', 0, (), 'warnings', dict(__name__='warnings'), ictx).is_exception()
     os.environ['ECHO_DUMP_INSTS'] = prior
 
     try:

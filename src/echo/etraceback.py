@@ -33,6 +33,9 @@ class ETraceback(EPyObject):
     def __init__(self, data: Tuple[Text, ...]):
         self.data = data
 
+    def __repr__(self) -> Text:
+        return '<etraceback object>'
+
     def get_type(self) -> EPyObject:
         return ETracebackType.singleton
 

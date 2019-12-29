@@ -204,8 +204,6 @@ def do_call(f,
             locals_dict: Dict[Text, Any],
             *,
             ictx: ICtx,
-            get_exception_data: Optional[
-                Callable[[], Optional[ExceptionData]]] = None,
             globals_: Dict[Text, Any] = None,
             in_function: bool = True
             ) -> Result[Any]:
@@ -222,13 +220,13 @@ def do_call(f,
         return Result(r)
 
     if f is sys.exc_info:
-        exception_data = get_exception_data()
+        exception_data = ictx.exc_info
         if exception_data is None:
-            return Result(None)
+            return Result((None, None, None))
         tb, p, exc = (exception_data.traceback, exception_data.parameter,
                       exception_data.exception)
         t = ETraceback(tuple(tb))
-        return Result((exc, p, t))
+        return Result((p, exc, t))
     if f is globals:
         return Result(globals_)
     elif isinstance(f, (EFunction, EMethod, EClassMethod, EStaticMethod,

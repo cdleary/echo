@@ -21,6 +21,8 @@ from echo.interp_result import Result, ExceptionData, check_result
 from echo.value import Value
 from echo.common import memoize
 
+E_PREFIX = 'e' if 'E_PREFIX' not in os.environ else os.environ['E_PREFIX']
+
 
 class EFunction(EPyObject):
     def __init__(self,
@@ -50,7 +52,7 @@ class EFunction(EPyObject):
         return EFunctionType.singleton
 
     def __repr__(self):
-        return '<efunction {} at {:#x}>'.format(self.name, id(self))
+        return '<{}function {} at {:#x}>'.format(E_PREFIX, self.name, id(self))
 
     @check_result
     def invoke(self,
@@ -182,7 +184,7 @@ class EAsyncGenerator(EPyObject):
 
 class EMethodType(EPyObject):
     def __repr__(self) -> Text:
-        return "<eclass 'method'>"
+        return "<{}class 'method'>".format(E_PREFIX)
 
     def get_type(self) -> EPyObject:
         return get_guest_builtin('type')
@@ -489,9 +491,9 @@ class EClass(EPyType):
 
     def __repr__(self) -> Text:
         if isinstance(self.dict_, dict) and '__module__' in self.dict_:
-            return '<eclass \'{}.{}\'>'.format(
+            return '<{}class \'{}.{}\'>'.format(E_PREFIX,
                 self.dict_['__module__'], self.name)
-        return '<eclass \'{}\">'.format(self.name)
+        return '<class \'{}\">'.format(E_PREFIX, self.name)
 
     def get_type(self) -> 'EClass':
         return self.metaclass or get_guest_builtin('type')
@@ -606,7 +608,7 @@ class EClass(EPyType):
 
 class EFunctionType(EPyType):
     def __repr__(self) -> Text:
-        return "<eclass 'function'>"
+        return "<{}class 'function'>".format(E_PREFIX)
 
     def get_type(self) -> EPyObject:
         return get_guest_builtin('type')
@@ -772,6 +774,9 @@ def _do_isinstance(
         # TODO(leary) How does the real type builtin make it here?
         return Result(isinstance(args[0], args[1]))
 
+    if isinstance(args[0], BaseException) and args[1] is get_guest_builtin('BaseException'):
+        return Result(True)
+
     if is_tuple_builtin(args[1]):
         if not isinstance(args[0], EPyObject):
             return Result(isinstance(args[0], tuple))
@@ -814,8 +819,12 @@ def _do_isinstance(
             and isinstance(args[1], EClass)):
         return Result(type(args[0]) in args[1].get_mro())
 
+    if (isinstance(args[0], EPyObject) and
+        isinstance(args[1], EPyType)):
+        return Result(args[1] in args[0].get_type().get_mro())
+
     if isinstance(args[0], EPyObject):
-        if isinstance(args[1], EClass):
+        if isinstance(args[1], (EClass, EBuiltin)):
             return Result(args[0].get_type() in args[1].get_mro())
         if args[0].get_type() == args[1]:
             return Result(True)
@@ -953,13 +962,13 @@ class EBuiltin(EPyType):
     """A builtin function/type in the echo VM."""
 
     BUILTIN_TYPES = (
-        'object', 'type', 'dict', 'tuple', 'list', 'int', 'classmethod',
-        'staticmethod', 'property', 'Exception', 'super', 'enumerate',
-        'str',
+        'object', 'type', 'classmethod',
+        'staticmethod', 'property', 'Exception', 'super', 'enumerate', 'map',
+        'str', 'dict', 'tuple', 'list', 'int', 'bool', 'BaseException',
     )
     BUILTIN_FNS = (
         'len', '__build_class__', 'getattr', 'setattr', 'iter', 'reversed',
-        'zip', 'next',
+        'zip', 'next', 'repr', 'exec', 'hash',
         'isinstance', 'issubclass', 'hasattr', 'any', 'min', 'max', 'callable',
         # object
         'object.__new__', 'object.__init__',
@@ -1033,9 +1042,9 @@ class EBuiltin(EPyType):
 
     def __repr__(self):
         if self.name in self.BUILTIN_TYPES:
-            return "<eclass '{}'>".format(self.name)
+            return "<{}class '{}'>".format(E_PREFIX, self.name)
         if self.name in self.BUILTIN_FNS and not self.bound_self:
-            return f'<ebuilt-in function {self.name}>'
+            return f'<{E_PREFIX}built-in function {self.name}>'
         return 'EBuiltin(name={!r}, bound_self={!r}, ...)'.format(
             self.name, self.bound_self)
 

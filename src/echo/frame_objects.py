@@ -13,6 +13,7 @@ from enum import Enum
 from echo.elog import log
 from echo.interp_context import ICtx
 from echo import import_routines
+from echo import etraceback
 from echo.eobjects import (
     ReturnKind, EBuiltin, EFunction, EPyObject,
     GuestCoroutine, EInstance, get_guest_builtin,
@@ -38,20 +39,26 @@ GUEST_BUILTINS = {
 }
 opcodeno = 0
 
-WHY_NOT = 0x01        # No error.
-WHY_EXCEPTION = 0x02  # Exception occurred.
-WHY_RETURN = 0x08     # 'return' statement.
-WHY_BREAK = 0x10      # 'break' statement.
-WHY_CONTINUE = 0x20   # 'continue' statement.
-WHY_YIELD = 0x40      # 'yield' operator.
-WHY_SILENCED = 0x80   # Exception silenced by 'with'.
-ALL_WHYS = set([WHY_NOT, WHY_EXCEPTION, WHY_RETURN, WHY_BREAK, WHY_CONTINUE,
-                WHY_YIELD, WHY_SILENCED])
+class WhyStatus(Enum):
+    WHY_NOT = 0x01        # No error.
+    WHY_EXCEPTION = 0x02  # Exception occurred.
+    WHY_RETURN = 0x08     # 'return' statement.
+    WHY_BREAK = 0x10      # 'break' statement.
+    WHY_CONTINUE = 0x20   # 'continue' statement.
+    WHY_YIELD = 0x40      # 'yield' operator.
+    WHY_SILENCED = 0x80   # Exception silenced by 'with'.
+
+#ALL_WHYS = set([WHY_NOT, WHY_EXCEPTION, WHY_RETURN, WHY_BREAK, WHY_CONTINUE,
+#                WHY_YIELD, WHY_SILENCED])
 
 
 # Use a sentinel value (this class object) to indicate when
 # UnboundLocalErrors have occurred.
 class UnboundLocalSentinel:
+    pass
+
+
+class Sentinel:
     pass
 
 
@@ -133,8 +140,6 @@ class StatefulFrame:
         self.locals_dict = locals_dict
         self.globals_ = globals_
         self.current_lineno = None  # type: Optional[int]
-        self.exception_data = None  # type: Optional[ExceptionData]
-        self.handling_exception_data = None  # type: Optional[ExceptionData]
         self.cellvars = cellvars
         self.consts = code.co_consts
         self.names = code.co_names
@@ -150,58 +155,71 @@ class StatefulFrame:
     def interp_state(self):
         return self.ictx.interp_state
 
+    def _etype(self, arg) -> Any:
+        do_type = get_guest_builtin('type')
+        return do_type.invoke((arg,), {}, {}, self.ictx).get_value()
+
+    def _eissubclass(self, t0, t1) -> bool:
+        do_issubclass = get_guest_builtin('issubclass')
+        r = do_issubclass.invoke((t0, t1), {}, {}, self.ictx).get_value()
+        assert isinstance(r, bool)
+        return r
+
+    def _eisinstance(self, o, t) -> bool:
+        do_issubclass = get_guest_builtin('isinstance')
+        r = do_issubclass.invoke((o, t), {}, {}, self.ictx).get_value()
+        assert isinstance(r, bool)
+        return r
+
+    def _unwind_except_handler(self, b: BlockInfo) -> None:
+        assert b.kind == BlockKind.EXCEPT_HANDLER, b
+        while len(self.stack) > b.level+3:
+            self._pop()
+        ty = self._pop()
+        val = self._pop()
+        tb = self._pop()
+        if val is StackNullSentinel:
+            exception_data = None
+        else:
+            exception_data = ExceptionData(parameter=ty, exception=val, traceback=tb)
+        log('fo:ueh', f'new exception data: {exception_data}')
+        self.ictx.exc_info = exception_data
+
     def _handle_exception(self, exception_data: ExceptionData) -> bool:
         """Returns whether the exception was handled in this function."""
         # Pop until we see an except block, or there's no block stack left.
         log('fo:he', f'handling exception; block stack: {self.block_stack}')
-        while (self.block_stack and
-               self.block_stack[-1].kind not in (BlockKind.SETUP_EXCEPT,
-                                                 BlockKind.SETUP_FINALLY)):
-            self.block_stack.pop()
+        while self.block_stack:
+            if (self.block_stack[-1].kind in (BlockKind.SETUP_EXCEPT,
+                                              BlockKind.SETUP_FINALLY)):
+                # We wound up at an except block, pop back to the right value-stack
+                # depth and start running the handler.
+                self.pc = self.block_stack[-1].handler
+                while len(self.stack) > self.block_stack[-1].level:
+                    self._pop()
+                if self.ictx.exc_info:
+                    log('fo:he', f'exc_info: {self.ictx.exc_info}')
+                    self._push(self.ictx.exc_info.traceback)
+                    self._push(self.ictx.exc_info.exception)
+                    self._push(self._etype(self.ictx.exc_info.exception))
+                else:
+                    self._push(StackNullSentinel)
+                    self._push(StackNullSentinel)
+                    self._push(None)
+                self._push(exception_data.traceback)
+                self._push(exception_data.exception)
+                self._push(self._etype(exception_data.exception))
+                # The block stack entry transmorgifies into an EXCEPT_HANDLER.
+                self.block_stack[-1].kind = BlockKind.EXCEPT_HANDLER
+                self.block_stack[-1].handler = -1
+                self.ictx.exc_info = exception_data
+                return True
 
-        do_type = get_guest_builtin('type')
+            if self.block_stack[-1].kind == BlockKind.EXCEPT_HANDLER:
+                self._unwind_except_handler(self.block_stack.pop())
+                continue
 
-        if (self.block_stack and
-                self.block_stack[-1].kind == BlockKind.SETUP_EXCEPT):
-            # We wound up at an except block, pop back to the right value-stack
-            # depth and start running the handler.
-            self.pc = self.block_stack[-1].handler
-            while len(self.stack) > self.block_stack[-1].level:
-                self._pop()
-            assert isinstance(self.exception_data, ExceptionData)
-            self._push(StackNullSentinel)
-            self._push(StackNullSentinel)
-            self._push(None)
-            self._push(self.exception_data.traceback)
-            self._push(self.exception_data.exception)
-            self._push(do_type.invoke((self.exception_data.exception,), {}, {},
-                                      self.ictx).get_value())
-            # The block stack entry transmorgifies into an EXCEPT_HANDLER.
-            self.block_stack[-1].kind = BlockKind.EXCEPT_HANDLER
-            self.block_stack[-1].handler = -1
-            self.handling_exception_data, self.exception_data = (
-                self.exception_data, None)
-            return True
-
-        if (self.block_stack and
-                self.block_stack[-1].kind == BlockKind.SETUP_FINALLY):
-            log('fo:he', f'handling finally: {self.block_stack[-1]}')
-            self.pc = self.block_stack[-1].handler
-            while len(self.stack) > self.block_stack[-1].level:
-                self._pop()
-            self._push(StackNullSentinel)
-            self._push(StackNullSentinel)
-            self._push(None)
-            self._push(exception_data.traceback)
-            self._push(exception_data.exception)
-            self._push(do_type.invoke((exception_data.exception,), {}, {},
-                                      self.ictx).get_value())
-            # The block stack entry transmorgifies into an EXCEPT_HANDLER.
-            self.block_stack[-1].kind = BlockKind.EXCEPT_HANDLER
-            self.block_stack[-1].handler = -1
-            self.handling_exception_data, self.exception_data = (
-                self.exception_data, None)
-            return True
+            raise NotImplementedError(self.block_stack[-1])
 
         return False
 
@@ -243,6 +261,7 @@ class StatefulFrame:
         res = self.ictx.get_ebuiltins().getattr(name, self.ictx)
         if not res.is_exception():
             return res
+        log('bc:globals', f'globals: {self.globals_.keys()}')
         return Result(ExceptionData(
             None, None, NameError(f'name {name!r} is not defined')))
 
@@ -292,7 +311,7 @@ class StatefulFrame:
     def _run_DELETE_SUBSCR(self, arg, argval):
         tos = self._pop()
         tos1 = self._pop()
-        if isinstance(tos1, (dict, list)):
+        if isinstance(tos1, (dict, list, type(os.environ))):
             del tos1[tos]
         elif isinstance(tos1, EPyObject):
             r = do_delitem((tos1, tos), self.ictx)
@@ -369,12 +388,7 @@ class StatefulFrame:
         self.stack = self.stack + self.stack[-1:]
 
     def _run_POP_EXCEPT(self, arg, argval):
-        popped = self.block_stack.pop()
-        assert popped.kind in (BlockKind.SETUP_EXCEPT,
-                               BlockKind.EXCEPT_HANDLER), (
-            'Popped non-except block.', popped)
-        while len(self.stack) > popped.level:
-            self._pop()
+        self._unwind_except_handler(self.block_stack.pop())
 
     def _run_SETUP_FINALLY(self, arg, argval):
         # "Pushes a try block from a try-except clause onto the block stack.
@@ -470,7 +484,7 @@ class StatefulFrame:
         res = self._pop()
         exc = self._pop()
         if res is True:
-            self._push(WHY_SILENCED)
+            self._push(WhyStatus.WHY_SILENCED)
         elif res is None:
             pass
         else:
@@ -614,7 +628,7 @@ class StatefulFrame:
                        f'args: {args}')
         result = self.do_call_callback(
             f, args, kwargs, locals_dict=self.locals_dict,
-            globals_=self.globals_, get_exception_data=self.get_exception_data)
+            globals_=self.globals_)
         assert isinstance(result, Result), (result, f)
         return result
 
@@ -643,7 +657,7 @@ class StatefulFrame:
     def _run_STORE_GLOBAL(self, arg, argval):
         self.globals_[argval] = self._pop()
 
-    def _run_MAKE_CLOSURE(self, arg, argval):
+    def _run_MAKE_CLOSURE(self, arg, argval) -> Result[Any]:
         # Note: this bytecode was removed in Python 3.6.
         name = self._pop()
         code = self._pop()
@@ -653,12 +667,15 @@ class StatefulFrame:
                       closure=freevar_cells)
         return Result(f)
 
-    def _run_LOAD_FAST(self, arg, argval):
+    def _run_LOAD_FAST(self, arg, argval) -> Result[Any]:
         v = self.locals_[arg]
         if v is UnboundLocalSentinel:
             msg = 'name {!r} is not defined'.format(argval)
             return Result(ExceptionData(None, None, NameError(msg)))
         return Result(v)
+
+    def _run_DELETE_FAST(self, arg, argval) -> None:
+        self.locals_[arg] = UnboundLocalSentinel
 
     def _run_IMPORT_NAME(self, arg, argval):
         fromlist = self._pop()
@@ -691,12 +708,7 @@ class StatefulFrame:
                     pass
             else:
                 return Result(self.locals_[arg])
-        try:
-            return self._get_global_or_builtin(argval)
-        except AttributeError:
-            msg = 'name {!r} is not defined'.format(argval)
-            return Result(ExceptionData(
-                None, None, NameError(msg)))
+        return self._get_global_or_builtin(argval)
 
     def _run_LOAD_ATTR(self, arg, argval) -> Result[Any]:
         obj = self._pop()
@@ -730,22 +742,25 @@ class StatefulFrame:
 
     def _run_END_FINALLY(self, arg, argval):
         status = self._pop()
+        log('bc:ef', f'END_FINALLY status {status!r}')
         do_issubclass = get_guest_builtin('issubclass')
-        if isinstance(status, int):
-            why = status
-            assert why not in (WHY_YIELD, WHY_EXCEPTION), why
-            if why in (WHY_RETURN, WHY_CONTINUE):
+        if isinstance(status, (int, WhyStatus)):
+            why = WhyStatus(status)
+
+            if why == WhyStatus.WHY_SILENCED:
+                self._unwind_except_handler(self.block_stack.pop())
+                return
+
+            raise NotImplementedError(status)
+            assert why not in (WhyStatus.WHY_YIELD, WhyStatus.WHY_EXCEPTION), why
+            if why in (WhyStatus.WHY_RETURN, WhyStatus.WHY_CONTINUE):
                 retval = self._pop()
-            if why == WHY_SILENCED:
-                b = self.block_stack.pop()
-                while len(self.stack) > b.level:
-                    self._pop()
-                why = WHY_NOT
-        elif do_issubclass.invoke((status, get_guest_builtin('BaseException')),
-                                  {}, {}, self.ictx).get_value():
+        elif self._eissubclass(status, get_guest_builtin('BaseException')):
             exc = self._pop()
             tb = self._pop()
-            why = WHY_EXCEPTION
+            exception_data = ExceptionData(traceback=tb, parameter=status, exception=exc)
+            log('bc:ef', f'END_FINALLY exception_data {exception_data!r}')
+            return Result(exception_data)
         elif status is None:
             pass
         else:
@@ -843,7 +858,7 @@ class StatefulFrame:
         to_call = self._pop()
         return self.do_call_callback(
             to_call, args, kwargs, self.locals_dict,
-            globals_=self.globals_, get_exception_data=self.get_exception_data)
+            globals_=self.globals_)
 
     def _run_SETUP_LOOP(self, arg, argval):
         self.block_stack.append(BlockInfo(
@@ -852,20 +867,24 @@ class StatefulFrame:
 
     def _run_RAISE_VARARGS(self, arg, argval):
         argc = arg
-        traceback, parameter, exception = (None, None, None)
-        if argc > 2:
-            traceback = self._pop()
-        if argc > 1:
-            parameter = self._pop()
-        if argc > 0:
-            exception = self._pop()
-        if (isinstance(exception, type)
-                and issubclass(exception, BaseException)):
-            exception = exception()
-        return Result(ExceptionData(traceback, parameter, exception))
+        cause, exc = Sentinel, Sentinel
+        if argc >= 2:
+            cause = self._pop()
+        if argc >= 1:
+            exc = self._pop()
+        if exc is Sentinel:  # Re-raise.
+            return Result(self.ictx.exc_info)
 
-    def get_exception_data(self) -> Optional[ExceptionData]:
-        return self.handling_exception_data
+        if (isinstance(exc, type) and issubclass(exc, BaseException)):
+            ty = exc
+            exc = ty()
+        elif self._eisinstance(exc, get_guest_builtin('BaseException')):
+            ty = self._etype(exc)
+        else:
+            ty = TypeError
+            exc = TypeError('exception must derive from BaseException')
+
+        return Result(ExceptionData([], ty, exc))
 
     def _run_LOAD_METHOD(self, arg, argval):
         # Note: New in 3.7. See also _run_CALL_METHOD
@@ -900,8 +919,7 @@ class StatefulFrame:
         log('bc:cm', f'self_value: {self_value}')
         return self.do_call_callback(
             method, args, {}, self.locals_dict,
-            globals_=self.globals_,
-            get_exception_data=self.get_exception_data)
+            globals_=self.globals_)
 
     def _run_CALL_FUNCTION_EX(self, arg, argval):
         if arg & 0x1:
@@ -917,8 +935,7 @@ class StatefulFrame:
             callargs = callargs.get_value()
         func = self._pop()
         return self.do_call_callback(
-            func, callargs, kwargs, self.locals_dict, globals_=self.globals_,
-            get_exception_data=self.get_exception_data)
+            func, callargs, kwargs, self.locals_dict, globals_=self.globals_)
 
     def _run_PRINT_EXPR(self, arg, argval):
         value = self._pop()
@@ -926,8 +943,7 @@ class StatefulFrame:
             if isinstance(value, EPyObject):
                 r = value.getattr('__repr__', self.ictx)
                 s = self.do_call_callback(
-                    r, (), {}, self.locals_dict, globals_=r.globals_,
-                    get_exception_data=self.get_exception_data)
+                    r, (), {}, self.locals_dict, globals_=r.globals_)
                 print(s)
             else:
                 print(repr(value))
@@ -981,7 +997,7 @@ class StatefulFrame:
     def _dump_inst(self, instruction: dis.Instruction) -> None:
         global opcodeno
         if instruction.starts_line:
-            print(f'{self.code.co_filename}:{instruction.starts_line}',
+            print(f'{self.code.co_filename}:{instruction.starts_line} :: {self.code.co_name}',
                   file=sys.stderr)
         if os.getenv('ECHO_DUMP_INSTS') == 'lines':
             return
@@ -993,12 +1009,10 @@ class StatefulFrame:
         if (instruction.opname == 'EXTENDED_ARG' or
                 os.getenv('ECHO_DUMP_INSTS') == 'nostack'):
             return
-        print(' ' * 8, ' stack ({}):'.format(len(self.stack)),
-              file=sys.stderr)
-        do_type = get_guest_builtin('type')
+        print(' ' * 8, ' stack ({}):{}'.format(len(self.stack),
+              ' empty' if len(self.stack) == 0 else ''), file=sys.stderr)
         for i, item in enumerate(reversed(self.stack)):
-            item_type = do_type.invoke((item,), {}, {},
-                                       self.ictx).get_value()
+            item_type = self._etype(item)
             s = '{!r} :: {}'.format(
                 item_type, trace_util.remove_at_hex(repr(item)))
             if item is StackNullSentinel:
@@ -1051,10 +1065,10 @@ class StatefulFrame:
             assert isinstance(result, Result), (
                 'Bytecode must return Result', instruction, 'got', result)
             if result.is_exception():
-                self.exception_data = result.get_exception()
-                self.exception_data.traceback.append(
+                exception_data = result.get_exception()
+                exception_data.traceback.append(
                     (self.code.co_filename, self.line))
-                if self._handle_exception(result.get_exception()):
+                if self._handle_exception(exception_data):
                     return None
                 else:
                     return result

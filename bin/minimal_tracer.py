@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import dis
 import optparse
@@ -6,19 +6,24 @@ import os
 import sys
 
 from echo import trace_util
-from echo.ctype_frame import CtypeFrame
+from echo import ctype_frame
 
 
 stack = True
 opcodeno = 0
+limit = None
+show_opcodeno = True
 
 
 def _print_inst(instruction, frame):
     global opcodeno
     if instruction.starts_line:
-        print('{}:{}'.format(frame.f_code.co_filename, frame.f_lineno))
-    print('{:5d} :: {:3d} {}'.format(opcodeno, instruction.offset, trace_util.remove_at_hex(str(instruction))))
+        print('{}:{} :: {}'.format(frame.f_code.co_filename, frame.f_lineno, frame.f_code.co_name))
+    opcode_leader = '{:5d} :: '.format(opcodeno) if show_opcodeno else ''
+    print('{}{:3d} {}'.format(opcode_leader, instruction.offset, trace_util.remove_at_hex(str(instruction))))
     opcodeno += 1
+    if limit is not None and opcodeno > limit:
+        sys.exit(0)
 
 
 def _print_stack(*args):
@@ -48,7 +53,7 @@ def note_trace(frame, event, arg):
                                if inst.offset > frame.f_lasti)
             _print_inst(instruction2, frame)
         if stack:
-            ctf = CtypeFrame(frame)
+            ctf = ctype_frame.CtypeFrame(frame)
             ctf.print_stack(do_localsplus=False, printer=_print_stack)
     elif event == 'return':
         #print('=>', repr(arg), repr(type(arg)))
@@ -59,13 +64,17 @@ def note_trace(frame, event, arg):
 
 
 def main():
-    global stack
+    global stack, limit, show_opcodeno
     parser = optparse.OptionParser()
     parser.add_option('--nostack', dest='stack', action='store_false', default=True, help='Do not show stack in dump')
+    parser.add_option('--noopcodeno', dest='opcodeno', action='store_false', default=True, help='Do not show opcodeno in dump')
+    parser.add_option('--limit', type=int, help='Limit opcode count to run')
     opts, args = parser.parse_args()
     assert len(args) == 1, args
     path = args[0]
     stack = opts.stack
+    limit = opts.limit
+    show_opcodeno = opts.opcodeno
     with open(path) as f:
         contents = f.read()
     globals_ = {'__name__': '__main__'}
@@ -79,7 +88,10 @@ def main():
     f = sys._getframe(0)
     code = compile(contents, os.path.realpath(path), 'exec')
     sys.settrace(note_trace)
-    exec(code, globals_)
+    try:
+        exec(code, globals_)
+    finally:
+        sys.settrace(None)
 
 
 if __name__ == '__main__':
