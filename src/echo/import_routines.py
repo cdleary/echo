@@ -152,8 +152,8 @@ def _find_absolute_import_path(module_name: Text,
 
 
 def _getattr_or_subimport(current_mod: ModuleT,
-                         fromlist_name: Text,
-                         ictx: ICtx) -> Result[Any]:
+                          fromlist_name: Text,
+                          ictx: ICtx) -> Result[Any]:
     """Either gets an attribute from a module or attempts a sub-import if no
     such attribute is available."""
     log(ictx, f'_getattr_or_subimport; current_mod: {current_mod} '
