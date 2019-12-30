@@ -78,7 +78,10 @@ def _do_dict_call(
             d.update(args[0])
             return Result(d)
 
-        ehasattr = lambda x, y: get_guest_builtin('hasattr').invoke((x, y), {}, {}, ictx).get_value()
+        def ehasattr(x, y):
+            return get_guest_builtin('hasattr').invoke(
+                (x, y), {}, {}, ictx).get_value()
+
         if ehasattr(args[0], 'keys'):
             raise NotImplementedError
 
