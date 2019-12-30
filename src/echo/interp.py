@@ -23,7 +23,7 @@ from echo.elog import log
 from echo.interp_result import Result, ExceptionData, check_result
 from echo.interp_context import ICtx
 from echo import import_routines
-from echo.arg_resolver import resolve_args
+from echo import arg_resolver
 from echo import code_attributes
 from echo.interpreter_state import InterpreterState
 from echo.ecell import ECell
@@ -108,7 +108,7 @@ def interp(code: types.CodeType,
 
     # Set up arguments as a precursor to establishing the locals.
     attrs = code_attributes.CodeAttributes.from_code(code, name)
-    arg_result = resolve_args(
+    arg_result = arg_resolver.resolve_args(
         attrs, args, kwargs, defaults, kwarg_defaults)
     if arg_result.is_exception():
         return Result(arg_result.get_exception())
@@ -116,6 +116,7 @@ def interp(code: types.CodeType,
     arg_locals, additional_local_count = arg_result.get_value()
 
     locals_ = (arg_locals + [UnboundLocalSentinel] * additional_local_count)
+    assert len(locals_) == attrs.nlocals, (len(locals_), attrs.nlocals)
     cellvars = tuple(ECell(name) for name in code.co_cellvars) + closure
 
     # Cellvars that match argument names get populated with the argument value,
@@ -204,7 +205,7 @@ def do_call(f,
             locals_dict: Dict[Text, Any],
             *,
             ictx: ICtx,
-            globals_: Dict[Text, Any] = None,
+            globals_: Optional[Dict[Text, Any]] = None,
             in_function: bool = True
             ) -> Result[Any]:
     log('interp:do_call', f'f: {f} args: {args} kwargs: {kwargs}')
@@ -240,7 +241,8 @@ def do_call(f,
     elif isinstance(f, EPartial):
         return f.invoke(args, kwargs, locals_dict, ictx)
     elif isinstance(f, EBuiltin):
-        return f.invoke(args, kwargs, locals_dict, ictx)
+        return f.invoke(args, kwargs, locals_dict, globals_=globals_,
+                        ictx=ictx)
     elif isinstance(f, EClass):
         return f.instantiate(args, kwargs, globals_=globals_, ictx=ictx)
     elif callable(f):

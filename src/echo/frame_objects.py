@@ -123,11 +123,13 @@ class StatefulFrame:
                  pc_to_instruction: List[Optional[dis.Instruction]],
                  pc_to_bc_width: List[Optional[int]],
                  locals_: List[Any],
-                 locals_dict: Dict[Text, Any],
+                 locals_dict: Optional[Dict[Text, Any]],
                  globals_: Dict[Text, Any],
                  cellvars: Tuple[ECell, ...],
                  in_function: bool,
                  ictx: ICtx):
+        assert len(locals_) == len(code.co_varnames), \
+            (len(locals_), len(code.co_varnames))
         self.code = code
         self.pc = 0
         self.stack = []
@@ -148,6 +150,14 @@ class StatefulFrame:
             self, ictx.interp_state, ictx.interp_callback)
         self.do_call_callback = wrap_with_push(
             self, ictx.interp_state, ictx.do_call_callback)
+
+    def get_locals_dict(self) -> Optional[Dict[Text, Any]]:
+        if self.locals_dict is not None:
+            return self.locals_dict
+        if not self.in_function:
+            return None
+        return {self.code.co_varnames[i]: v
+                for i, v in enumerate(self.locals_)}
 
     @property
     def interp_state(self):
@@ -626,7 +636,7 @@ class StatefulFrame:
         log('bc:call', f'{self.code.co_filename}:{self.current_lineno} f: {f} '
                        f'args: {args}')
         result = self.do_call_callback(
-            f, args, kwargs, locals_dict=self.locals_dict,
+            f, args, kwargs, locals_dict=self.get_locals_dict(),
             globals_=self.globals_)
         assert isinstance(result, Result), (result, f)
         return result

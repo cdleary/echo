@@ -1082,7 +1082,9 @@ class EBuiltin(EPyType):
                args: Tuple[Any, ...],
                kwargs: Dict[Text, Any],
                locals_dict: Dict[Text, Any],
-               ictx: ICtx) -> Result[Any]:
+               ictx: ICtx,
+               globals_: Optional[Dict[Text, Any]] = None) -> Result[Any]:
+        assert isinstance(ictx, ICtx), ictx
         if self.name == 'dict.keys':
             assert not args, args
             return Result(self.bound_self.keys())
@@ -1111,11 +1113,17 @@ class EBuiltin(EPyType):
         if self.name == 'repr':
             return _do_repr(args, ictx)
         if self.name == 'dir':
+            if not args and not kwargs:
+                return Result(sorted(list(
+                    globals_.keys() if locals_dict is None
+                    else locals_dict.keys())))
             return _do_dir(args, kwargs, ictx)
         if self.name == 'getattr':
             return do_getattr(args, kwargs, ictx)
         if self.name == 'setattr':
             return do_getattr(args, kwargs, ictx)
+
+        # Check if the builtin has been registered from an external location.
         if self.name in self._registry:
             if self.bound_self is not None:
                 args = (self.bound_self,) + args

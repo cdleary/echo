@@ -27,12 +27,13 @@ class _Sentinel:
 
 
 @check_result
-def resolve_args(attrs: code_attributes.CodeAttributes,
-                 args: Optional[Tuple[Any, ...]] = None,
-                 kwargs: Optional[Dict[Text, Any]] = None,
-                 defaults: Optional[Tuple[Any, ...]] = None,
-                 kwarg_defaults: Optional[Dict[Text, Any]] = None) -> Result[
-        Tuple[List[Any], int]]:
+def resolve_args(
+        attrs: code_attributes.CodeAttributes,
+        args: Optional[Tuple[Any, ...]] = None,
+        kwargs: Optional[Dict[Text, Any]] = None,
+        defaults: Optional[Tuple[Any, ...]] = None,
+        kwarg_defaults: Optional[Dict[Text, Any]] = None
+        ) -> Result[Tuple[List[Any], int]]:
     """Returns argument prefix that is pre-pended to local slots of a frame."""
     args = args or ()
     kwargs = kwargs or {}
@@ -49,6 +50,7 @@ def resolve_args(attrs: code_attributes.CodeAttributes,
     #   varnames        names of the arguments as in their definition signature
     #   kwonlyargcount  number of names after the '*' position
 
+    log('ar', f'code: {attrs.code}')
     log('ar:attrs', f'argcount:       {attrs.argcount}')
     log('ar:attrs', f'total_argcount: {attrs.total_argcount}')
     log('ar:attrs', f'kwonlyargcount: {attrs.kwonlyargcount}')
@@ -59,17 +61,17 @@ def resolve_args(attrs: code_attributes.CodeAttributes,
 
     # The functionality of this method is to populate these arg slots
     # appropriately.
-    arg_slots = [_Sentinel] * (attrs.total_argcount + attrs.starkwargs)
+    arg_slots = [_Sentinel] * attrs.total_argcount
 
     if attrs.starargs:
         # Note: somewhat surprisingly, the arg slot for the varargs doesn't
         # live at its corresponding position in the argument list; instead,
         # Python appears to put it as the last argument, always.
-        stararg_index = attrs.total_argcount-1
+        stararg_index = attrs.stararg_index
         arg_slots[stararg_index] = ()
     else:
         stararg_index = None
-        permitted_args = attrs.total_argcount - attrs.kwonlyargcount
+        permitted_args = attrs.total_argcount_no_skwa - attrs.kwonlyargcount
         log('ar', f'given args: {len(args)} permitted: {permitted_args}')
         if len(args) > permitted_args:
             msg = '{}() takes {} positional arguments but {} {} given'.format(
@@ -82,15 +84,15 @@ def resolve_args(attrs: code_attributes.CodeAttributes,
                 exception=TypeError(msg)))
 
     if attrs.starkwargs:
-        starkwarg_index = attrs.total_argcount
+        starkwarg_index = attrs.starkwarg_index
         arg_slots[starkwarg_index] = {}
     else:
         starkwarg_index = None
 
     # Check for keyword-only arguments that were not provided.
     if attrs.kwonlyargcount:
-        start, limit = (attrs.total_argcount-attrs.kwonlyargcount,
-                        attrs.total_argcount)
+        start, limit = (attrs.total_argcount_no_skwa-attrs.kwonlyargcount,
+                        attrs.total_argcount_no_skwa)
         if attrs.starargs:
             start -= 1
             limit -= 1
@@ -126,7 +128,7 @@ def resolve_args(attrs: code_attributes.CodeAttributes,
     # "default required" annotation to None:
     #
     #       f(42, c=7) => default_required: [None, 0, None]
-    default_required = [None] * attrs.total_argcount
+    default_required = [None] * attrs.total_argcount_no_skwa
     if defaults:
         default_required[-len(defaults):] = list(range(len(defaults)))
 
@@ -143,7 +145,8 @@ def resolve_args(attrs: code_attributes.CodeAttributes,
         return (False, argno)
 
     def populate_positional(argno: int, value: Any) -> None:
-        assert len(default_required) == attrs.total_argcount, default_required
+        assert len(default_required) == attrs.total_argcount_no_skwa, \
+            default_required
         stararg_info = in_stararg_position(argno)
         argno = stararg_info[1]  # Stararg can update the slot index.
         if stararg_info[0]:
@@ -204,6 +207,17 @@ def resolve_args(attrs: code_attributes.CodeAttributes,
                 exception=TypeError(msg)))
 
     # For convenience we inform the caller how many slots should be appended to
-    # reach the number of local slots.
+    # the arg_slots to reach the full number of local slots.
     remaining = attrs.nlocals - attrs.total_argcount
+    assert remaining >= 0
+    assert attrs.nlocals == len(attrs.varnames)
+
+    log('ar', f'arg_slots: {len(arg_slots)} remaining: {remaining} '
+              f'varnames ({len(attrs.varnames)}): {attrs.varnames} '
+              f'cellvars: {attrs.cellvars} freevars: {attrs.freevars}')
+
+    assert len(arg_slots) == attrs.total_argcount, \
+        (len(arg_slots), attrs.total_argcount)
+    assert len(arg_slots) + remaining == len(attrs.varnames), \
+        (len(arg_slots), remaining, len(attrs.varnames))
     return Result((arg_slots, remaining))
