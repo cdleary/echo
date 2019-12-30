@@ -7,6 +7,7 @@ from typing import (
     Text, Dict, Any, Optional, Union, Sequence, List, Tuple, Callable,
 )
 
+from echo.elog import log as elog
 from echo.interp_context import ICtx
 from echo.interp_result import Result, ExceptionData
 from echo.emodule import EModule
@@ -18,6 +19,7 @@ DEBUG_PRINT_IMPORTS = bool(os.getenv('DEBUG_PRINT_IMPORTS', False))
 SPECIAL_MODULES = (
     'os', 'sys', 'itertools', 'time',
     '_weakref', '_weakrefset', '_thread', 'errno', '_sre',
+    'numpy.core._multiarray_umath',
 )
 
 
@@ -101,6 +103,7 @@ def _import_module_at_path(
 def _subimport_module_at_path(
         path: Text, fully_qualified_name: Text,
         containing_package: EModule, ictx: ICtx) -> Result[EModule]:
+    assert isinstance(containing_package, EModule), module
     log(ictx, f'path {path} fqn {fully_qualified_name} '
               f'containing_package {containing_package}')
 
@@ -118,12 +121,15 @@ def _subimport_module_at_path(
 
 def _resolve_module_or_package(
         dirpath: Text, fqn_piece: Text) -> Result[Text]:
+    elog('imp:rmop',
+         f'resolving mod or pkg; dirpath {dirpath!r} fqn_piece {fqn_piece!r}')
     module_path = os.path.join(dirpath, fqn_piece + '.py')
     package_path = os.path.join(dirpath, fqn_piece, '__init__.py')
     if os.path.exists(module_path):
         return Result(module_path)
     if os.path.exists(package_path):
         return Result(package_path)
+
     msg = 'Could not find module or package with name: {!r}'.format(fqn_piece),
     return Result(ExceptionData(
         None,
@@ -174,6 +180,7 @@ def _extract_fromlist(
         module: ModuleT,
         fromlist: Optional[Sequence[Text]],
         ictx: ICtx) -> Result[Tuple[Any, ...]]:
+    """Returns (start_module, leaf_module, fromlist_imports)."""
     if fromlist is None or fromlist == ('*',):
         return Result((start_module, module, ()))
 
@@ -379,15 +386,36 @@ def run_IMPORT_NAME(importing_path: Text,
                     globals_: Dict[Text, Any],
                     ictx: ICtx,
                     ) -> Result[Any]:
+    """Performs functionality of the IMPORT_NAME bytecode.
+
+    Args:
+        importing_path: The filename for the code object that's doing the
+            IMPORT_NAME.
+        level: TODO document
+        fromlist: TODO document
+        multi_module_name: TODO document
+        globals_: Globals for the *importing* module.
+        ictx: Interpreter context.
+
+    Returns:
+        The imported module.
+
+    Side effects:
+        Imports indicated names (based on the fromlist) into the globals_ for
+        the importing module.
+    """
     log(ictx, 'run_IMPORT_NAME importing_path {} level {} fromlist {} '
               'multi_module_name {}'.format(
                 importing_path, level, fromlist, multi_module_name))
 
+    # If it has already been imported, we just give back that result.
     if multi_module_name in ictx.interp_state.sys_modules:
         return Result(ictx.interp_state.sys_modules[multi_module_name])
 
-    if multi_module_name == '_abc':
-        msg = 'Cannot import C-module _abc.'
+    if multi_module_name in ('_abc', '_heapq'):
+        # Some C modules we refuse to import so we can get their Python based
+        # implementations instead.
+        msg = 'Cannot import C-module {}.'.format(multi_module_name)
         return Result(ExceptionData(
             None, None, ImportError(msg)))
     elif multi_module_name in SPECIAL_MODULES:
@@ -420,6 +448,7 @@ def import_star(module: EModule,
                 globals_: Dict[Text, Any],
                 ictx: ICtx,
                 ) -> None:
+    assert isinstance(module, EModule), module
     for name in module.keys():
         if not name.startswith('_'):
             globals_[name] = module.getattr(name, ictx).get_value()

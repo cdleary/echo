@@ -10,7 +10,7 @@ def f(a, b, c):
 def main(a, b, c):
     try:
         f(a, b, c)
-    except TypeError as e:
+    except TypeError:
         pass
     else:
         raise AssertionError

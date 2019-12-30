@@ -677,6 +677,7 @@ class StatefulFrame:
         self.locals_[arg] = UnboundLocalSentinel
 
     def _run_IMPORT_NAME(self, arg, argval):
+        assert isinstance(argval, str), argval
         fromlist = self._pop()
         level = self._pop()
         return import_routines.run_IMPORT_NAME(
