@@ -686,13 +686,8 @@ class StatefulFrame:
 
     def _run_IMPORT_FROM(self, arg, argval):
         module = self._peek()
-        if isinstance(module, types.ModuleType):
-            return Result(getattr(module, argval))
-        elif isinstance(module, EModule):
-            return import_routines.getattr_or_subimport(
-                module, argval, self.ictx)
-        else:
-            raise NotImplementedError(module)
+        return import_routines.run_IMPORT_FROM(
+            module, argval, self.ictx)
 
     def _run_LOAD_GLOBAL(self, arg, argval):
         namei = arg

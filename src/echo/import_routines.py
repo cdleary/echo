@@ -26,7 +26,7 @@ SPECIAL_MODULES = (
 ModuleT = Union[ModuleType, EModule]
 
 
-def bump_import_depth(f):
+def _bump_import_depth(f):
     @functools.wraps(f)
     def wrapper(*args, **kwargs):
         ictx = kwargs['ictx']
@@ -48,7 +48,7 @@ def log(ictx: ICtx, s: Text) -> None:
           file=sys.stderr)
 
 
-@bump_import_depth
+@_bump_import_depth
 def _import_module_at_path(
         path: Text, fully_qualified_name: Text, *,
         ictx: ICtx) -> Result[EModule]:
@@ -151,19 +151,25 @@ def _find_absolute_import_path(module_name: Text,
         ImportError(msg)))
 
 
-def getattr_or_subimport(current_mod: ModuleT,
+def _getattr_or_subimport(current_mod: ModuleT,
                          fromlist_name: Text,
                          ictx: ICtx) -> Result[Any]:
-    log(ictx, f'getattr_or_subimport; current_mod: {current_mod} '
+    """Either gets an attribute from a module or attempts a sub-import if no
+    such attribute is available."""
+    log(ictx, f'_getattr_or_subimport; current_mod: {current_mod} '
               f'fromlist_name: {fromlist_name}')
 
+    # Try normal gettattr for real Python modules.
     if isinstance(current_mod, ModuleType):
         return Result(getattr(current_mod, fromlist_name))
 
+    # Use echo getattr for EModules.
+    assert isinstance(current_mod, EModule), current_mod
     result = current_mod.getattr(fromlist_name, ictx)
     if not result.is_exception():
         return result
 
+    # If not an attribute, try a sub-import.
     current_dirpath = os.path.dirname(current_mod.filename)
     path_result = _resolve_module_or_package(current_dirpath, fromlist_name)
     if path_result.is_exception():
@@ -186,7 +192,7 @@ def _extract_fromlist(
 
     results = []  # List[Any]
     for name in fromlist:
-        result = getattr_or_subimport(module, name, ictx)
+        result = _getattr_or_subimport(module, name, ictx)
         if result.is_exception():
             return Result(result.get_exception())
         results.append(result.get_value())
@@ -377,6 +383,10 @@ def import_path(path: Text, module_name: Text, fully_qualified_name: Text,
     if fully_qualified_name in ictx.interp_state.sys_modules:
         return Result(ictx.interp_state.sys_modules[fully_qualified_name])
     return _import_module_at_path(path, fully_qualified_name, ictx=ictx)
+
+
+def run_IMPORT_FROM(module: ModuleT, fromname: Text, ictx: ICtx):
+    return _getattr_or_subimport(module, fromname, ictx)
 
 
 def run_IMPORT_NAME(importing_path: Text,
