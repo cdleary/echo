@@ -9,6 +9,7 @@ from echo.eobjects import (
     register_builtin, _is_dict_builtin, get_guest_builtin,
 )
 from echo.interp_context import ICtx
+from echo import iteration_helpers
 
 
 @register_builtin('dict.__new__')
@@ -71,6 +72,25 @@ def _do_dict_call(
         # TODO read from keys, this is a hack
         d.update(args[0].builtin_storage[dict])
         args = ()
+
+    if len(args) == 1 and not kwargs:
+        if isinstance(args[0], dict):
+            d.update(args[0])
+            return Result(d)
+
+        ehasattr = lambda x, y: get_guest_builtin('hasattr').invoke((x, y), {}, {}, ictx).get_value()
+        if ehasattr(args[0], 'keys'):
+            raise NotImplementedError
+
+        def cb(item: Any) -> Result[bool]:
+            k, v = item  # TODO this will break for eiterables.
+            d[k] = v
+            return Result(True)
+        res = iteration_helpers.foreach(args[0], cb, ictx)
+        if res.is_exception():
+            return res
+
+        return Result(d)
 
     log('go:dict()', f'dict(*{args}, **{kwargs})')
     d.update(*args, **kwargs)

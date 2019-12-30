@@ -1,3 +1,4 @@
+import importlib
 import functools
 import logging
 import os
@@ -19,6 +20,7 @@ DEBUG_PRINT_IMPORTS = bool(os.getenv('DEBUG_PRINT_IMPORTS', False))
 SPECIAL_MODULES = (
     'os', 'sys', 'itertools', 'time',
     '_weakref', '_weakrefset', '_thread', 'errno', '_sre',
+    '_struct', '_codecs',
     'numpy.core._multiarray_umath',
 )
 
@@ -429,7 +431,8 @@ def run_IMPORT_NAME(importing_path: Text,
         return Result(ExceptionData(
             None, None, ImportError(msg)))
     elif multi_module_name in SPECIAL_MODULES:
-        module = __import__(multi_module_name, globals_)  # type: ModuleType
+        module = importlib.import_module(multi_module_name)
+        assert isinstance(module, ModuleType), module
         result = _extract_fromlist(module, module, fromlist, ictx)
     else:
         result = _import_name(
@@ -454,11 +457,16 @@ def run_IMPORT_NAME(importing_path: Text,
     return Result(leaf)
 
 
-def import_star(module: EModule,
+def import_star(module: ModuleT,
                 globals_: Dict[Text, Any],
                 ictx: ICtx,
                 ) -> None:
-    assert isinstance(module, EModule), module
-    for name in module.keys():
-        if not name.startswith('_'):
-            globals_[name] = module.getattr(name, ictx).get_value()
+    if isinstance(module, ModuleType):
+        for name in dir(module):
+            if not name.startswith('_'):
+                globals_[name] = getattr(module, name)
+    else:
+        assert isinstance(module, EModule), module
+        for name in module.keys():
+            if not name.startswith('_'):
+                globals_[name] = module.getattr(name, ictx).get_value()

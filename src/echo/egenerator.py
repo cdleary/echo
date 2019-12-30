@@ -65,7 +65,8 @@ class EGenerator(EPyObject):
         if name == '__next__':
             return Result(EMethod(NativeFunction(
                 self._next, 'egenerator.__next__'), bound_self=self))
-        raise NotImplementedError
+        msg = f'Cannot find attribute {name} on {self}'
+        return Result(ExceptionData(None, name, AttributeError(msg)))
 
     def setattr(self, name: Text, value: Any) -> Any:
         raise NotImplementedError
