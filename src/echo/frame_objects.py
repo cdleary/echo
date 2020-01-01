@@ -194,6 +194,10 @@ class StatefulFrame:
         log('fo:ueh', f'new exception data: {exception_data}')
         self.ictx.exc_info = exception_data
 
+    def _unwind_block(self, b: BlockInfo) -> None:
+        while len(self.stack) > b.level:
+            self._pop()
+
     def _handle_exception(self, exception_data: ExceptionData) -> bool:
         """Returns whether the exception was handled in this function."""
         # Pop until we see an except block, or there's no block stack left.
@@ -204,8 +208,7 @@ class StatefulFrame:
                 # We wound up at an except block, pop back to the right
                 # value-stack depth and start running the handler.
                 self.pc = self.block_stack[-1].handler
-                while len(self.stack) > self.block_stack[-1].level:
-                    self._pop()
+                self._unwind_block(self.block_stack[-1])
                 if self.ictx.exc_info:
                     log('fo:he', f'exc_info: {self.ictx.exc_info}')
                     self._push(self.ictx.exc_info.traceback)
@@ -226,6 +229,10 @@ class StatefulFrame:
 
             if self.block_stack[-1].kind == BlockKind.EXCEPT_HANDLER:
                 self._unwind_except_handler(self.block_stack.pop())
+                continue
+
+            if self.block_stack[-1].kind == BlockKind.SETUP_LOOP:
+                self._unwind_block(self.block_stack.pop())
                 continue
 
             raise NotImplementedError(self.block_stack[-1])
@@ -321,7 +328,10 @@ class StatefulFrame:
         tos = self._pop()
         tos1 = self._pop()
         if isinstance(tos1, (dict, list, type(os.environ))):
-            del tos1[tos]
+            try:
+                del tos1[tos]
+            except KeyError as e:
+                return Result(ExceptionData(None, None, e))
         elif isinstance(tos1, EPyObject):
             r = do_delitem((tos1, tos), self.ictx)
             assert not r.is_exception(), r

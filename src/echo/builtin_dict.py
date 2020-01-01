@@ -204,6 +204,27 @@ def _do_dict_pop(
     return Result(r)
 
 
+@register_builtin('dict.fromkeys')
+@check_result
+def _do_dict_fromkeys(
+        args: Tuple[Any, ...],
+        kwargs: Dict[Text, Any],
+        ictx: ICtx) -> Result[None]:
+    assert 1 <= len(args) <= 2 and not kwargs, (args, kwargs)
+    value = args[1] if len(args) == 2 else None
+    d = {}
+
+    def cb(k: Any) -> Result[bool]:
+        d[k] = value
+        return Result(True)
+
+    res = iteration_helpers.foreach(args[0], cb, ictx)
+    if res.is_exception():
+        return res
+
+    return Result(d)
+
+
 @register_builtin('dict.__instancecheck__')
 @check_result
 def _do_dict_instancecheck(

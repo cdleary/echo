@@ -234,6 +234,7 @@ def do_call(f,
                         NativeFunction)):
         return f.invoke(args, kwargs, locals_dict, ictx)
     elif isinstance(f, (types.MethodType, types.FunctionType)):
+        log('interp:do_call:native', f'f: {f} args: {args} kwargs: {kwargs}')
         # Builtin object method.
         return Result(f(*args, **kwargs))
     elif f is get_sunder_sre().compile:
@@ -246,6 +247,7 @@ def do_call(f,
     elif isinstance(f, EClass):
         return f.instantiate(args, kwargs, globals_=globals_, ictx=ictx)
     elif callable(f):
+        log('interp:do_call:native', f'f: {f} args: {args} kwargs: {kwargs}')
         return Result(f(*args, **kwargs))
     elif isinstance(f, EPyObject) and f.hasattr('__call__'):
         f_call = f.getattr('__call__', ictx)
@@ -291,8 +293,11 @@ def _do_exec(args: Tuple[Any, ...],
              ictx: ICtx) -> Result[None]:
     assert 1 <= len(args) <= 3 and not kwargs, (args, kwargs)
     source, globals_, locals_ = none_filler(args, 3)
-    assert isinstance(source, str), type(source)
-    code = compile(source, 'exec-source', 'exec')
+    if isinstance(source, types.CodeType):
+        code = source
+    else:
+        assert isinstance(source, str), type(source)
+        code = compile(source, 'exec-source', 'exec')
     res = interp(code, globals_=globals_, ictx=ictx, name='exec',
                  locals_dict=locals, in_function=False)
     if res.is_exception():

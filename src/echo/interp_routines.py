@@ -109,6 +109,7 @@ BUILTIN_VALUE_TYPES = {
     float,
     range,
     str,
+    bytes,
     tuple,
     slice,
     set,

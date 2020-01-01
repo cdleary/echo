@@ -1,3 +1,4 @@
+import imp
 import importlib
 import functools
 import logging
@@ -20,8 +21,9 @@ DEBUG_PRINT_IMPORTS = bool(os.getenv('DEBUG_PRINT_IMPORTS', False))
 SPECIAL_MODULES = (
     'os', 'sys', 'itertools', 'time',
     '_weakref', '_weakrefset', '_thread', 'errno', '_sre',
-    '_struct', '_codecs',
+    '_struct', '_codecs', '_pickle',
     'numpy.core._multiarray_umath',
+    'numpy.core._fastCopyAndTranspose',
 )
 
 
@@ -53,8 +55,10 @@ def log(ictx: ICtx, s: Text) -> None:
 @_bump_import_depth
 def _import_module_at_path(
         path: Text, fully_qualified_name: Text, *,
-        ictx: ICtx) -> Result[EModule]:
+        ictx: ICtx) -> Result[ModuleT]:
     """Imports a module at the given path and runs its code.
+
+    For Python code modules:
 
     * Reads in the file,
     * Starts the module existing in the interpreter state, and
@@ -69,6 +73,12 @@ def _import_module_at_path(
         return Result(ictx.interp_state.sys_modules[fully_qualified_name])
 
     log(ictx, f'importing module {fully_qualified_name} at path {path}')
+
+    if path.endswith('.so'):
+        module = importlib.import_module(fully_qualified_name)
+        # Place the imported module into the module dictionary.
+        ictx.interp_state.sys_modules[fully_qualified_name] = module
+        return Result(module)
 
     with open(path) as f:
         contents = f.read()
@@ -104,7 +114,20 @@ def _import_module_at_path(
 
 def _subimport_module_at_path(
         path: Text, fully_qualified_name: Text,
-        containing_package: EModule, ictx: ICtx) -> Result[EModule]:
+        containing_package: EModule, ictx: ICtx) -> Result[ModuleT]:
+    """
+    Args:
+        path: Path of the subimported module.
+        fully_qualified_name: FQN of the subimported module.
+        containing_package: Module that will contain this subimported module.
+        ictx: Interpreter context.
+
+    Returns:
+        The subimported module.
+
+    Side effects:
+        Sets the subimported module name on the containing package.
+    """
     assert isinstance(containing_package, EModule), module
     log(ictx, f'path {path} fqn {fully_qualified_name} '
               f'containing_package {containing_package}')
@@ -132,6 +155,15 @@ def _resolve_module_or_package(
     if os.path.exists(package_path):
         return Result(package_path)
 
+    module_path = os.path.join(
+        dirpath, fqn_piece + '.cpython-37m-x86_64-linux-gnu.so')
+    if os.path.exists(module_path):
+        return Result(module_path)
+    module_path = os.path.join(
+        dirpath, fqn_piece + '.cpython-37dm-x86_64-linux-gnu.so')
+    if os.path.exists(module_path):
+        return Result(module_path)
+
     msg = 'Could not find module or package with name: {!r}'.format(fqn_piece),
     return Result(ExceptionData(
         None,
@@ -158,8 +190,8 @@ def _getattr_or_subimport(current_mod: ModuleT,
                           ictx: ICtx) -> Result[Any]:
     """Either gets an attribute from a module or attempts a sub-import if no
     such attribute is available."""
-    log(ictx, f'_getattr_or_subimport; current_mod: {current_mod} '
-              f'fromlist_name: {fromlist_name}')
+    elog('imp:rmop', f'_getattr_or_subimport; current_mod: {current_mod} '
+                     f'fromlist_name: {fromlist_name}')
 
     # Try normal gettattr for real Python modules.
     if isinstance(current_mod, ModuleType):
@@ -416,9 +448,9 @@ def run_IMPORT_NAME(importing_path: Text,
         Imports indicated names (based on the fromlist) into the globals_ for
         the importing module.
     """
-    log(ictx, 'run_IMPORT_NAME importing_path {} level {} fromlist {} '
-              'multi_module_name {}'.format(
-                importing_path, level, fromlist, multi_module_name))
+    elog('imp:in',
+         f'run_IMPORT_NAME importing_path {importing_path} level {level} '
+         f'fromlist {fromlist} multi_module_name {multi_module_name}')
 
     # If it has already been imported, we just give back that result.
     if multi_module_name in ictx.interp_state.sys_modules:
@@ -442,7 +474,7 @@ def run_IMPORT_NAME(importing_path: Text,
     if result.is_exception():
         return result
 
-    log(ictx, 'run_IMPORT_NAME result: {}'.format(result.get_value()))
+    elog('imp:in', 'run_IMPORT_NAME result: {}'.format(result.get_value()))
     root, leaf, fromlist_values = result.get_value()
 
     if fromlist is None:

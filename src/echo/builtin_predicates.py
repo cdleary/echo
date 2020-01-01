@@ -1,3 +1,4 @@
+import re
 from typing import Text, Tuple, Any, Dict, Optional
 
 from echo.elog import log
@@ -21,7 +22,7 @@ def _do_bool_call(args: Tuple[Any, ...],
     o = args[0]
     if not isinstance(o, EPyObject):
         assert isinstance(o, (int, bool, str, set, tuple, dict, list,
-                              type(None))), o
+                              type(None), getattr(re, 'Match'))), o
         return Result(bool(o))
     if isinstance(o, EBuiltin):
         log('fo:truthy', f'builtin o: {o}')

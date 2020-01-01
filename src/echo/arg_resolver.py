@@ -51,6 +51,7 @@ def resolve_args(
     #   kwonlyargcount  number of names after the '*' position
 
     log('ar', f'code: {attrs.code}')
+    log('ar', f'args: {args}')
     log('ar:attrs', f'argcount:       {attrs.argcount}')
     log('ar:attrs', f'total_argcount: {attrs.total_argcount}')
     log('ar:attrs', f'kwonlyargcount: {attrs.kwonlyargcount}')
@@ -80,7 +81,7 @@ def resolve_args(
             log('ar', 'emsg: ' + msg)
             return Result(ExceptionData(
                 traceback=None,
-                parameter=msg,
+                parameter=None,
                 exception=TypeError(msg)))
 
     if attrs.starkwargs:
@@ -108,7 +109,7 @@ def resolve_args(
             log('ar', 'emsg: ' + msg)
             return Result(ExceptionData(
                 traceback=None,
-                parameter=msg,
+                parameter=None,
                 exception=TypeError(msg)))
 
     # Note the name of each slot.
@@ -155,6 +156,7 @@ def resolve_args(
             assert argno < len(arg_slots), (
                 'Argument number is out of range of argument slots.', argno,
                 attrs, getattr(attrs, 'code', None), value)
+            log('ar', f'updating arg_slots[{argno}] = {value!r}')
             arg_slots[argno] = value
             default_required[argno] = None
 
@@ -193,17 +195,17 @@ def resolve_args(
         arg_slots[argno] = defaults[note]
 
     for arg in arg_slots:
-        if arg == _Sentinel:
-            missing_count = sum(1 for arg in arg_slots if arg == _Sentinel)
+        if arg is _Sentinel:
+            missing_count = sum(1 for arg in arg_slots if arg is _Sentinel)
             missing_names = [name for i, name in enumerate(arg_names)
-                             if arg_slots[i] == _Sentinel]
+                             if arg_slots[i] is _Sentinel]
             missing = _arg_join(missing_names)
             msg = '{}() missing {} required positional argument{}: {}'.format(
                     attrs.name, missing_count,
                     '' if missing_count == 1 else 's', missing)
             return Result(ExceptionData(
                 traceback=None,
-                parameter=msg,
+                parameter=None,
                 exception=TypeError(msg)))
 
     # For convenience we inform the caller how many slots should be appended to

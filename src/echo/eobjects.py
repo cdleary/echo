@@ -1134,8 +1134,8 @@ class EBuiltin(EPyType):
         if name in self.dict:
             return AttrWhere.SELF_DICT
         if self.name == 'dict' and name in (
-                'update', 'setdefault', 'pop', 'get', '__eq__', '__getitem__',
-                '__setitem__', '__delitem__', '__contains__'):
+                'update', 'setdefault', 'pop', 'get', 'fromkeys', '__eq__',
+                '__getitem__', '__setitem__', '__delitem__', '__contains__'):
             return AttrWhere.SELF_SPECIAL
         if self.name == 'list' and name in (
                 'append', 'extend', 'clear', '__eq__', '__getitem__',
@@ -1432,7 +1432,8 @@ def do_setattr(args: Tuple[Any, ...],
         sys.path = ictx.interp_state.paths = value
         return Result(None)
     else:
-        raise NotImplementedError(obj, name, value)
+        setattr(obj, name, value)
+        return Result(None)
 
 
 @check_result
