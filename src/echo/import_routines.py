@@ -20,6 +20,7 @@ from termcolor import cprint
 DEBUG_PRINT_IMPORTS = bool(os.getenv('DEBUG_PRINT_IMPORTS', False))
 SPECIAL_MODULES = (
     'os', 'sys', 'itertools', 'time',
+    '_collections',
     '_weakref', '_weakrefset', '_thread', 'errno', '_sre',
     '_struct', '_codecs', '_pickle',
     'numpy.core._multiarray_umath',
