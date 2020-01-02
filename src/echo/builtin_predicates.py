@@ -123,3 +123,32 @@ def _do_max(
     if res.is_exception():
         return res
     return Result(args[1] if res.get_value() else args[0])
+
+
+@register_builtin('sum')
+@check_result
+def _do_sum(
+        args: Tuple[Any, ...],
+        kwargs: Dict[Text, Any],
+        ictx: ICtx) -> Result[Any]:
+    assert 1 <= len(args) <= 2 and not kwargs
+
+    accum = 0 if len(args) == 1 else args[2]
+
+    def callback(item) -> Result[bool]:
+        nonlocal accum
+        add_res = item.getattr('__add__', ictx)
+        if add_res.is_exception():
+            return add_res
+        f = add_res.get_value()
+        res = f.invoke((accum,), {}, {}, ictx)
+        if res.is_exception():
+            return res
+        accum = res.get_value()
+        return Result(True)
+
+    res = iteration_helpers.foreach(args[0], callback, ictx)
+    if res.is_exception():
+        return res
+
+    return Result(accum)

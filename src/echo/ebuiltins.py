@@ -4,7 +4,7 @@ from typing import Dict, Text, Any
 from echo.eobjects import get_guest_builtin
 
 BUILTINS = tuple("""len str int bool super type object list dict tuple
-property staticmethod classmethod
+property staticmethod classmethod sum
 map iter next enumerate any all exec hash
 hasattr getattr setattr isinstance issubclass repr callable min max dir
 BaseException Exception
