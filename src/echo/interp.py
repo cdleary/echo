@@ -29,7 +29,7 @@ from echo.interpreter_state import InterpreterState
 from echo.ecell import ECell
 from echo.eobjects import (
     EFunction, EBuiltin, EPyObject,
-    EPartial, EClass, EMethod,
+    EClass, EMethod,
     EAsyncGenerator, ReturnKind,
     NativeFunction, get_guest_builtin, register_builtin,
 )
@@ -160,17 +160,6 @@ def interp(code: types.CodeType,
     return Result(v.wrapped)
 
 
-@check_result
-def _do_call_functools_partial(
-        args: Tuple[Any, ...],
-        kwargs: Optional[Dict[Text, Any]]) -> Result[Any]:
-    """Helper for calling `functools.partial`."""
-    if kwargs:
-        raise NotImplementedError(kwargs)
-    guest_partial = EPartial(args[0], args[1:])
-    return Result(guest_partial)
-
-
 def get_sunder_sre() -> types.ModuleType:
     return importlib.import_module('_sre')
 
@@ -239,8 +228,6 @@ def do_call(f,
         return Result(f(*args, **kwargs))
     elif f is get_sunder_sre().compile:
         return _do_call_sre_compile(args, kwargs, ictx)
-    elif isinstance(f, EPartial):
-        return f.invoke(args, kwargs, locals_dict, ictx)
     elif isinstance(f, EBuiltin):
         return f.invoke(args, kwargs, locals_dict, globals_=globals_,
                         ictx=ictx)

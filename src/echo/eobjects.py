@@ -7,7 +7,7 @@ import pprint
 import sys
 import types
 from typing import (
-    Text, Any, Dict, Iterable, Tuple, Optional, Set, Callable, Union,
+    Text, Any, Dict, Iterable, Tuple, Optional, Set, Callable, Union, Type,
 )
 import weakref
 
@@ -95,6 +95,8 @@ class EFunction(EPyObject):
             return Result(EFunctionType.singleton)
         if name == '__dict__':
             return Result(self.dict_)
+        if name == '__defaults__':
+            return Result(self.defaults)
         if name == '__get__':
             return Result(EMethod(NativeFunction(
                 self._get, 'efunction.__get__'), bound_self=self))
@@ -277,7 +279,7 @@ def _find_name_in_mro(type_: EPyType, name: Text, ictx: ICtx) -> Any:
             if cls.hasattr(name):
                 return cls.getattr(name, ictx).get_value()
         else:
-            assert isinstance(cls, EClass), cls
+            assert isinstance(cls, EClass), (cls, name)
             log('eo:fnim',
                 f'searching for {name} in {cls.name} among {cls.dict_.keys()}')
             if name in cls.dict_:
@@ -294,6 +296,8 @@ def _type_getattro(type_: 'EClass', name: Text, ictx: ICtx) -> Result[Any]:
         return Result(type_.metaclass or get_guest_builtin('type'))
     if name == '__bases__':
         return Result(type_.bases)
+    if name == '__base__':
+        return Result(type_.get_base())
     if name == '__name__':
         return Result(type_.name)
 
@@ -447,9 +451,21 @@ class EInstance(EPyObject):
 
 
 EClassOrBuiltin = Union['EClass', 'EBuiltin']
+EClassOrEBuiltinOrType = Union['EClass', 'EBuiltin', Type]
 
 
-def _get_bases(c: EClassOrBuiltin) -> Tuple[EPyObject, ...]:
+def _maybe_builtin(b: Type) -> Union['EBuiltin', Type]:
+    if b is Exception:
+        return get_guest_builtin('Exception')
+    if b is BaseException:
+        return get_guest_builtin('BaseException')
+    return b
+
+
+def _get_bases(c: EClassOrEBuiltinOrType
+               ) -> Tuple[EClassOrEBuiltinOrType, ...]:
+    if isinstance(c, type):
+        return tuple(_maybe_builtin(b) for b in c.__bases__)
     assert isinstance(c, (EClass, EBuiltin)), c
     if isinstance(c, EClass):
         return c.bases
@@ -473,7 +489,7 @@ class EClass(EPyType):
     subclasses: Set['EClass']
 
     def __init__(self, name: Text, dict_: Dict[Text, Any], *,
-                 bases: Optional[Tuple[EClassOrBuiltin]] = None,
+                 bases: Optional[Tuple[EClassOrEBuiltinOrType, ...]] = None,
                  metaclass=None, kwargs=None):
         self.name = name
         self.dict_ = dict_
@@ -483,6 +499,7 @@ class EClass(EPyType):
         self.subclasses = weakref.WeakSet()
 
         for base in self.bases:
+            assert isinstance(base, (EBuiltin, EClass, type))
             if isinstance(base, (EBuiltin, EClass)):
                 base.note_subclass(self)
 
@@ -535,6 +552,11 @@ class EClass(EPyType):
             order.append(eobject)
         return tuple(order)
 
+    def get_base(self) -> EClassOrEBuiltinOrType:
+        if len(self.bases) != 1:
+            raise NotImplementedError(self, self.bases)
+        return self.bases[0]
+
     def instantiate(self,
                     args: Tuple[Any, ...],
                     kwargs: Dict[Text, Any],
@@ -573,8 +595,8 @@ class EClass(EPyType):
     def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
         if name in self.dict_:
             return AttrWhere.SELF_DICT
-        if name in ('__class__', '__bases__', '__mro__', '__dict__',
-                    '__name__'):
+        if name in ('__class__', '__bases__', '__base__', '__mro__',
+                    '__dict__', '__name__'):
             return AttrWhere.SELF_SPECIAL
         if self.get_type().hasattr(name):
             return AttrWhere.CLS
@@ -759,6 +781,9 @@ def _do_isinstance(
                            globals_=ic.globals_)
         return result
 
+    if isinstance(args[0], EFunction) and args[1] is EMethodType.singleton:
+        return Result(False)
+
     for t in (bool, int, str, float, dict, list, tuple, set):
         if args[1] is t:
             return Result(isinstance(args[0], t))
@@ -849,13 +874,12 @@ def _do_isinstance(
     raise NotImplementedError(args)
 
 
+@debugged('eo:issubclass')
 @check_result
 def _do_issubclass(
         args: Tuple[Any, ...],
         ictx: ICtx) -> Result[bool]:
     assert len(args) == 2, args
-    log('eo:issubclass', f'arg0: {args[0]}')
-    log('eo:issubclass', f'arg1: {args[1]}')
 
     if args[0] is args[1] and isinstance(args[0], EBuiltin):
         return Result(True)
@@ -875,6 +899,7 @@ def _do_issubclass(
         return result
 
     if isinstance(args[0], EClass) and isinstance(args[1], EBuiltin):
+        log('eo:issubclass', 'args[0] EClass args[1] EBuiltin')
         return Result(args[0].is_subtype_of(args[1]))
 
     if isinstance(args[0], EPyType) and isinstance(args[1], EPyType):
@@ -1010,6 +1035,7 @@ class EBuiltin(EPyType):
         # tuple
         'tuple.__new__', 'tuple.__init__',
         'tuple.__eq__', 'tuple.__lt__',
+        'tuple.__getitem__',
     )
 
     _registry: Dict[Text, Tuple[Callable, Optional[type]]] = {}
@@ -1121,7 +1147,7 @@ class EBuiltin(EPyType):
         if self.name == 'getattr':
             return do_getattr(args, kwargs, ictx)
         if self.name == 'setattr':
-            return do_getattr(args, kwargs, ictx)
+            return do_setattr(args, kwargs, ictx)
 
         # Check if the builtin has been registered from an external location.
         if self.name in self._registry:
@@ -1133,22 +1159,8 @@ class EBuiltin(EPyType):
     def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
         if name in self.dict:
             return AttrWhere.SELF_DICT
-        if self.name == 'dict' and name in (
-                'update', 'setdefault', 'pop', 'get', 'fromkeys', '__eq__',
-                '__getitem__', '__setitem__', '__delitem__', '__contains__'):
-            return AttrWhere.SELF_SPECIAL
-        if self.name == 'list' and name in (
-                'append', 'extend', 'clear', '__eq__', '__getitem__',
-                '__setitem__', '__delitem__', '__contains__', '__iter__'):
-            return AttrWhere.SELF_SPECIAL
-        if self.name == 'int' and name in (
-                '__add__', '__radd__',
-                '__init__', '__repr__', '__sub__', '__lt__',
-                '__int__', '__eq__', '__and__', '__rand__', '__mul__',
-                '__rmul__', '__bool__', '__ge__', '__le__', '__gt__'):
-            return AttrWhere.SELF_SPECIAL
-        if self.name == 'tuple' and name in (
-                '__lt__',):
+        if (self.name in self.BUILTIN_TYPES
+                and f'{self.name}.{name}' in self.BUILTIN_FNS):
             return AttrWhere.SELF_SPECIAL
         if self.name == 'str' and name in ('maketrans',):
             return AttrWhere.SELF_SPECIAL
@@ -1284,22 +1296,6 @@ def get_guest_builtin_self(name: Text, self: Any) -> EBuiltin:
     return EBuiltin(name, self)
 
 
-class EPartial:
-    def __init__(self, f: EFunction, args: Tuple[Any, ...]):
-        assert isinstance(f, EFunction), f
-        self.f = f
-        self.args = args
-
-    @check_result
-    def invoke(self,
-               args: Tuple[Any, ...],
-               kwargs: Dict[Text, Any],
-               locals_dict: Dict[Text, Any],
-               ictx: ICtx) -> Any:
-        return self.f.invoke(
-            self.args + args, kwargs, locals_dict, ictx)
-
-
 class NativeFunction(EPyObject):
 
     def __init__(self, f: Callable[..., Result], name: Text):
@@ -1397,8 +1393,12 @@ def do_getattr(args: Tuple[Any, ...],
     assert 2 <= len(args) <= 3, args
     assert not kwargs, kwargs
     o, attr, *default = args
+    # TODO(cdleary): 2020-01-01 genericize this
     if type(o) is tuple and attr == '__class__':
         return Result(get_guest_builtin('tuple'))
+    if o is TypeError and attr == '__bases__':
+        return Result((get_guest_builtin('Exception'),))
+
     clsname = o.__class__.__name__
     if (type(o) in (int, str, tuple, list)
             and f'{clsname}.{attr}' in EBuiltin.BUILTIN_FNS):

@@ -4,6 +4,7 @@ from typing import Text, Any, Optional, Tuple
 
 from echo.interp_context import ICtx
 from echo.interp_result import Result
+from echo.elog import log
 
 
 class AttrWhere(Enum):
@@ -48,7 +49,9 @@ class EPyType(EPyObject):
         raise NotImplementedError
 
     def is_subtype_of(self, other: EPyObject) -> bool:
-        is_subtype = other in self.get_mro()
+        mro = self.get_mro()
+        log('epyo:iso', f'other: {other} mro: {mro}')
+        is_subtype = other in mro
         if self is other:
             assert is_subtype
         return is_subtype

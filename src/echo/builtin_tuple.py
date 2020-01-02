@@ -90,3 +90,12 @@ def _do_tuple_lt(args: Tuple[Any, ...],
                  ictx: ICtx) -> Result[Any]:
     assert len(args) == 2 and not kwargs, (args, kwargs)
     return Result(_resolve(args[0]) < _resolve(args[1]))
+
+
+@register_builtin('tuple.__getitem__')
+@check_result
+def _do_tuple_lt(args: Tuple[Any, ...],
+                 kwargs: Dict[Text, Any],
+                 ictx: ICtx) -> Result[Any]:
+    assert len(args) == 2 and not kwargs, (args, kwargs)
+    return Result(_resolve(args[0])[args[1]])

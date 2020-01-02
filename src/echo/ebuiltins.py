@@ -14,10 +14,14 @@ bytearray memoryview bytes complex
 compile
 NotImplemented StopIteration
 print globals abs ord chr
+
 NameError AttributeError KeyError TypeError IndexError ImportError
-NotImplementedError ValueError AssertionError SystemError
+NotImplementedError ValueError AssertionError SystemError RuntimeError
+MemoryError
+
 Warning PendingDeprecationWarning ImportWarning ResourceWarning
-UserWarning DeprecationWarning""".split())
+UserWarning DeprecationWarning RuntimeWarning
+""".split())
 
 
 def make_ebuiltins() -> Dict[Text, Any]:

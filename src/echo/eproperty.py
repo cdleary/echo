@@ -11,7 +11,8 @@ from echo.interp_context import ICtx
 
 
 class EProperty(EPyObject):
-    def __init__(self, fget: EFunction, doc: Optional[Text]):
+    def __init__(self, fget: EPyObject, doc: Optional[Text]):
+        assert isinstance(fget, EPyObject), fget
         self.fget = fget
         self.doc = doc
 
@@ -34,7 +35,11 @@ class EProperty(EPyObject):
             return Result(self)
         log('ep:get', f'fget: {self.fget} obj: {obj} objtype: {objtype}')
         assert _self is self
-        return self.fget.invoke((obj,), kwargs, locals_dict, ictx)
+        do_call = self.fget.getattr('__call__', ictx)
+        if do_call.is_exception():
+            return do_call
+        do_call = do_call.get_value()
+        return do_call.invoke((obj,), kwargs, locals_dict, ictx)
 
     @check_result
     def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:

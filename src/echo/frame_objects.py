@@ -246,6 +246,8 @@ class StatefulFrame:
         assert x is not isinstance
         assert x is not tuple
         assert x is not dict
+        assert x is not Exception
+        assert x is not BaseException
         assert not isinstance(x, Value), x
         assert x is not GuestCoroutine
         log('fo:stack:push()', repr(x))
