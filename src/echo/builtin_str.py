@@ -16,10 +16,11 @@ from echo import iteration_helpers
 @check_result
 def _do_str_call(args: Tuple[Any, ...],
                  kwargs: Dict[Text, Any], ictx: ICtx) -> Result[Any]:
-    assert len(args) == 1 and not kwargs, (args, kwargs)
+    assert 1 <= len(args) <= 2 and not kwargs, (args, kwargs)
     o = args[0]
     if not isinstance(o, EPyObject):
-        return Result(str(o))
+        return Result(str(*args))
+    assert len(args) == 1
     fstr = o.getattr('__str__')
     if fstr.is_exception():
         return fstr

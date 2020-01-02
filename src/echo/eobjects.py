@@ -60,7 +60,9 @@ class EFunction(EPyObject):
                args: Tuple[Any, ...],
                kwargs: Dict[Text, Any],
                locals_dict: Dict[Text, Any],
-               ictx: ICtx) -> Result[Any]:
+               ictx: ICtx,
+               globals_: Optional[Dict[Text, Any]] = None) -> Result[Any]:
+        assert isinstance(ictx, ICtx), ictx
         if self._code_attrs.coroutine:
             return Result(GuestCoroutine(self))
 
@@ -439,8 +441,9 @@ class EInstance(EPyObject):
         cls_attr = None
         if name in self.cls.dict_:
             cls_attr = self.cls.dict_[name]
+            log('eo:ei:sa', f'cls_attr {cls_attr!r}')
 
-        if (isinstance(cls_attr, EInstance)
+        if (isinstance(cls_attr, EPyObject)
                 and cls_attr.hasattr('__set__')):
             f_result = cls_attr.getattr('__set__', ictx)
             if f_result.is_exception():

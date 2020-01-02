@@ -19,10 +19,10 @@ from termcolor import cprint
 
 DEBUG_PRINT_IMPORTS = bool(os.getenv('DEBUG_PRINT_IMPORTS', False))
 SPECIAL_MODULES = (
-    'os', 'sys', 'itertools', 'time', 'ctypes',
+    'os', 'sys', 'itertools', 'time', 'ctypes', 'subprocess',
     '_collections', '_signal',
     '_weakref', '_weakrefset', '_thread', 'errno', '_sre',
-    '_struct', '_codecs', '_pickle',
+    '_struct', '_codecs', '_pickle', '_ast',
     'numpy.core._multiarray_umath',
     'numpy.core._fastCopyAndTranspose',
 )
@@ -364,6 +364,7 @@ def _import_name_without_level(
         return Result(start_path_result.get_exception())
     start_path = start_path_result.get_value()
     start_fqn = multi_module_pieces[0]
+    elog('imp:inwl', f'start_path {start_path!r} start_fqn {start_fqn!r}')
 
     # First import the "start path" as the first module-or-package.
     start_mod_result = _import_module_at_path(
@@ -421,6 +422,7 @@ def import_path(path: Text, module_name: Text, fully_qualified_name: Text,
 
 
 def run_IMPORT_FROM(module: ModuleT, fromname: Text, ictx: ICtx):
+    elog('imp:if', f'IMPORT_FROM module {module!r} fromname {fromname!r}')
     return _getattr_or_subimport(module, fromname, ictx)
 
 
@@ -455,7 +457,11 @@ def run_IMPORT_NAME(importing_path: Text,
 
     # If it has already been imported, we just give back that result.
     if multi_module_name in ictx.interp_state.sys_modules:
-        return Result(ictx.interp_state.sys_modules[multi_module_name])
+        if fromlist is None:
+            return Result(
+                ictx.interp_state.sys_modules[multi_module_name.split('.')[0]])
+        else:
+            return Result(ictx.interp_state.sys_modules[multi_module_name])
 
     if multi_module_name in ('_abc', '_heapq'):
         # Some C modules we refuse to import so we can get their Python based

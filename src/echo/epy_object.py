@@ -35,7 +35,7 @@ def _find_thread_ictx():
 class EPyObject(abc.ABC):
 
     def __call__(self, *args, **kwargs) -> Any:
-        locals_dict, ictx, globals_ = _find_thread_ictx()
+        locals_dict, globals_, ictx = _find_thread_ictx()
         res = self.invoke(args, kwargs, locals_dict=locals_dict, ictx=ictx,
                           globals_=globals_)
         if res.is_exception():

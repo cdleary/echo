@@ -666,7 +666,7 @@ class StatefulFrame:
             v = self._pop()
             self.globals_[argval] = v
 
-    def _run_STORE_ATTR(self, arg, argval):
+    def _run_STORE_ATTR(self, arg, argval) -> Result[Any]:
         obj = self._pop()
         value = self._pop()
         log('bc:sa', f'obj {obj!r} attr {argval!r} val {value!r}')
@@ -675,7 +675,7 @@ class StatefulFrame:
             return r
         return Result(NoStackPushSentinel)
 
-    def _run_STORE_GLOBAL(self, arg, argval):
+    def _run_STORE_GLOBAL(self, arg, argval) -> None:
         self.globals_[argval] = self._pop()
 
     def _run_MAKE_CLOSURE(self, arg, argval) -> Result[Any]:
@@ -1118,6 +1118,10 @@ class StatefulFrame:
         return None
 
     def run_to_return_or_yield(self) -> Result[Tuple[Value, ReturnKind]]:
+        if (os.getenv('ECHO_DUMP_CODE')
+                and os.getenv('ECHO_DUMP_CODE') in str(self.code)):
+            print(self.code, file=sys.stderr)
+            dis.dis(self.code)
         while True:
             bc_result = self._run_one_bytecode()
             if bc_result is None:

@@ -10,7 +10,7 @@ from echo.interp_context import ICtx
 
 
 class EStaticMethod(EPyObject):
-    def __init__(self, f: EFunction):
+    def __init__(self, f: EPyObject):
         self.f = f
         self.dict_ = {}
 
@@ -59,7 +59,7 @@ def _do_staticmethod(
         kwargs: Dict[Text, Any],
         ictx: ICtx) -> Result[Any]:
     assert len(args) == 1, args
-    assert isinstance(args[0], EFunction), args[0]
+    assert isinstance(args[0], EPyObject), args[0]
     return Result(EStaticMethod(args[0]))
 
 
