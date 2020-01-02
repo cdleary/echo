@@ -1,6 +1,7 @@
 import types
 import weakref
 from typing import Text, Tuple, Any, Dict, Optional
+from collections import OrderedDict as odict
 
 from echo.elog import log
 from echo.epy_object import EPyObject, AttrWhere, EPyType
@@ -143,7 +144,7 @@ BUILTIN_ITERATORS = (
     RANGE_ITERATOR,
     DICT_KEY_ITERATOR, DICT_ITEM_ITERATOR, DICT_VALUE_ITERATOR, DICT_ITERATOR,
     ZIP_ITERATOR,
-    STR_ITERATOR, BYTES_ITERATOR,
+    STR_ITERATOR, BYTES_ITERATOR, type(iter(odict())),
     types.GeneratorType
 )
 

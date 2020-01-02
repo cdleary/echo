@@ -1,4 +1,5 @@
 import abc
+import builtins
 import collections
 import itertools
 import operator
@@ -448,6 +449,20 @@ class EInstance(EPyObject):
 
         self.dict_[name] = value
         return Result(None)
+
+    @check_result
+    def invoke(self,
+               args: Tuple[Any, ...],
+               kwargs: Dict[Text, Any],
+               locals_dict: Dict[Text, Any],
+               ictx: ICtx,
+               globals_: Optional[Dict[Text, Any]] = None) -> Result[Any]:
+        assert isinstance(ictx, ICtx), ictx
+        call_res = self.getattr('__call__', ictx)
+        if call_res.is_exception():
+            return call_res
+        call = call_res.get_value()
+        return call.invoke(args, kwargs, locals_dict, ictx, globals_=globals_)
 
 
 EClassOrBuiltin = Union['EClass', 'EBuiltin']
@@ -994,7 +1009,7 @@ class EBuiltin(EPyType):
     )
     BUILTIN_FNS = (
         'len', '__build_class__', 'getattr', 'setattr', 'iter', 'reversed',
-        'zip', 'next', 'repr', 'exec', 'hash',
+        'zip', 'next', 'repr', 'exec', 'hash', 'vars',
         'isinstance', 'issubclass', 'hasattr', 'any', 'min', 'max', 'callable',
         # object
         'object.__new__', 'object.__init__',
@@ -1144,6 +1159,10 @@ class EBuiltin(EPyType):
                     globals_.keys() if locals_dict is None
                     else locals_dict.keys())))
             return _do_dir(args, kwargs, ictx)
+        if self.name == 'vars':
+            if len(args) == 0 and not kwargs:
+                return Result(locals_dict)
+            return _do_vars(args, kwargs, ictx)
         if self.name == 'getattr':
             return do_getattr(args, kwargs, ictx)
         if self.name == 'setattr':
@@ -1200,6 +1219,21 @@ class EBuiltin(EPyType):
     def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
         if name == '__self__' and self.bound_self is not None:
             return Result(self.bound_self)
+
+        if self.name in self.BUILTIN_TYPES and name == '__module__':
+            return Result('builtins')
+
+        if (self.name in self.BUILTIN_TYPES and
+                name in ('__name__', '__qualname__')):
+            return Result(self.name)
+
+        if self.name in self.BUILTIN_TYPES and name in ('__doc__'):
+            return Result(getattr(builtins, self.name).__doc__)
+
+        if (self.name in self.BUILTIN_TYPES
+                and name in ('__annotations__',)):
+            return Result(ExceptionData(
+                None, None, AttributeError('__annotations__')))
 
         if self.name == 'str':
             if name == 'maketrans':
@@ -1457,3 +1491,11 @@ def invoke_desc(self, cls_attr: EPyObject, ictx: ICtx) -> Result[Any]:
     ictx.desc_count += 1
 
     return f.invoke((self, objtype), {}, {}, ictx)
+
+
+@check_result
+def _do_vars(args: Tuple[Any, ...],
+             kwargs: Dict[Text, Any],
+             ictx: ICtx) -> Result[Any]:
+    assert len(args) == 1
+    return do_getattr((args[0], '__dict__'), {}, ictx)

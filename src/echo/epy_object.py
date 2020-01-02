@@ -1,6 +1,7 @@
 import abc
+import contextlib
 from enum import Enum
-from typing import Text, Any, Optional, Tuple
+from typing import Text, Any, Optional, Tuple, Dict
 
 from echo.interp_context import ICtx
 from echo.interp_result import Result
@@ -13,7 +14,43 @@ class AttrWhere(Enum):
     CLS = 'cls'
 
 
+ictx_data = []
+
+
+@contextlib.contextmanager
+def establish_ictx(locals_dict: Dict[Text, Any],
+                   globals_: Optional[Dict[Text, Any]],
+                   ictx: ICtx):
+    data = (locals_dict, globals_, ictx)
+    ictx_data.append(data)
+    yield
+    popped = ictx_data.pop()
+    assert popped is data
+
+
+def _find_thread_ictx():
+    return ictx_data[-1]
+
+
 class EPyObject(abc.ABC):
+
+    def __call__(self, *args, **kwargs) -> Any:
+        locals_dict, ictx, globals_ = _find_thread_ictx()
+        res = self.invoke(args, kwargs, locals_dict=locals_dict, ictx=ictx,
+                          globals_=globals_)
+        if res.is_exception():
+            exc = res.get_exception().exception
+            assert isinstance(exc, BaseException), exc
+            raise exc
+        return res.get_value()
+
+    def invoke(self,
+               args: Tuple[Any, ...],
+               kwargs: Dict[Text, Any],
+               locals_dict: Dict[Text, Any],
+               ictx: ICtx,
+               globals_: Optional[Dict[Text, Any]] = None) -> Result[Any]:
+        raise NotImplementedError(self)
 
     @abc.abstractmethod
     def get_type(self) -> 'EPyObject':

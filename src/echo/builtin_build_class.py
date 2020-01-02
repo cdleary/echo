@@ -1,4 +1,4 @@
-from typing import Text, Tuple, Any, Dict, Optional, Union
+from typing import Text, Tuple, Any, Dict, Optional, Union, Type
 
 from echo.epy_object import EPyObject, EPyType
 from echo.interp_result import Result, ExceptionData, check_result
@@ -10,20 +10,29 @@ from echo.interp_context import ICtx
 from echo.elog import log
 
 
+def _is_subtype_of(x, y):
+    """Returns whether x is a subtype of y."""
+    if isinstance(x, EPyType) and isinstance(y, EPyType):
+        return x.is_subtype_of(y)
+    if isinstance(x, type) and isinstance(y, type):
+        return issubclass(x, y)
+    raise NotImplementedError(x, y)
+
+
 def _pytype_calculate_metaclass(
         metatype: EPyType,
         bases: Tuple[EPyType, EBuiltin],
-        ictx: ICtx) -> Result[Union[EPyType, EBuiltin]]:
+        ictx: ICtx) -> Result[Union[EPyType, EBuiltin, Type]]:
     do_type = get_guest_builtin('type')
 
     winner = metatype
     for tmp in bases:
         tmptype = do_type.invoke((tmp,), {}, {}, ictx).get_value()
-        assert isinstance(winner, (EPyType, EBuiltin)), winner
-        assert isinstance(tmptype, (EPyType, EBuiltin)), tmptype
-        if winner.is_subtype_of(tmptype):
+        assert isinstance(winner, (EPyType, EBuiltin, type)), winner
+        assert isinstance(tmptype, (EPyType, EBuiltin, type)), tmptype
+        if _is_subtype_of(winner, tmptype):
             continue
-        if tmptype.is_subtype_of(winner):
+        if _is_subtype_of(tmptype, winner):
             winner = tmptype
             continue
         log('go:pcm', f'winner: {winner} tmptype: {tmptype}')

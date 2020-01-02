@@ -18,6 +18,7 @@ from typing import (
     Callable,
 )
 
+from echo import epy_object
 from echo.common import dis_to_str, get_code, none_filler
 from echo.elog import log
 from echo.interp_result import Result, ExceptionData, check_result
@@ -222,10 +223,6 @@ def do_call(f,
     elif isinstance(f, (EFunction, EMethod, EClassMethod, EStaticMethod,
                         NativeFunction)):
         return f.invoke(args, kwargs, locals_dict, ictx)
-    elif isinstance(f, (types.MethodType, types.FunctionType)):
-        log('interp:do_call:native', f'f: {f} args: {args} kwargs: {kwargs}')
-        # Builtin object method.
-        return Result(f(*args, **kwargs))
     elif f is get_sunder_sre().compile:
         return _do_call_sre_compile(args, kwargs, ictx)
     elif isinstance(f, EBuiltin):
@@ -233,15 +230,17 @@ def do_call(f,
                         ictx=ictx)
     elif isinstance(f, EClass):
         return f.instantiate(args, kwargs, globals_=globals_, ictx=ictx)
-    elif callable(f):
-        log('interp:do_call:native', f'f: {f} args: {args} kwargs: {kwargs}')
-        return Result(f(*args, **kwargs))
     elif isinstance(f, EPyObject) and f.hasattr('__call__'):
         f_call = f.getattr('__call__', ictx)
         if f_call.is_exception():
             return f_call
         f_call = f_call.get_value()
         return ictx.call(f_call, args, kwargs, locals_dict, globals_=globals_)
+    elif (isinstance(f, (types.MethodType, types.FunctionType)) or
+            (not isinstance(f, EPyObject) and callable(f))):
+        log('interp:do_call:native', f'f: {f} args: {args} kwargs: {kwargs}')
+        with epy_object.establish_ictx(locals_dict, globals_, ictx):
+            return Result(f(*args, **kwargs))
     else:
         if isinstance(f, EPyObject):
             type_name = f.get_type().name

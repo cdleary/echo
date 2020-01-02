@@ -21,3 +21,7 @@ assert not object.__bases__
 assert isinstance(None, object)
 
 assert (int == frozenset) is False
+
+assert str.__module__ == 'builtins'
+assert str.__name__ == 'str'
+assert str.__qualname__ == 'str'
