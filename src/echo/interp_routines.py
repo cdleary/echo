@@ -113,6 +113,7 @@ BUILTIN_VALUE_TYPES = {
     tuple,
     slice,
     set,
+    bytearray,
     type(None),
     type(sys.version_info),
 }

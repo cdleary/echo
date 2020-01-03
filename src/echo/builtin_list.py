@@ -2,7 +2,7 @@ from typing import Text, Tuple, Any, Dict, Optional, List
 
 from echo.elog import log
 from echo.epy_object import EPyObject
-from echo.interp_result import Result, check_result
+from echo.interp_result import Result, check_result, ExceptionData
 from echo import interp_routines
 from echo import iteration_helpers
 from echo.eobjects import (
@@ -95,6 +95,19 @@ def _do_list_append(
         ictx: ICtx) -> Result[Any]:
     assert len(args) == 1 and not kwargs, (args, kwargs)
     _resolve(args[0]).clear()
+    return Result(None)
+
+
+@register_builtin('list.remove')
+def _do_list_append(
+        args: Tuple[Any, ...],
+        kwargs: Dict[Text, Any],
+        ictx: ICtx) -> Result[Any]:
+    assert len(args) == 2 and not kwargs, (args, kwargs)
+    try:
+        _resolve(args[0]).remove(args[1])
+    except ValueError as e:
+        return Result(ExceptionData(None, None, e))
     return Result(None)
 
 

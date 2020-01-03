@@ -853,13 +853,15 @@ class StatefulFrame:
             BlockKind.SETUP_EXCEPT, arg+self.pc+self.pc_to_bc_width[self.pc],
             len(self.stack)))
 
-    def _run_STORE_SUBSCR(self, arg, argval) -> None:
+    def _run_STORE_SUBSCR(self, arg, argval) -> Result[Any]:
         tos = self._pop()
         tos1 = self._pop()
         tos2 = self._pop()
         log('bc:store_subscr', f'd: {tos1} k: {tos} v: {tos2}')
         r = do_setitem((tos1, tos, tos2), self.ictx)
-        assert not r.is_exception(), r
+        if r.is_exception():
+            return r
+        return Result(NoStackPushSentinel)
 
     def _run_CALL_FUNCTION_KW(self, arg, argval):
         args = arg

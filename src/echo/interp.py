@@ -60,6 +60,7 @@ import echo.builtin_type
 import echo.builtin_enumerate
 import echo.builtin_predicates
 import echo.builtin_object
+import echo.builtin_bytearray
 
 
 @check_result
@@ -236,8 +237,7 @@ def do_call(f,
             return f_call
         f_call = f_call.get_value()
         return ictx.call(f_call, args, kwargs, locals_dict, globals_=globals_)
-    elif (isinstance(f, (types.MethodType, types.FunctionType)) or
-            (not isinstance(f, EPyObject) and callable(f))):
+    elif not isinstance(f, EPyObject) and callable(f):
         log('interp:do_call:native', f'f: {f} args: {args} kwargs: {kwargs}')
         with epy_object.establish_ictx(locals_dict, globals_, ictx):
             return Result(f(*args, **kwargs))

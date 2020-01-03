@@ -1006,7 +1006,7 @@ class EBuiltin(EPyType):
     """A builtin function/type in the echo VM."""
 
     BUILTIN_TYPES = (
-        'object', 'type', 'classmethod',
+        'object', 'type', 'classmethod', 'bytearray',
         'staticmethod', 'property', 'Exception', 'super', 'enumerate', 'map',
         'str', 'dict', 'tuple', 'list', 'int', 'bool', 'BaseException',
     )
@@ -1047,13 +1047,15 @@ class EBuiltin(EPyType):
         # list
         'list.__new__', 'list.__init__',
         'list.__eq__',
-        'list.append', 'list.extend', 'list.clear',
+        'list.append', 'list.extend', 'list.clear', 'list.remove',
         'list.__contains__', 'list.__iter__',
         'list.__setitem__',
         # tuple
         'tuple.__new__', 'tuple.__init__',
         'tuple.__eq__', 'tuple.__lt__',
         'tuple.__getitem__',
+        # bytearray
+        'bytearray.__setitem__',
     )
 
     _registry: Dict[Text, Tuple[Callable, Optional[type]]] = {}
@@ -1374,6 +1376,7 @@ def do_getitem(args: Tuple[Any, ...], ictx: ICtx) -> Result[Any]:
 @check_result
 def do_setitem(args: Tuple[Any, ...], ictx: ICtx) -> Result[None]:
     assert len(args) == 3, args
+    log('eo:do_setitem()', f'args: {args}')
     o, name, value = args
     hsi = do_hasattr((o, '__setitem__'), ictx).get_value()
     if hsi:
@@ -1437,7 +1440,7 @@ def do_getattr(args: Tuple[Any, ...],
         return Result((get_guest_builtin('Exception'),))
 
     clsname = o.__class__.__name__
-    if (type(o) in (int, str, tuple, list)
+    if (type(o) in (int, str, tuple, list, bytearray)
             and f'{clsname}.{attr}' in EBuiltin.BUILTIN_FNS):
         return Result(get_guest_builtin_self(f'{clsname}.{attr}', o))
     if not isinstance(o, EPyObject):
