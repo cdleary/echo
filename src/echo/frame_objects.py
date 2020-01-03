@@ -6,7 +6,8 @@ import os
 import sys
 import types
 from typing import (
-    List, Any, Text, Optional, Dict, Tuple, Callable, cast, Sequence
+    List, Any, Text, Optional, Dict, Tuple, Callable, cast, Sequence, Union,
+    Type,
 )
 from enum import Enum
 
@@ -41,13 +42,13 @@ opcodeno = 0
 
 
 class WhyStatus(Enum):
-    WHY_NOT = 0x01        # No error.
-    WHY_EXCEPTION = 0x02  # Exception occurred.
-    WHY_RETURN = 0x08     # 'return' statement.
-    WHY_BREAK = 0x10      # 'break' statement.
-    WHY_CONTINUE = 0x20   # 'continue' statement.
-    WHY_YIELD = 0x40      # 'yield' operator.
-    WHY_SILENCED = 0x80   # Exception silenced by 'with'.
+    NOT = 0x01        # No error.
+    EXCEPTION = 0x02  # Exception occurred.
+    RETURN = 0x08     # 'return' statement.
+    BREAK = 0x10      # 'break' statement.
+    CONTINUE = 0x20   # 'continue' statement.
+    YIELD = 0x40      # 'yield' operator.
+    SILENCED = 0x80   # Exception silenced by 'with'.
 
 
 # Use a sentinel value (this class object) to indicate when
@@ -56,8 +57,11 @@ class UnboundLocalSentinel:
     pass
 
 
-class Sentinel:
+class _Sentinel:
     pass
+
+
+AnyOrSentinel = Union[Any, Type[_Sentinel]]
 
 
 # For nulls that appear in the CPython stack we push a sentinel value that
@@ -198,33 +202,59 @@ class StatefulFrame:
         while len(self.stack) > b.level:
             self._pop()
 
-    def _handle_exception(self, exception_data: ExceptionData) -> bool:
-        """Returns whether the exception was handled in this function."""
+    def _push_exception_info(
+            self, exception_data: Optional[ExceptionData]) -> None:
+        if exception_data:
+            log('fo:he', f'exc_info: {self.ictx.exc_info}')
+            self._push(exception_data.traceback)
+            self._push(exception_data.exception)
+            self._push(self._etype(exception_data.exception))
+        else:
+            self._push(StackNullSentinel)
+            self._push(StackNullSentinel)
+            self._push(None)
+
+    def _handle_exception(self, why: WhyStatus,
+                          exception_data: Optional[ExceptionData],
+                          return_value: AnyOrSentinel) -> bool:
+        """Returns whether the exception was handled in this function.
+
+        Side effects:
+            When an exception is handled, the PC is set to that of the handler.
+        """
         # Pop until we see an except block, or there's no block stack left.
         log('fo:he', f'handling exception; block stack: {self.block_stack}')
         while self.block_stack:
-            if (self.block_stack[-1].kind in (BlockKind.SETUP_EXCEPT,
-                                              BlockKind.SETUP_FINALLY)):
+            if (why == WhyStatus.EXCEPTION
+                    and self.block_stack[-1].kind in (
+                        BlockKind.SETUP_EXCEPT, BlockKind.SETUP_FINALLY)):
                 # We wound up at an except block, pop back to the right
                 # value-stack depth and start running the handler.
                 self.pc = self.block_stack[-1].handler
                 self._unwind_block(self.block_stack[-1])
-                if self.ictx.exc_info:
-                    log('fo:he', f'exc_info: {self.ictx.exc_info}')
-                    self._push(self.ictx.exc_info.traceback)
-                    self._push(self.ictx.exc_info.exception)
-                    self._push(self._etype(self.ictx.exc_info.exception))
-                else:
-                    self._push(StackNullSentinel)
-                    self._push(StackNullSentinel)
-                    self._push(None)
-                self._push(exception_data.traceback)
-                self._push(exception_data.exception)
-                self._push(self._etype(exception_data.exception))
+                self._push_exception_info(self.ictx.exc_info)
+                self._push_exception_info(exception_data)
                 # The block stack entry transmorgifies into an EXCEPT_HANDLER.
                 self.block_stack[-1].kind = BlockKind.EXCEPT_HANDLER
                 self.block_stack[-1].handler = -1
                 self.ictx.exc_info = exception_data
+                return True
+
+            if (why == WhyStatus.CONTINUE and
+                    self.block_stack[-1].kind == BlockKind.SETUP_LOOP):
+                b = self.block_stack[-1]
+                self.pc = return_value
+                return True
+
+            if self.block_stack[-1].kind == BlockKind.SETUP_FINALLY:
+                b = self.block_stack.pop()
+                self._unwind_block(b)
+                # Not an exception, but we have a finally block to run.
+                if why in (WhyStatus.RETURN, WhyStatus.CONTINUE):
+                    assert return_value is not _Sentinel
+                    self._push(return_value)
+                self._push(why)
+                self.pc = b.handler
                 return True
 
             if self.block_stack[-1].kind == BlockKind.EXCEPT_HANDLER:
@@ -505,7 +535,7 @@ class StatefulFrame:
         res = self._pop()
         exc = self._pop()
         if res is True:
-            self._push(WhyStatus.WHY_SILENCED)
+            self._push(WhyStatus.SILENCED)
         elif res is None:
             pass
         else:
@@ -757,16 +787,23 @@ class StatefulFrame:
             return interp_routines.compare(
                 argval, lhs, rhs, self.ictx)
 
-    def _run_END_FINALLY(self, arg, argval):
+    @sets_pc
+    def _run_END_FINALLY(self, arg, argval) -> Result[bool]:
         status = self._pop()
         log('bc:ef', f'END_FINALLY status {status!r}')
         do_issubclass = get_guest_builtin('issubclass')
         if isinstance(status, (int, WhyStatus)):
             why = WhyStatus(status)
 
-            if why == WhyStatus.WHY_SILENCED:
+            if why == WhyStatus.SILENCED:
                 self._unwind_except_handler(self.block_stack.pop())
-                return
+                return Result(False)
+
+            if why in (WhyStatus.CONTINUE, WhyStatus.RETURN):
+                retval = self._pop()
+                assert retval is not _Sentinel, retval
+                assert self._handle_exception(why, None, retval)
+                return Result(True)
 
             raise NotImplementedError(status)
         elif self._eissubclass(status, get_guest_builtin('BaseException')):
@@ -777,7 +814,7 @@ class StatefulFrame:
             log('bc:ef', f'END_FINALLY exception_data {exception_data!r}')
             return Result(exception_data)
         elif status is None:
-            pass
+            return Result(False)
         else:
             raise NotImplementedError(repr(status))
 
@@ -882,14 +919,19 @@ class StatefulFrame:
             BlockKind.SETUP_LOOP, arg + self.pc + self.pc_to_bc_width[self.pc],
             len(self.stack)))
 
+    @sets_pc
+    def _run_CONTINUE_LOOP(self, arg, argval) -> bool:
+        assert self._handle_exception(WhyStatus.CONTINUE, None, arg)
+        return True
+
     def _run_RAISE_VARARGS(self, arg, argval):
         argc = arg
-        cause, exc = Sentinel, Sentinel
+        cause, exc = _Sentinel, _Sentinel
         if argc >= 2:
             cause = self._pop()
         if argc >= 1:
             exc = self._pop()
-        if exc is Sentinel:  # Re-raise.
+        if exc is _Sentinel:  # Re-raise.
             return Result(self.ictx.exc_info)
 
         if (isinstance(exc, type) and issubclass(exc, BaseException)):
@@ -1073,6 +1115,7 @@ class StatefulFrame:
             return Result((Value(self._peek()), ReturnKind.YIELD))
 
         f = getattr(self, '_run_{}'.format(instruction.opname))
+        f_sets_pc = getattr(f, '_sets_pc', False)
 
         stack_depth_before = len(self.stack)
         result = f(arg=instruction.arg, argval=instruction.argval)
@@ -1086,13 +1129,15 @@ class StatefulFrame:
                 exception_data = result.get_exception()
                 exception_data.traceback.append(
                     (self.code.co_filename, self.line))
-                if self._handle_exception(exception_data):
+                if self._handle_exception(WhyStatus.EXCEPTION, exception_data,
+                                          _Sentinel):
                     return None
                 else:
                     return result
             elif isinstance(result.get_value(), Value):
                 self._push_value(result.get_value())
-            elif result.get_value() is not NoStackPushSentinel:
+            elif (not f_sets_pc and
+                    result.get_value() is not NoStackPushSentinel):
                 self._push(result.get_value())
 
         stack_depth_after = len(self.stack)
@@ -1101,6 +1146,7 @@ class StatefulFrame:
                 # different stack for block info.
                 'SETUP_EXCEPT', 'POP_EXCEPT', 'SETUP_FINALLY', 'END_FINALLY',
                 'SETUP_WITH', 'WITH_CLEANUP_START', 'WITH_CLEANUP_FINISH',
+                'CONTINUE_LOOP',
                 # This op causes the stack_effect call to error.
                 'EXTENDED_ARG', 'BREAK_LOOP',
                 # These ops may or may not pop the stack.
@@ -1112,12 +1158,23 @@ class StatefulFrame:
                 instruction, stack_depth_after, stack_depth_before,
                 stack_effect)
 
-        f_sets_pc = getattr(f, '_sets_pc', False)
-        if (not f_sets_pc) or (f_sets_pc and not result):
+        if ((not f_sets_pc) or
+                (f_sets_pc and not self._maybe_box_result_truthy(result))):
             width = self.pc_to_bc_width[self.pc]
             self.pc += width
 
         return None
+
+    def _maybe_box_result_truthy(
+            self, result: Optional[Union[bool, Result[bool]]]) -> bool:
+        if result is None:
+            return False
+        if isinstance(result, bool):
+            return result
+        assert isinstance(result, Result), result
+        r = result.get_value()
+        assert isinstance(r, bool)
+        return r
 
     def run_to_return_or_yield(self) -> Result[Tuple[Value, ReturnKind]]:
         if (os.getenv('ECHO_DUMP_CODE')
