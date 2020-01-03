@@ -1,7 +1,7 @@
 import functools
 import os
 import sys
-from typing import Text, Callable
+from typing import Text, Callable, Union
 
 
 ECHO_DEBUG = os.getenv('ECHO_DEBUG', '')
@@ -16,12 +16,14 @@ def _accepts(channel: Text) -> bool:
     return any(channel.startswith(start) for start in starts)
 
 
-def log(channel: Text, s: Text) -> None:
+def log(channel: Text, s: Union[Text, Callable[[], Text]]) -> None:
     ECHO_DEBUG = os.getenv('ECHO_DEBUG', '')
     if not ECHO_DEBUG:
         return
     if not _accepts(channel):
         return
+    if callable(s):
+        s = s()
     print(f'[{channel}] {s}', file=sys.stderr)
 
 

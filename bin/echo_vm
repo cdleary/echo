@@ -17,7 +17,7 @@ import os
 import pdb
 import sys
 import types
-from typing import Any
+from typing import Any, Text
 
 from echo import interp
 from echo import ebuiltins
@@ -27,24 +27,25 @@ from echo import import_routines
 from echo import bytecode_trace
 from echo.interp_result import Result
 
-from termcolor import cprint
+import termcolor
 
 
-def _print_surrounding(filename, lineno):
+def _print_surrounding(filename: Text, lineno: int) -> None:
     with open(filename) as f:
         lines = list(enumerate((l.rstrip() for l in f), start=1))
     print(f' {filename}:{lineno}', file=sys.stderr)
     for i, line in lines[max(lineno-8, 0):lineno+8]:
         arrow = '->' if i == lineno else '  '
-        print(f' {arrow}   {i:6d}  {line}', file=sys.stderr)
+        line_str = termcolor.colored(f'{i:6d}', 'yellow')
+        print(f' {arrow}   {line_str}  {line}', file=sys.stderr)
 
 
 def _handle_result(result: Result[Any]) -> int:
     if result.is_exception():
-        cprint(repr(result.get_exception().exception), color='red', file=sys.stderr)
+        termcolor.cprint(repr(result.get_exception().exception), color='red', file=sys.stderr)
         for filename, lineno in result.get_exception().traceback:
             _print_surrounding(filename, lineno)
-        cprint(str(result), color='red', file=sys.stderr)
+        termcolor.cprint(str(result), color='red', file=sys.stderr)
         error = True
     else:
         error = False

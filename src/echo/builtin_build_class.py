@@ -101,12 +101,11 @@ def _do___build_class__(
                 globals_=new_f.globals_)
         return Result(EClass(name, ns, bases=bases, metaclass=metaclass))
 
-    if metaclass != get_guest_builtin('type'):
-        raise NotImplementedError(metaclass, cell)
+    # TODO have to check for more derived metaclass or metaclass conflicts.
 
     # Now we call the metaclass with the evaluated namespace.
     assert isinstance(metaclass, (EClass, EBuiltin)), metaclass
-    cls_result = metaclass.invoke((name, bases, ns), {}, {}, ictx)
+    cls_result = ictx.call(metaclass, (name, bases, ns), {}, {})
     if cls_result.is_exception():
         return Result(cls_result.get_exception())
 

@@ -281,12 +281,15 @@ def _find_name_in_mro(type_: EPyType, name: Text, ictx: ICtx) -> Any:
         if isinstance(cls, EBuiltin):
             if cls.hasattr(name):
                 return cls.getattr(name, ictx).get_value()
-        else:
-            assert isinstance(cls, EClass), (cls, name)
+        elif isinstance(cls, EClass):
             log('eo:fnim',
                 f'searching for {name} in {cls.name} among {cls.dict_.keys()}')
             if name in cls.dict_:
                 return cls.dict_[name]
+        else:
+            assert isinstance(cls, type)
+            if hasattr(cls, name):
+                return getattr(cls, name)
     return NotFoundSentinel.singleton
 
 
@@ -581,7 +584,8 @@ class EClass(EPyType):
                     globals_: Dict[Text, Any],
                     ictx: ICtx) -> Result[EInstance]:
         """Creates an instance of this user-defined class."""
-        log('eo:gc', f'instantiate self: {self} args: {args} kwargs: {kwargs}')
+        log('eo:gc',
+            lambda: f'instantiate self: {self} args: {args} kwargs: {kwargs}')
         guest_instance = None
         if self.hasattr('__new__'):
             new_f = self.getattr('__new__', ictx).get_value()
@@ -591,7 +595,10 @@ class EClass(EPyType):
             if result.is_exception():
                 return Result(result.get_exception())
             guest_instance = result.get_value()
-            if not _do_isinstance((guest_instance, self), ictx).get_value():
+            ii_result = _do_isinstance((guest_instance, self), ictx)
+            if ii_result.is_exception():
+                return ii_result
+            if not ii_result.get_value():
                 return Result(guest_instance)
         guest_instance = (EInstance(self) if guest_instance is None
                           else guest_instance)
@@ -619,9 +626,14 @@ class EClass(EPyType):
         if self.get_type().hasattr(name):
             return AttrWhere.CLS
         for base in self.get_mro()[1:]:
-            haw = base.hasattr_where(name)
-            if haw:
-                return haw
+            if isinstance(base, EPyObject):
+                haw = base.hasattr_where(name)
+                if haw:
+                    return haw
+            else:
+                if hasattr(base, name):
+                    return AttrWhere.SELF_SPECIAL
+
         return None
 
     @debugged('eo:ec:ga')
@@ -787,7 +799,7 @@ def _do_isinstance(
         args: Tuple[Any, ...],
         ictx: ICtx) -> Result[bool]:
     assert len(args) == 2, args
-    log('eo:isinstance', f'args: {args}')
+    log('eo:isinstance', lambda: f'args: {args}')
 
     if (isinstance(args[1], EClass) and
             args[1].hasattr('__instancecheck__')):
@@ -796,7 +808,7 @@ def _do_isinstance(
             return Result(ic.get_exception())
         ic = ic.get_value()
         result = ictx.call(ic, (args[0],), {}, {},
-                           globals_=ic.globals_)
+                           globals_=getattr(ic, 'globals_', None))
         return result
 
     if isinstance(args[0], EFunction) and args[1] is EMethodType.singleton:
@@ -913,7 +925,7 @@ def _do_issubclass(
             return Result(scc.get_exception())
         scc = scc.get_value()
         result = ictx.call(scc, (args[0],), {}, {},
-                           globals_=scc.globals_)
+                           globals_=getattr(scc, 'globals_', None))
         return result
 
     if isinstance(args[0], EClass) and isinstance(args[1], EBuiltin):
@@ -1012,7 +1024,7 @@ class EBuiltin(EPyType):
     )
     BUILTIN_FNS = (
         'len', '__build_class__', 'getattr', 'setattr', 'iter', 'reversed',
-        'zip', 'next', 'repr', 'exec', 'hash', 'vars',
+        'zip', 'next', 'repr', 'exec', 'hash', 'vars', 'dir',
         'isinstance', 'issubclass', 'hasattr', 'any', 'min', 'max', 'callable',
         # object
         'object.__new__', 'object.__init__',

@@ -19,10 +19,10 @@ from termcolor import cprint
 
 DEBUG_PRINT_IMPORTS = bool(os.getenv('DEBUG_PRINT_IMPORTS', False))
 SPECIAL_MODULES = (
-    'os', 'sys', 'itertools', 'time', 'ctypes', 'subprocess',
-    '_collections', '_signal',
+    'sys', 'itertools', 'time', 'ctypes', 'subprocess', 'shutil',
+    '_collections', '_signal', '_stat', 'posix',
     '_weakref', '_weakrefset', '_thread', 'errno', '_sre',
-    '_struct', '_codecs', '_pickle', '_ast',
+    '_struct', '_codecs', '_pickle', '_ast', '_io', '_functools',
     'numpy.core._multiarray_umath',
     'numpy.core._fastCopyAndTranspose',
 )
@@ -196,7 +196,11 @@ def _getattr_or_subimport(current_mod: ModuleT,
 
     # Try normal gettattr for real Python modules.
     if isinstance(current_mod, ModuleType):
-        return Result(getattr(current_mod, fromlist_name))
+        if hasattr(current_mod, fromlist_name):
+            return Result(getattr(current_mod, fromlist_name))
+        err = ImportError(f'cannot import name {fromlist_name!r} from '
+                          f'{current_mod.__name__!r} (unknown location)')
+        return Result(ExceptionData(None, None, err))
 
     # Use echo getattr for EModules.
     assert isinstance(current_mod, EModule), current_mod

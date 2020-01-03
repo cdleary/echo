@@ -14,11 +14,11 @@ PASSTHRU = tuple("""range slice float reversed set frozenset zip sorted
 memoryview bytes complex
 compile
 NotImplemented StopIteration
-print globals abs ord chr
+print globals abs ord chr open
 
 NameError AttributeError KeyError TypeError IndexError ImportError
 NotImplementedError ValueError AssertionError SystemError RuntimeError
-MemoryError
+MemoryError OSError FutureWarning
 
 Warning PendingDeprecationWarning ImportWarning ResourceWarning
 UserWarning DeprecationWarning RuntimeWarning

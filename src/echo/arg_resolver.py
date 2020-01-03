@@ -51,7 +51,7 @@ def resolve_args(
     #   kwonlyargcount  number of names after the '*' position
 
     log('ar', f'code: {attrs.code}')
-    log('ar', f'args: {args}')
+    log('ar', lambda: f'args: {args}')
     log('ar:attrs', f'argcount:       {attrs.argcount}')
     log('ar:attrs', f'total_argcount: {attrs.total_argcount}')
     log('ar:attrs', f'kwonlyargcount: {attrs.kwonlyargcount}')
@@ -156,7 +156,7 @@ def resolve_args(
             assert argno < len(arg_slots), (
                 'Argument number is out of range of argument slots.', argno,
                 attrs, getattr(attrs, 'code', None), value)
-            log('ar', f'updating arg_slots[{argno}] = {value!r}')
+            log('ar', lambda: f'updating arg_slots[{argno}] = {value!r}')
             arg_slots[argno] = value
             default_required[argno] = None
 
@@ -166,9 +166,9 @@ def resolve_args(
 
     # Populate the keyword arguments.
     all_kwargs = dict(kwarg_defaults)
-    log('ar', f'kwarg defaults: {all_kwargs}')
+    log('ar', lambda: f'kwarg defaults: {all_kwargs}')
     all_kwargs.update(kwargs)
-    log('ar', f'all kwargs:     {all_kwargs}')
+    log('ar', lambda: f'all kwargs:     {all_kwargs}')
     for kw, arg in all_kwargs.items():
         # Resolve the keyword to an index.
         try:

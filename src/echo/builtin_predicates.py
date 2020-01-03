@@ -25,8 +25,11 @@ def _do_bool_call(args: Tuple[Any, ...],
     if not isinstance(o, EPyObject):
         assert isinstance(o, (int, bool, str, set, tuple, dict, list,
                               collections.deque, types.FunctionType,
+                              types.MethodType, types.BuiltinMethodType,
                               types.BuiltinFunctionType,
-                              type(None), getattr(re, 'Match'))), o
+                              types.MethodDescriptorType,
+                              type(None), getattr(re, 'Match'))), \
+            (o, type(o))
         return Result(bool(o))
     if isinstance(o, EBuiltin):
         log('fo:truthy', f'builtin o: {o}')

@@ -98,7 +98,7 @@ def interp(code: types.CodeType,
     TODO(cdleary): 2019-01-21 Use dis.stack_effect to cross-check stack depth
         change.
     """
-    log('interp', f'args: {args} kwargs: {kwargs}')
+    log('interp', lambda: f'args: {args} kwargs: {kwargs}')
 
     closure = closure or ()
 
@@ -199,7 +199,7 @@ def do_call(f,
             globals_: Optional[Dict[Text, Any]] = None,
             in_function: bool = True
             ) -> Result[Any]:
-    log('interp:do_call', f'f: {f} args: {args} kwargs: {kwargs}')
+    log('interp:do_call', lambda: f'f: {f} args: {args} kwargs: {kwargs}')
 
     assert in_function
 
@@ -238,9 +238,10 @@ def do_call(f,
         f_call = f_call.get_value()
         return ictx.call(f_call, args, kwargs, locals_dict, globals_=globals_)
     elif not isinstance(f, EPyObject) and callable(f):
-        log('interp:do_call:native', f'f: {f} args: {args} kwargs: {kwargs}')
+        log('interp:do_call:native',
+            lambda: f'f: {f} args: {args} kwargs: {kwargs}')
         with epy_object.establish_ictx(locals_dict, globals_, ictx):
-            return Result(f(*args, **kwargs))
+            return Result(f(*args, **kwargs))  # Native call.
     else:
         if isinstance(f, EPyObject):
             type_name = f.get_type().name

@@ -11,6 +11,7 @@ from typing import (
 )
 from enum import Enum
 
+from echo import iteration_helpers
 from echo.elog import log
 from echo.interp_context import ICtx
 from echo import import_routines
@@ -280,7 +281,7 @@ class StatefulFrame:
         assert x is not BaseException
         assert not isinstance(x, Value), x
         assert x is not GuestCoroutine
-        log('fo:stack:push()', repr(x))
+        log('fo:stack:push()', lambda: repr(x))
         self.stack.append(x)
 
     def _push_value(self, x: Value) -> None:
@@ -288,7 +289,7 @@ class StatefulFrame:
 
     def _pop(self) -> Any:
         x = self.stack.pop()
-        log('fo:stack:pop()', repr(x))
+        log('fo:stack:pop()', lambda: repr(x))
         return x
 
     def _pop_n(self, n: int, tos_is_0: bool = True) -> Tuple[Any, ...]:
@@ -675,8 +676,9 @@ class StatefulFrame:
         kwargs = dict(zip(kwarg_stack[::2], kwarg_stack[1::2]))
         args = self._pop_n(argc, tos_is_0=False)
         f = self._pop()
-        log('bc:call', f'{self.code.co_filename}:{self.current_lineno} f: {f} '
-                       f'args: {args}')
+        log('bc:call',
+            lambda: f'{self.code.co_filename}:{self.current_lineno} f: {f} '
+                    f'args: {args}')
         result = self.do_call_callback(
             f, args, kwargs, locals_dict=self.get_locals_dict(),
             globals_=self.globals_)
@@ -759,7 +761,7 @@ class StatefulFrame:
 
     def _run_LOAD_ATTR(self, arg, argval) -> Result[Any]:
         obj = self._pop()
-        log('bc:la', f'obj {obj!r} attr {argval}')
+        log('bc:la', lambda: f'obj {obj!r} attr {argval}')
         if isinstance(obj, EInstance):
             r = obj.getattr(argval, self.ictx)
         elif isinstance(obj, EPyObject):
@@ -775,7 +777,7 @@ class StatefulFrame:
         if not r.is_exception():
             assert do_hasattr((obj, argval), self.ictx).get_value() is True, \
                    (obj, argval)
-        log('bc:la', f'obj {obj!r} attr {argval} => {r}')
+        log('bc:la', lambda: f'obj {obj!r} attr {argval} => {r}')
         return r
 
     def _run_COMPARE_OP(self, arg, argval):
@@ -829,6 +831,10 @@ class StatefulFrame:
     def _run_UNARY_NEGATIVE(self, arg, argval) -> Result[Any]:
         arg = self._pop()
         return interp_routines.run_unop('UNARY_NEGATIVE', arg, self.ictx)
+
+    def _run_UNARY_POSITIVE(self, arg, argval) -> Result[Any]:
+        arg = self._pop()
+        return interp_routines.run_unop('UNARY_POSITIVE', arg, self.ictx)
 
     def _run_binary(self, opname) -> Result[Any]:
         rhs = self._pop()
@@ -894,7 +900,6 @@ class StatefulFrame:
         tos = self._pop()
         tos1 = self._pop()
         tos2 = self._pop()
-        log('bc:store_subscr', f'd: {tos1} k: {tos} v: {tos2}')
         r = do_setitem((tos1, tos, tos2), self.ictx)
         if r.is_exception():
             return r
@@ -973,9 +978,9 @@ class StatefulFrame:
         method = self._pop()
         if self_value is not StackNullSentinel:
             args = (self_value,) + args
-        log('bc:cm', f'method: {method}')
-        log('bc:cm', f'args: {args}')
-        log('bc:cm', f'self_value: {self_value}')
+        log('bc:cm', lambda: f'method: {method}')
+        log('bc:cm', lambda: f'args: {args}')
+        log('bc:cm', lambda: f'self_value: {self_value}')
         return self.do_call_callback(
             method, args, {}, self.locals_dict,
             globals_=self.globals_)
@@ -1040,15 +1045,22 @@ class StatefulFrame:
         for item in reversed(stack_values):
             self._push(item)
 
-    def _run_UNPACK_SEQUENCE(self, arg, argval):
+    def _run_UNPACK_SEQUENCE(self, arg, argval) -> Optional[Result[None]]:
         # https://docs.python.org/3.7/library/dis.html#opcode-UNPACK_SEQUENCE
-        t = self._pop()  # type: Sequence
-        # Want to make sure we have a test that exercises this behavior
-        # properly, I expect it leaves the remainder in a tuple when arg is <
-        # len.
-        assert len(t) == arg
-        for e in t[::-1]:
-            self._push(e)
+        t = self._pop()
+
+        seen = []
+
+        def cb(item: Any) -> Result[bool]:
+            seen.append(item)
+            return Result(True)
+
+        res = iteration_helpers.foreach(t, cb, self.ictx)
+        if res.is_exception():
+            return res
+
+        for item in reversed(seen):
+            self._push(item)
 
     def _run_EXTENDED_ARG(self, arg, argval):
         pass  # The to-instruction decoding step already extended the args?
@@ -1119,7 +1131,7 @@ class StatefulFrame:
 
         stack_depth_before = len(self.stack)
         result = f(arg=instruction.arg, argval=instruction.argval)
-        log('bc:res', f'result {result}')
+        log('bc:res', lambda: f'result {result}')
         if result is None or type(result) == bool:
             pass
         else:

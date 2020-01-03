@@ -72,6 +72,8 @@ class EProperty(EPyObject):
     def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
         if name == 'fget':
             return Result(self.fget)
+        if name == 'fset':
+            return Result(self.fset)
         if name == '__get__':
             return Result(EMethod(NativeFunction(
                 self._get, 'eproperty.__get__'), bound_self=self))
@@ -85,7 +87,10 @@ class EProperty(EPyObject):
             return Result(self.doc)
         return Result(ExceptionData(None, name, AttributeError(name)))
 
-    def setattr(self, name: Text, value: Any) -> Result[None]:
+    def setattr(self, name: Text, value: Any, ictx: ICtx) -> Result[None]:
+        if name == '__doc__':
+            self.doc = value
+            return Result(None)
         raise NotImplementedError
 
 
@@ -95,8 +100,16 @@ def _do_property(
         kwargs: Dict[Text, Any],
         ictx: ICtx) -> Result[Any]:
     doc = kwargs.pop('doc', None)
-    assert len(args) == 1 and not kwargs, (args, kwargs)
-    guest_property = EProperty(args[0], None, doc=doc)
+    fget = kwargs.pop('fget', None)
+    if len(args) == 0:
+        pass
+    elif len(args) == 1:
+        assert fget is None
+        fget = args[0]
+    else:
+        raise NotImplementedError(args, kwargs)
+    assert not kwargs, kwargs
+    guest_property = EProperty(fget, fset=None, doc=doc)
     return Result(guest_property)
 
 

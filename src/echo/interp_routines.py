@@ -105,15 +105,17 @@ COMPARE_OPS = {
     'not in': lambda a, b: not operator.contains(b, a),
 }
 BUILTIN_VALUE_TYPES = {
-    int,
-    float,
-    range,
-    str,
-    bytes,
-    tuple,
-    slice,
-    set,
+    bool,
     bytearray,
+    bytes,
+    complex,
+    float,
+    int,
+    range,
+    set,
+    slice,
+    str,
+    tuple,
     type(None),
     type(sys.version_info),
 }
@@ -153,6 +155,7 @@ _BINARY_OPS = {
 _UNARY_OPS = {
     'UNARY_INVERT': operator.invert,
     'UNARY_NEGATIVE': operator.neg,
+    'UNARY_POSITIVE': operator.pos,
 }
 
 
@@ -203,6 +206,8 @@ def code_to_str(c: types.CodeType) -> Text:
 
 
 def exception_match(lhs, rhs, ictx: ICtx) -> Result[Any]:
+    if isinstance(rhs, tuple):
+        return Result(any(exception_match(lhs, e, ictx) for e in rhs))
     if lhs is rhs:
         r = Result(True)
     else:

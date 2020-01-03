@@ -97,7 +97,7 @@ def _do_type_call(args: Tuple[Any, ...], kwargs: Dict[Text, Any],
                   ictx: ICtx) -> Result[Any]:
     assert not kwargs, kwargs
     assert isinstance(args, tuple), args
-    log('go:type()', f'args: {args}')
+    log('go:type()', lambda: f'args: {args}')
     if len(args) == 1:
         if isinstance(args[0], EPyObject):
             return Result(args[0].get_type())
