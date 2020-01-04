@@ -1018,7 +1018,7 @@ class EBuiltin(EPyType):
     """A builtin function/type in the echo VM."""
 
     BUILTIN_TYPES = (
-        'object', 'type', 'classmethod', 'bytearray',
+        'object', 'type', 'classmethod', 'bytearray', 'bytes',
         'staticmethod', 'property', 'Exception', 'super', 'enumerate', 'map',
         'str', 'dict', 'tuple', 'list', 'int', 'bool', 'BaseException',
     )

@@ -50,6 +50,7 @@ BUILTIN_VALUE_TYPES_TUP = tuple(BUILTIN_VALUE_TYPES)
 
 TYPE_TO_EBUILTIN = {
     bool: get_guest_builtin('bool'),
+    bytes: get_guest_builtin('bytes'),
     bytearray: get_guest_builtin('bytearray'),
     dict: get_guest_builtin('dict'),
     int: get_guest_builtin('int'),

@@ -6,6 +6,7 @@ import types
 from typing import Text, Any, Union, Dict, Callable
 import weakref
 
+from echo.dso_objects import DsoPyObject
 from echo.ebuiltins import BUILTIN_VALUE_TYPES_TUP, BUILTIN_VALUE_TYPES
 from echo.elog import log, debugged
 from echo.interp_context import ICtx
@@ -126,6 +127,7 @@ def run_binop(opname: Text, lhs: Any, rhs: Any, ictx: ICtx) -> Result[Any]:
     lhs_type = do_type.invoke((lhs,), {}, {}, ictx).get_value()
     rhs_type = do_type.invoke((rhs,), {}, {}, ictx).get_value()
     ebool = get_guest_builtin('bool')
+    ebytes = get_guest_builtin('bytes')
     estr = get_guest_builtin('str')
     eint = get_guest_builtin('int')
     elist = get_guest_builtin('list')
@@ -134,8 +136,8 @@ def run_binop(opname: Text, lhs: Any, rhs: Any, ictx: ICtx) -> Result[Any]:
     eset = get_guest_builtin('set')
     etuple = get_guest_builtin('tuple')
     builtin_value_types = {
-        ebool, estr, eint, elist, edict, ebytearray, eset, etuple,
-        slice, range, ebytearray
+        ebool, ebytes, estr, eint, elist, edict, ebytearray, eset, etuple,
+        slice, range, ebytearray, type(sys.version_info),
     }
 
     if (opname in ('BINARY_TRUE_DIVIDE', 'BINARY_MODULO') and rhs_type is eint
@@ -291,6 +293,14 @@ def compare(opname: Text, lhs, rhs, ictx: ICtx) -> Result[bool]:
         return fcmp.invoke((lhs, rhs), {}, {}, ictx)
 
     if isinstance(lhs, EBuiltin) and isinstance(rhs, type):
+        return Result(False)
+
+    def symmetric_isinstance(atype, btype):
+        return ((isinstance(lhs, atype) and isinstance(rhs, btype)) or
+                (isinstance(lhs, btype) and isinstance(rhs, atype)))
+
+    if (symmetric_isinstance(type, DsoPyObject) or
+            symmetric_isinstance(EBuiltin, DsoPyObject)):
         return Result(False)
 
     raise NotImplementedError(opname, lhs, rhs)

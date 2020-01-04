@@ -45,7 +45,11 @@ def _dso_unlift(o: Any) -> Any:
     raise NotImplementedError(o)
 
 
-class DsoClassProxy(EPyType):
+class DsoPyObject(EPyObject):
+    pass
+
+
+class DsoClassProxy(EPyType, DsoPyObject):
     def __init__(self, wrapped: Type):
         self.wrapped = wrapped
 
@@ -76,7 +80,7 @@ class DsoClassProxy(EPyType):
         return None
 
 
-class DsoInstanceProxy(EPyObject):
+class DsoInstanceProxy(DsoPyObject):
     def __init__(self, wrapped: Any):
         self.wrapped = wrapped
 
@@ -98,7 +102,7 @@ class DsoInstanceProxy(EPyObject):
         return None
 
 
-class DsoFunctionProxy(EPyObject):
+class DsoFunctionProxy(DsoPyObject):
     def __init__(self, wrapped: Union[types.FunctionType,
                                       types.BuiltinFunctionType]):
         self.wrapped = wrapped
@@ -142,7 +146,7 @@ class DsoFunctionProxy(EPyObject):
         return Result(_dso_lift(o))
 
 
-class DsoModuleProxy(EPyObject):
+class DsoModuleProxy(DsoPyObject):
     def __init__(self, wrapped: types.ModuleType):
         assert isinstance(wrapped, types.ModuleType), wrapped
         self.wrapped = wrapped
