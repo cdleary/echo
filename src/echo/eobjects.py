@@ -1040,9 +1040,9 @@ class EBuiltin(EPyType):
         'type.__subclasses__',
         'type.mro', 'type.__call__',
         # str
-        'str.maketrans', 'str.join',
+        'str.maketrans', 'str.join', 'str.__repr__',
         # dict
-        'dict.__eq__', 'dict.__init__',
+        'dict.__eq__', 'dict.__init__', 'dict.__repr__',
         'dict.__setitem__', 'dict.__getitem__', 'dict.__delitem__',
         'dict.__contains__',
         'dict.fromkeys', 'dict.update', 'dict.setdefault',
@@ -1059,16 +1059,16 @@ class EBuiltin(EPyType):
         'int.__gt__',
         # list
         'list.__new__', 'list.__init__',
-        'list.__eq__',
+        'list.__eq__', 'list.__repr__',
         'list.append', 'list.extend', 'list.clear', 'list.remove',
         'list.__contains__', 'list.__iter__',
         'list.__setitem__',
         # tuple
         'tuple.__new__', 'tuple.__init__',
         'tuple.__eq__', 'tuple.__lt__',
-        'tuple.__getitem__',
+        'tuple.__getitem__', 'tuple.__repr__',
         # bytearray
-        'bytearray.__setitem__',
+        'bytearray.__setitem__', 'bytearray.__repr__',
     )
 
     _registry: Dict[Text, Tuple[Callable, Optional[type]]] = {}
@@ -1253,14 +1253,7 @@ class EBuiltin(EPyType):
             return Result(ExceptionData(
                 None, None, AttributeError('__annotations__')))
 
-        if self.name == 'str':
-            if name == 'maketrans':
-                return Result(get_guest_builtin('str.maketrans'))
-            if name == 'join':
-                return Result(get_guest_builtin('str.join'))
-
-        if self.name in ('str', 'int', 'tuple', 'list', 'type', 'dict',
-                         'object'):
+        if self.name in self.BUILTIN_TYPES:
             fullname = f'{self.name}.{name}'
             if fullname in self.BUILTIN_FNS:
                 return Result(get_guest_builtin(fullname))

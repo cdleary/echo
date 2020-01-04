@@ -58,6 +58,7 @@ def resolve_args(
     log('ar:attrs', f'starargs:       {attrs.starargs}')
     log('ar:attrs', f'starkwargs:     {attrs.starkwargs}')
     log('ar:attrs', f'varnames:       {attrs.varnames}')
+    log('ar:attrs', f'defaults:       {defaults}')
     log('ar:attrs', f'kwarg_defaults: {kwarg_defaults}')
 
     # The functionality of this method is to populate these arg slots

@@ -25,6 +25,10 @@ EVM_FAILING_SAMPLES = [
     'simple_repr_udt',
     'type_subclass_of_abc',
     'dunder_base',
+
+    # positional vs kwarg defaults issues
+    'positional_and_kwarg_defaults',
+    'pprint_items',
 ]
 
 

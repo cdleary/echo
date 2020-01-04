@@ -1090,8 +1090,14 @@ class StatefulFrame:
               ' empty' if len(self.stack) == 0 else ''), file=sys.stderr)
         for i, item in enumerate(reversed(self.stack)):
             item_type = self._etype(item)
-            s = '{!r} :: {}'.format(
-                item_type, trace_util.remove_at_hex(repr(item)))
+            if (isinstance(item, EPyObject) or
+                    isinstance(item, (types.FunctionType,
+                                      types.BuiltinFunctionType, type, bool,
+                                      int))):
+                s = '{!r} :: {}'.format(
+                    item_type, trace_util.remove_at_hex(repr(item)))
+            else:
+                s = repr(item_type)
             if item is StackNullSentinel:
                 s = '<null>'
             print(' ' * 8, '  TOS{}: {}'.format(i, s), file=sys.stderr)
@@ -1144,8 +1150,9 @@ class StatefulFrame:
                 'Bytecode must return Result', instruction, 'got', result)
             if result.is_exception():
                 exception_data = result.get_exception()
-                exception_data.traceback = etraceback.ETraceback(
-                    EFrame(self), self.pc, self.line)
+                if not exception_data.traceback:
+                    exception_data.traceback = etraceback.ETraceback(
+                        EFrame(self), self.pc, self.line)
                 if self._handle_exception(WhyStatus.EXCEPTION, exception_data,
                                           _Sentinel):
                     return None

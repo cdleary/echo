@@ -15,17 +15,12 @@ from echo.interp_result import Result, ExceptionData
 from echo.emodule import EModule
 from echo.dso_objects import DsoModuleProxy
 from echo.eobjects import NativeFunction, get_guest_builtin
+from echo import builtin_sys_module
 
 from termcolor import cprint
 
 
 DEBUG_PRINT_IMPORTS = bool(os.getenv('DEBUG_PRINT_IMPORTS', False))
-SPECIAL_MODULES = (
-    'itertools', 'time', 'ctypes', 'subprocess', 'shutil',
-    '_collections', '_signal', '_stat', 'posix',
-    '_weakref', '_weakrefset', '_thread', 'errno', '_sre',
-    '_struct', '_codecs', '_pickle', '_ast', '_io', '_functools',
-)
 
 
 ModuleT = Union[ModuleType, EModule, DsoModuleProxy]
@@ -433,62 +428,6 @@ def run_IMPORT_FROM(module: ModuleT, fromname: Text, ictx: ICtx):
     return _getattr_or_subimport(module, fromname, ictx)
 
 
-def _get_exc_info(
-             args: Tuple[Any, ...],
-             kwargs: Dict[Text, Any],
-             locals_dict: Dict[Text, Any],
-             ictx: ICtx) -> Result[Any]:
-    exc_info = ictx.exc_info
-    if not exc_info:
-        return Result((None, None, None))
-    do_type = get_guest_builtin('type')
-    exc_type = do_type.invoke((exc_info.exception,), {}, {}, ictx).get_value()
-    return Result((exc_type, exc_info.exception, exc_info.traceback))
-
-
-def wrap_sys(name: Text, arity: int) -> Callable:
-    sys_f = getattr(sys, name)
-
-    def f(args: Tuple[Any, ...],
-          kwargs: Dict[Text, Any],
-          locals_dict: Dict[Text, Any],
-          ictx: ICtx) -> Result[Any]:
-        assert len(args) == arity and not kwargs
-        return Result(sys_f(*args))
-    return NativeFunction(f, f'sys.{name}')
-
-
-def _make_sys_module() -> EModule:
-    globals_ = dict(
-        stdout=sys.stdout,
-        stderr=sys.stderr,
-        warnoptions=[],
-        implementation=sys.implementation,
-        exc_info=NativeFunction(_get_exc_info, 'sys.exc_info'),
-        intern=wrap_sys('intern', 1),
-        getfilesystemencoding=wrap_sys('getfilesystemencoding', 0),
-        getfilesystemencodeerrors=wrap_sys('getfilesystemencodeerrors', 0),
-        builtin_module_names=SPECIAL_MODULES,
-        maxsize=sys.maxsize,
-        platform=sys.platform,
-    )
-
-    def _set_paths(v, ictx) -> Result[None]:
-        assert isinstance(v, list), v
-        ictx.interp_state.paths = v
-        return Result(None)
-
-    return EModule(
-        'sys', filename='<built-in>', globals_=globals_,
-        special_attrs={
-            'modules': ((lambda ictx: Result(ictx.interp_state.sys_modules)),
-                        None),
-            'path': ((lambda ictx: Result(ictx.interp_state.paths)),
-                     _set_paths),
-        },
-    )
-
-
 def run_IMPORT_NAME(importing_path: Text,
                     level: int,
                     fromlist: Optional[Tuple[Text, ...]],
@@ -533,9 +472,9 @@ def run_IMPORT_NAME(importing_path: Text,
         return Result(ExceptionData(
             None, None, ImportError(msg)))
     elif multi_module_name == 'sys':
-        module = _make_sys_module()
+        module = builtin_sys_module.make_sys_module()
         result = _extract_fromlist(module, module, fromlist, ictx)
-    elif multi_module_name in SPECIAL_MODULES:
+    elif multi_module_name in builtin_sys_module.SPECIAL_MODULES:
         module = importlib.import_module(multi_module_name)
         assert isinstance(module, ModuleType), module
         result = _extract_fromlist(module, module, fromlist, ictx)
@@ -578,4 +517,4 @@ def import_star(module: ModuleT,
         assert isinstance(module, DsoModuleProxy), module
         for name in dir(module.wrapped):
             if not name.startswith('_'):
-                globals_[name] = getattr(module.wrapped, name)
+                globals_[name] = module.getattr(name, ictx).get_value()

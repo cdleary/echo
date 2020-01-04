@@ -36,9 +36,9 @@ def _print_surrounding(filename: Text, lineno: int) -> None:
         lines = list(enumerate((l.rstrip() for l in f), start=1))
     print(f' {filename}:{lineno}', file=sys.stderr)
     for i, line in lines[max(lineno-8, 0):lineno+8]:
-        arrow = '->' if i == lineno else '  '
+        arrow = termcolor.colored('==>', 'blue') if i == lineno else '   '
         line_str = termcolor.colored(f'{i:6d}', 'yellow')
-        print(f' {arrow}   {line_str}  {line}', file=sys.stderr)
+        print(f' {arrow} {line_str}  {line}', file=sys.stderr)
 
 
 def _handle_result(result: Result[Any]) -> int:
@@ -65,7 +65,7 @@ def main() -> int:
     parser.add_option('-c', default=None,
                       help='Literal text to execute.')
     parser.add_option('--dump_trace', help='Path to dump bytecode trace to.')
-    parser.add_option('--preload', '', help='Modules to pre-load before potentially dumping instructions.')
+    parser.add_option('--preload', default='', help='Modules to pre-load before potentially dumping instructions.')
     opts, args = parser.parse_args()
 
     # Options.
@@ -100,8 +100,9 @@ def main() -> int:
 
     prior = os.environ.get('ECHO_DUMP_INSTS', '')
     os.environ['ECHO_DUMP_INSTS'] = ''
-    for mod in opts.preload.split(','):
-        assert not import_routines.run_IMPORT_NAME('fake', 0, (), mod, dict(__name__=mod), ictx).is_exception()
+    if opts.preload:
+        for mod in opts.preload.split(','):
+            assert not import_routines.run_IMPORT_NAME('fake', 0, (), mod, dict(__name__=mod), ictx).is_exception()
     os.environ['ECHO_DUMP_INSTS'] = prior
 
     try:
