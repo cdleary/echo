@@ -11,13 +11,14 @@ This allows comparisons of echo versus the standard CPython interpreter driver
 on the command line.
 """
 
+import contextlib
 import logging
 import optparse
 import os
 import pdb
 import sys
 import types
-from typing import Any, Text
+from typing import Any, Text, Tuple
 
 from echo import interp
 from echo import ebuiltins
@@ -54,6 +55,17 @@ def _handle_result(result: Result[Any]) -> int:
         error = False
 
     return -1 if error else 0
+
+
+@contextlib.contextmanager
+def suppress_env_vars(names: Tuple[Text, ...]):
+    olds = {}
+    for name in names:
+        olds[name] = os.environ.pop(name, None)
+    yield
+    for k, v in olds.items():
+        if v is not None:
+            os.environ[k] = v
 
 
 def main() -> int:
@@ -98,12 +110,10 @@ def main() -> int:
     builtins = emodule.EModule('builtins', filename='<built-in>', globals_=ebuiltins.make_ebuiltins())
     ictx = interp_context.ICtx(state, interp.interp, interp.do_call, builtins)
 
-    prior = os.environ.get('ECHO_DUMP_INSTS', '')
-    os.environ['ECHO_DUMP_INSTS'] = ''
-    if opts.preload:
-        for mod in opts.preload.split(','):
-            assert not import_routines.run_IMPORT_NAME('fake', 0, (), mod, dict(__name__=mod), ictx).is_exception()
-    os.environ['ECHO_DUMP_INSTS'] = prior
+    with suppress_env_vars(('ECHO_DUMP_INSTS', 'ECHO_DEBUG')):
+        if opts.preload:
+            for mod in opts.preload.split(','):
+                assert not import_routines.run_IMPORT_NAME('fake', 0, (), mod, dict(__name__=mod), ictx).is_exception()
 
     try:
         result = interp.import_path(fullpath, fully_qualified, fully_qualified,

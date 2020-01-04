@@ -9,6 +9,7 @@ from echo.eobjects import (
     register_builtin, _is_dict_builtin, get_guest_builtin,
 )
 from echo.interp_context import ICtx
+from echo.ebuiltins import TYPE_TO_EBUILTIN
 
 
 @register_builtin('type.__new__')
@@ -102,19 +103,7 @@ def _do_type_call(args: Tuple[Any, ...], kwargs: Dict[Text, Any],
         if isinstance(args[0], EPyObject):
             return Result(args[0].get_type())
         res = type(args[0])
-        if res is object:
-            return Result(get_guest_builtin('object'))
-        if res is type:
-            return Result(get_guest_builtin('type'))
-        if res is tuple:
-            return Result(get_guest_builtin('tuple'))
-        if res is int:
-            return Result(get_guest_builtin('int'))
-        if res is str:
-            return Result(get_guest_builtin('str'))
-        if res is dict:
-            return Result(get_guest_builtin('dict'))
-        return Result(res)
+        return Result(TYPE_TO_EBUILTIN.get(res, res))
 
     assert len(args) == 3, args
     name, bases, ns = args

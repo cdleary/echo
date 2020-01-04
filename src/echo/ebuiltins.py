@@ -12,7 +12,7 @@ hasattr getattr setattr isinstance issubclass repr callable min max dir
 BaseException Exception
 """.split())
 PASSTHRU = tuple("""range slice float reversed set frozenset zip sorted
-memoryview bytes complex
+memoryview bytes complex id
 compile
 NotImplemented StopIteration
 print globals abs ord chr open
@@ -47,6 +47,19 @@ BUILTIN_VALUE_TYPES = {
     type(sys.version_info),
 } | BUILTIN_CONTAINER_TYPES
 BUILTIN_VALUE_TYPES_TUP = tuple(BUILTIN_VALUE_TYPES)
+
+TYPE_TO_EBUILTIN = {
+    bool: get_guest_builtin('bool'),
+    bytearray: get_guest_builtin('bytearray'),
+    dict: get_guest_builtin('dict'),
+    int: get_guest_builtin('int'),
+    list: get_guest_builtin('list'),
+    object: get_guest_builtin('object'),
+    set: get_guest_builtin('set'),
+    str: get_guest_builtin('str'),
+    tuple: get_guest_builtin('tuple'),
+    type: get_guest_builtin('type'),
+}
 
 
 def make_ebuiltins() -> Dict[Text, Any]:

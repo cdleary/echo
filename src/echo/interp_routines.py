@@ -47,38 +47,6 @@ COMPARE_TO_SPECIAL = {
     'in': '__contains__',
     'not in': '__contains__',
 }
-GUEST_BUILTIN_NAMES = (
-    'Exception',
-    'any',
-    'bool',
-    'callable',
-    'classmethod',
-    'dict',
-    'dir',
-    'enumerate',
-    'getattr',
-    'hasattr',
-    'int',
-    'isinstance',
-    'issubclass',
-    'iter',
-    'len',
-    'list',
-    'map',
-    'max',
-    'min',
-    'next',
-    'object',
-    'property',
-    'repr',
-    'reversed',
-    'staticmethod',
-    'str',
-    'super',
-    'tuple',
-    'type',
-    'zip',
-)
 BUILTIN_EXCEPTION_TYPES = (
     AssertionError,
     AttributeError,
@@ -154,18 +122,35 @@ def run_unop(opname: Text, arg: Any, ictx: ICtx) -> Result[Any]:
 
 @check_result
 def run_binop(opname: Text, lhs: Any, rhs: Any, ictx: ICtx) -> Result[Any]:
-    if (opname in ('BINARY_TRUE_DIVIDE', 'BINARY_MODULO') and type(rhs) is int
+    do_type = get_guest_builtin('type')
+    lhs_type = do_type.invoke((lhs,), {}, {}, ictx).get_value()
+    rhs_type = do_type.invoke((rhs,), {}, {}, ictx).get_value()
+    ebool = get_guest_builtin('bool')
+    estr = get_guest_builtin('str')
+    eint = get_guest_builtin('int')
+    elist = get_guest_builtin('list')
+    edict = get_guest_builtin('dict')
+    ebytearray = get_guest_builtin('bytearray')
+    eset = get_guest_builtin('set')
+    etuple = get_guest_builtin('tuple')
+    builtin_value_types = {
+        ebool, estr, eint, elist, edict, ebytearray, eset, etuple,
+        slice, range, ebytearray
+    }
+
+    if (opname in ('BINARY_TRUE_DIVIDE', 'BINARY_MODULO') and rhs_type is eint
             and rhs == 0):
         raise NotImplementedError(opname, lhs, rhs)
 
-    if {type(lhs), type(rhs)} <= BUILTIN_VALUE_TYPES or (
-            type(lhs) in (list, dict, types.MappingProxyType, bytearray)
-            and opname == 'BINARY_SUBSCR') or (
-            type(lhs) == type(rhs) == list and opname == 'BINARY_ADD') or (
-            type(lhs) == list and type(rhs) == int
-            and opname == 'BINARY_MULTIPLY') or (
-            type(lhs) == type(rhs) == set and opname == 'BINARY_SUBTRACT') or (
-            type(lhs) is str and opname == 'BINARY_MODULO'):
+    if (({lhs_type, rhs_type} <= builtin_value_types) or
+        (lhs_type in (elist, edict, types.MappingProxyType, ebytearray)
+            and opname == 'BINARY_SUBSCR') or
+        (lhs_type == rhs_type == elist and opname == 'BINARY_ADD') or
+        (lhs_type == elist and rhs_type == eint
+            and opname == 'BINARY_MULTIPLY') or
+        (lhs_type == rhs_type == eset and opname == 'BINARY_SUBTRACT') or
+        (lhs_type is estr
+            and opname == 'BINARY_MODULO')):
         op = _BINARY_OPS[opname]
         return Result(op(lhs, rhs))
 
@@ -181,7 +166,7 @@ def run_binop(opname: Text, lhs: Any, rhs: Any, ictx: ICtx) -> Result[Any]:
             raise NotImplementedError(special_f)
         return special_f.get_value().invoke((lhs,), {}, {}, ictx)
 
-    raise NotImplementedError(opname, lhs, rhs)
+    raise NotImplementedError(opname, lhs, rhs, lhs_type, rhs_type)
 
 
 def code_to_str(c: types.CodeType) -> Text:
@@ -207,6 +192,7 @@ def compare(opname: Text, lhs, rhs, ictx: ICtx) -> Result[bool]:
     if (isinstance(lhs, BUILTIN_VALUE_TYPES_TUP)
             and isinstance(rhs, BUILTIN_VALUE_TYPES_TUP)):
         return Result(COMPARE_OPS[opname](lhs, rhs))
+
     if {type(lhs), type(rhs)} == {str, tuple} and opname == '==':
         return Result(False)
     if {type(lhs), type(rhs)} == {int, tuple} and opname == '==':
