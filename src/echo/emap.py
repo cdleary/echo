@@ -4,7 +4,7 @@ from echo.epy_object import EPyObject, AttrWhere
 from echo.interp_result import Result, ExceptionData, check_result
 from echo.eobjects import (
     EFunction, EMethod, NativeFunction, EBuiltin,
-    get_guest_builtin,
+    get_guest_builtin, E_PREFIX
 )
 from echo.interp_context import ICtx
 from echo.elog import log
@@ -15,6 +15,9 @@ class EMap(EPyObject):
         log('emap:new', f'f: {f} it: {it}')
         self.f = f
         self.it = it
+
+    def __repr__(self) -> Text:
+        return f'<{E_PREFIX}map object>'
 
     def get_type(self) -> EPyObject:
         return get_guest_builtin('map')

@@ -1,5 +1,6 @@
 import sys
 
+
 def f():
     assert isinstance(sys.exc_info()[1], ValueError), sys.exc_info()
 
@@ -10,6 +11,7 @@ def f():
 
     assert isinstance(sys.exc_info()[1], ValueError), sys.exc_info()
 
+
 def main():
     try:
         raise ValueError('here goes')
@@ -18,7 +20,9 @@ def main():
         f()
         assert isinstance(sys.exc_info()[1], ValueError), sys.exc_info()
 
-assert sys.exc_info() == (None, None, None)
+
+sei = sys.exc_info()
+assert sei == (None, None, None), sei
 
 try:
     main()

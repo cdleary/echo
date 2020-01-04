@@ -1,4 +1,5 @@
 import builtins
+import sys
 from typing import Dict, Text, Any
 
 from echo.eobjects import get_guest_builtin
@@ -23,6 +24,29 @@ MemoryError OSError FutureWarning
 Warning PendingDeprecationWarning ImportWarning ResourceWarning
 UserWarning DeprecationWarning RuntimeWarning
 """.split())
+
+# Types that hold pyobjects.
+BUILTIN_CONTAINER_TYPES = {
+    dict,
+    list,
+    set,
+    tuple,
+}
+BUILTIN_CONTAINER_TYPES_TUP = tuple(BUILTIN_CONTAINER_TYPES)
+BUILTIN_VALUE_TYPES = {
+    bool,
+    bytearray,
+    bytes,
+    complex,
+    float,
+    int,
+    range,
+    slice,
+    str,
+    type(None),
+    type(sys.version_info),
+} | BUILTIN_CONTAINER_TYPES
+BUILTIN_VALUE_TYPES_TUP = tuple(BUILTIN_VALUE_TYPES)
 
 
 def make_ebuiltins() -> Dict[Text, Any]:

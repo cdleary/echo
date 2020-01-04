@@ -1,4 +1,4 @@
-import imp
+import types
 import importlib
 import functools
 import logging
@@ -13,22 +13,22 @@ from echo.elog import log as elog
 from echo.interp_context import ICtx
 from echo.interp_result import Result, ExceptionData
 from echo.emodule import EModule
+from echo.dso_objects import DsoModuleProxy
+from echo.eobjects import NativeFunction, get_guest_builtin
 
 from termcolor import cprint
 
 
 DEBUG_PRINT_IMPORTS = bool(os.getenv('DEBUG_PRINT_IMPORTS', False))
 SPECIAL_MODULES = (
-    'sys', 'itertools', 'time', 'ctypes', 'subprocess', 'shutil',
+    'itertools', 'time', 'ctypes', 'subprocess', 'shutil',
     '_collections', '_signal', '_stat', 'posix',
     '_weakref', '_weakrefset', '_thread', 'errno', '_sre',
     '_struct', '_codecs', '_pickle', '_ast', '_io', '_functools',
-    'numpy.core._multiarray_umath',
-    'numpy.core._fastCopyAndTranspose',
 )
 
 
-ModuleT = Union[ModuleType, EModule]
+ModuleT = Union[ModuleType, EModule, DsoModuleProxy]
 
 
 def _bump_import_depth(f):
@@ -76,7 +76,7 @@ def _import_module_at_path(
     log(ictx, f'importing module {fully_qualified_name} at path {path}')
 
     if path.endswith('.so'):
-        module = importlib.import_module(fully_qualified_name)
+        module = DsoModuleProxy(importlib.import_module(fully_qualified_name))
         # Place the imported module into the module dictionary.
         ictx.interp_state.sys_modules[fully_qualified_name] = module
         return Result(module)
@@ -194,16 +194,19 @@ def _getattr_or_subimport(current_mod: ModuleT,
     elog('imp:rmop', f'_getattr_or_subimport; current_mod: {current_mod} '
                      f'fromlist_name: {fromlist_name}')
 
+    def make_err(current_mod_name):
+        err = ImportError(f'cannot import name {fromlist_name!r} from '
+                          f'{current_mod_name!r} (unknown location)')
+        return Result(ExceptionData(None, None, err))
+
     # Try normal gettattr for real Python modules.
     if isinstance(current_mod, ModuleType):
         if hasattr(current_mod, fromlist_name):
             return Result(getattr(current_mod, fromlist_name))
-        err = ImportError(f'cannot import name {fromlist_name!r} from '
-                          f'{current_mod.__name__!r} (unknown location)')
-        return Result(ExceptionData(None, None, err))
+        return make_err(current_mod.__name__)
 
     # Use echo getattr for EModules.
-    assert isinstance(current_mod, EModule), current_mod
+    assert isinstance(current_mod, (EModule, DsoModuleProxy)), current_mod
     result = current_mod.getattr(fromlist_name, ictx)
     if not result.is_exception():
         return result
@@ -212,7 +215,7 @@ def _getattr_or_subimport(current_mod: ModuleT,
     current_dirpath = os.path.dirname(current_mod.filename)
     path_result = _resolve_module_or_package(current_dirpath, fromlist_name)
     if path_result.is_exception():
-        return Result(path_result.get_exception())
+        return make_err(current_mod.fully_qualified_name)
     path = path_result.get_value()
 
     return _subimport_module_at_path(
@@ -430,6 +433,62 @@ def run_IMPORT_FROM(module: ModuleT, fromname: Text, ictx: ICtx):
     return _getattr_or_subimport(module, fromname, ictx)
 
 
+def _get_exc_info(
+             args: Tuple[Any, ...],
+             kwargs: Dict[Text, Any],
+             locals_dict: Dict[Text, Any],
+             ictx: ICtx) -> Result[Any]:
+    exc_info = ictx.exc_info
+    if not exc_info:
+        return Result((None, None, None))
+    do_type = get_guest_builtin('type')
+    exc_type = do_type.invoke((exc_info.exception,), {}, {}, ictx).get_value()
+    return Result((exc_type, exc_info.exception, exc_info.traceback))
+
+
+def wrap_sys(name: Text, arity: int) -> Callable:
+    sys_f = getattr(sys, name)
+
+    def f(args: Tuple[Any, ...],
+          kwargs: Dict[Text, Any],
+          locals_dict: Dict[Text, Any],
+          ictx: ICtx) -> Result[Any]:
+        assert len(args) == arity and not kwargs
+        return Result(sys_f(*args))
+    return NativeFunction(f, f'sys.{name}')
+
+
+def _make_sys_module() -> EModule:
+    globals_ = dict(
+        stdout=sys.stdout,
+        stderr=sys.stderr,
+        warnoptions=[],
+        implementation=sys.implementation,
+        exc_info=NativeFunction(_get_exc_info, 'sys.exc_info'),
+        intern=wrap_sys('intern', 1),
+        getfilesystemencoding=wrap_sys('getfilesystemencoding', 0),
+        getfilesystemencodeerrors=wrap_sys('getfilesystemencodeerrors', 0),
+        builtin_module_names=SPECIAL_MODULES,
+        maxsize=sys.maxsize,
+        platform=sys.platform,
+    )
+
+    def _set_paths(v, ictx) -> Result[None]:
+        assert isinstance(v, list), v
+        ictx.interp_state.paths = v
+        return Result(None)
+
+    return EModule(
+        'sys', filename='<built-in>', globals_=globals_,
+        special_attrs={
+            'modules': ((lambda ictx: Result(ictx.interp_state.sys_modules)),
+                        None),
+            'path': ((lambda ictx: Result(ictx.interp_state.paths)),
+                     _set_paths),
+        },
+    )
+
+
 def run_IMPORT_NAME(importing_path: Text,
                     level: int,
                     fromlist: Optional[Tuple[Text, ...]],
@@ -473,6 +532,9 @@ def run_IMPORT_NAME(importing_path: Text,
         msg = 'Cannot import C-module {}.'.format(multi_module_name)
         return Result(ExceptionData(
             None, None, ImportError(msg)))
+    elif multi_module_name == 'sys':
+        module = _make_sys_module()
+        result = _extract_fromlist(module, module, fromlist, ictx)
     elif multi_module_name in SPECIAL_MODULES:
         module = importlib.import_module(multi_module_name)
         assert isinstance(module, ModuleType), module
@@ -508,8 +570,12 @@ def import_star(module: ModuleT,
         for name in dir(module):
             if not name.startswith('_'):
                 globals_[name] = getattr(module, name)
-    else:
-        assert isinstance(module, EModule), module
+    elif isinstance(module, EModule):
         for name in module.keys():
             if not name.startswith('_'):
                 globals_[name] = module.getattr(name, ictx).get_value()
+    else:
+        assert isinstance(module, DsoModuleProxy), module
+        for name in dir(module.wrapped):
+            if not name.startswith('_'):
+                globals_[name] = getattr(module.wrapped, name)

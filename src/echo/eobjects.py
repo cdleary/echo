@@ -1024,7 +1024,7 @@ class EBuiltin(EPyType):
     )
     BUILTIN_FNS = (
         'len', '__build_class__', 'getattr', 'setattr', 'iter', 'reversed',
-        'zip', 'next', 'repr', 'exec', 'hash', 'vars', 'dir',
+        'zip', 'next', 'repr', 'exec', 'hash', 'vars', 'dir', 'sum',
         'isinstance', 'issubclass', 'hasattr', 'any', 'min', 'max', 'callable',
         # object
         'object.__new__', 'object.__init__',
@@ -1033,6 +1033,7 @@ class EBuiltin(EPyType):
         'object.__setattr__',
         'object.__format__', 'object.__reduce_ex__',
         'object.__ne__',
+        'object.__subclasshook__',
         # type
         'type.__new__', 'type.__init__',
         'type.__str__', 'type.__repr__',
@@ -1352,6 +1353,9 @@ class NativeFunction(EPyObject):
     def __init__(self, f: Callable[..., Result], name: Text):
         self.f = f
         self.name = name
+
+    def __repr__(self) -> Text:
+        return f'<built-in function {self.name}>'
 
     def get_type(self) -> EPyObject:
         return EFunctionType.singleton

@@ -3,7 +3,7 @@
 import collections
 import functools
 from enum import Enum
-from typing import TypeVar, Union, Generic, Text, Callable
+from typing import TypeVar, Union, Generic, Text, Callable, Tuple, Any
 
 
 T = TypeVar('T')

@@ -16,11 +16,12 @@ from echo.elog import log
 from echo.interp_context import ICtx
 from echo import import_routines
 from echo import etraceback
+from echo.epy_object import EPyType, AttrWhere
 from echo.eobjects import (
     ReturnKind, EBuiltin, EFunction, EPyObject,
     GuestCoroutine, EInstance, get_guest_builtin,
     do_getitem, do_setitem, do_hasattr, do_getattr,
-    do_delitem, do_setattr,
+    do_delitem, do_setattr, E_PREFIX,
 )
 from echo import trace_util
 from echo.ecell import ECell
@@ -105,6 +106,8 @@ def wrap_with_push(frame: 'StatefulFrame', state: InterpreterState,
     @functools.wraps(f)
     def push_wrapper(*args, **kwargs):
         prior = state.last_frame
+        if isinstance(prior, StatefulFrame):
+            frame.older_frame = prior
         state.last_frame = frame
         try:
             return f(*args, **kwargs, ictx=frame.ictx)
@@ -145,6 +148,7 @@ class StatefulFrame:
         self.locals_dict = locals_dict
         self.globals_ = globals_
         self.current_lineno = None  # type: Optional[int]
+        self.older_frame = None  # type: Optional[StatefulFrame]
         self.cellvars = cellvars
         self.consts = code.co_consts
         self.names = code.co_names
@@ -268,6 +272,7 @@ class StatefulFrame:
 
             raise NotImplementedError(self.block_stack[-1])
 
+        log('fo:he', 'extinguished block stack without setting PC')
         return False
 
     def _push(self, x: Any) -> None:
@@ -960,13 +965,13 @@ class StatefulFrame:
         if attr_result.is_exception():
             return attr_result
         log('bc:lm', f'LOAD_ATTR obj {obj!r} argval {argval} => {attr_result}')
-        self._push(attr_result.get_value())
         if (desc_count_before == self.ictx.desc_count
                 and interp_routines.method_requires_self(
                     obj=obj, name=argval, value=attr_result.get_value())):
             self._push(obj)
         else:
             self._push(StackNullSentinel)
+        self._push(attr_result.get_value())
 
     def _run_CALL_METHOD(self, arg, argval):
         # Note: new in 3.7. See also _run_LOAD_METHOD
@@ -974,8 +979,8 @@ class StatefulFrame:
         # https://docs.python.org/3.7/library/dis.html#opcode-CALL_METHOD
         positional_argc = arg
         args = self._pop_n(positional_argc, tos_is_0=False)
-        self_value = self._pop()
         method = self._pop()
+        self_value = self._pop()
         if self_value is not StackNullSentinel:
             args = (self_value,) + args
         log('bc:cm', lambda: f'method: {method}')
@@ -1139,8 +1144,8 @@ class StatefulFrame:
                 'Bytecode must return Result', instruction, 'got', result)
             if result.is_exception():
                 exception_data = result.get_exception()
-                exception_data.traceback.append(
-                    (self.code.co_filename, self.line))
+                exception_data.traceback = etraceback.ETraceback(
+                    EFrame(self), self.pc, self.line)
                 if self._handle_exception(WhyStatus.EXCEPTION, exception_data,
                                           _Sentinel):
                     return None
@@ -1198,3 +1203,60 @@ class StatefulFrame:
             if bc_result is None:
                 continue
             return bc_result
+
+
+class EFrameType(EPyType):
+    def __repr__(self) -> Text:
+        return f"<{E_PREFIX}class 'frame'>"
+
+    def get_mro(self) -> Tuple[EPyObject, ...]:
+        return (self,)
+
+    def get_type(self) -> EPyObject:
+        return get_guest_builtin('type')
+
+    def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
+        return None
+
+    def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
+        raise NotImplementedError
+
+    def setattr(self, name: Text, value: Any) -> Any:
+        raise NotImplementedError
+
+
+EFrameType.singleton = EFrameType()
+
+
+class EFrame(EPyObject):
+    def __init__(self, frame: StatefulFrame):
+        self.frame = frame
+
+    @property
+    def f_code(self):
+        return self.frame.code
+
+    @property
+    def f_lineno(self):
+        return self.frame.current_lineno
+
+    @property
+    def f_back(self):
+        return self.frame.older_frame
+
+    def __repr__(self) -> Text:
+        return (f'<frame, file {self.frame.code.co_filename!r}, '
+                f'line {self.frame.current_lineno}, '
+                f'code {self.frame.code.co_name}>')
+
+    def get_type(self) -> EPyType:
+        return EFrameType.singleton
+
+    def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
+        return None
+
+    def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
+        raise NotImplementedError
+
+    def setattr(self, name: Text, value: Any) -> Any:
+        raise NotImplementedError

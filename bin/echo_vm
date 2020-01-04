@@ -22,6 +22,7 @@ from typing import Any, Text
 from echo import interp
 from echo import ebuiltins
 from echo import emodule
+from echo import etraceback
 from echo import interp_context
 from echo import import_routines
 from echo import bytecode_trace
@@ -43,7 +44,9 @@ def _print_surrounding(filename: Text, lineno: int) -> None:
 def _handle_result(result: Result[Any]) -> int:
     if result.is_exception():
         termcolor.cprint(repr(result.get_exception().exception), color='red', file=sys.stderr)
-        for filename, lineno in result.get_exception().traceback:
+        tb = result.get_exception().traceback
+        assert isinstance(tb, etraceback.ETraceback)
+        for filename, lineno in etraceback.walk(tb):
             _print_surrounding(filename, lineno)
         termcolor.cprint(str(result), color='red', file=sys.stderr)
         error = True
@@ -62,6 +65,7 @@ def main() -> int:
     parser.add_option('-c', default=None,
                       help='Literal text to execute.')
     parser.add_option('--dump_trace', help='Path to dump bytecode trace to.')
+    parser.add_option('--preload', '', help='Modules to pre-load before potentially dumping instructions.')
     opts, args = parser.parse_args()
 
     # Options.
@@ -96,11 +100,8 @@ def main() -> int:
 
     prior = os.environ.get('ECHO_DUMP_INSTS', '')
     os.environ['ECHO_DUMP_INSTS'] = ''
-    #assert not import_routines.run_IMPORT_NAME('fake', 0, (), 'types', dict(__name__='types'), ictx).is_exception()
-    #assert not import_routines.run_IMPORT_NAME('fake', 0, (), 'collections', dict(__name__='collections'), ictx).is_exception()
-    #assert not import_routines.run_IMPORT_NAME('fake', 0, (), 'enum', dict(__name__='enum'), ictx).is_exception()
-    #assert not import_routines.run_IMPORT_NAME('fake', 0, (), 're', dict(__name__='re'), ictx).is_exception()
-    #assert not import_routines.run_IMPORT_NAME('fake', 0, (), 'warnings', dict(__name__='warnings'), ictx).is_exception()
+    for mod in opts.preload.split(','):
+        assert not import_routines.run_IMPORT_NAME('fake', 0, (), mod, dict(__name__=mod), ictx).is_exception()
     os.environ['ECHO_DUMP_INSTS'] = prior
 
     try:

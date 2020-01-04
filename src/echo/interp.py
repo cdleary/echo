@@ -19,6 +19,7 @@ from typing import (
 )
 
 from echo import epy_object
+from echo.dso_objects import DsoFunctionProxy
 from echo.common import dis_to_str, get_code, none_filler
 from echo.elog import log
 from echo.interp_result import Result, ExceptionData, check_result
@@ -211,18 +212,10 @@ def do_call(f,
         r = f(*args, **kwargs)
         return Result(r)
 
-    if f is sys.exc_info:
-        exception_data = ictx.exc_info
-        if exception_data is None:
-            return Result((None, None, None))
-        tb, p, exc = (exception_data.traceback, exception_data.parameter,
-                      exception_data.exception)
-        t = ETraceback(tuple(tb))
-        return Result((p, exc, t))
     if f is globals:
         return Result(globals_)
     elif isinstance(f, (EFunction, EMethod, EClassMethod, EStaticMethod,
-                        NativeFunction)):
+                        NativeFunction, DsoFunctionProxy)):
         return f.invoke(args, kwargs, locals_dict, ictx)
     elif f is get_sunder_sre().compile:
         return _do_call_sre_compile(args, kwargs, ictx)

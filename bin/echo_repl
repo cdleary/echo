@@ -10,6 +10,8 @@ import typing
 
 from echo import interp
 from echo import interp_context
+from echo import ebuiltins
+from echo import emodule
 
 
 def main():
@@ -20,7 +22,8 @@ def main():
     globals_ = dict(globals())
     state = interp.InterpreterState(os.getcwd())
     state.paths = sys.path[1:] + state.paths
-    ictx = interp_context.ICtx(state, interp.interp, interp.do_call)
+    builtins = emodule.EModule('builtins', filename='<built-in>', globals_=ebuiltins.make_ebuiltins())
+    ictx = interp_context.ICtx(state, interp.interp, interp.do_call, builtins)
 
     while True:
         try:

@@ -6,6 +6,7 @@ import types
 from typing import Text, Any, Union, Dict, Callable
 import weakref
 
+from echo.ebuiltins import BUILTIN_VALUE_TYPES_TUP, BUILTIN_VALUE_TYPES
 from echo.elog import log, debugged
 from echo.interp_context import ICtx
 from echo.interp_result import Result, check_result, ExceptionData
@@ -104,28 +105,12 @@ COMPARE_OPS = {
     'in': lambda a, b: operator.contains(b, a),
     'not in': lambda a, b: not operator.contains(b, a),
 }
-BUILTIN_VALUE_TYPES = {
-    bool,
-    bytearray,
-    bytes,
-    complex,
-    float,
-    int,
-    range,
-    set,
-    slice,
-    str,
-    tuple,
-    type(None),
-    type(sys.version_info),
-}
 CODE_ATTRS = [
     'co_argcount', 'co_cellvars', 'co_code', 'co_consts', 'co_filename',
     'co_firstlineno', 'co_flags', 'co_freevars', 'co_kwonlyargcount',
     'co_lnotab', 'co_name', 'co_names', 'co_nlocals', 'co_stacksize',
     'co_varnames',
 ]
-BUILTIN_VALUE_TYPES_TUP = tuple(BUILTIN_VALUE_TYPES)
 
 
 def _egetitem(x, y):

@@ -77,7 +77,7 @@ def main():
     show_opcodeno = opts.opcodeno
     with open(path) as f:
         contents = f.read()
-    globals_ = {'__name__': '__main__'}
+    globals_ = {'__name__': '__main__', '__file__': os.path.realpath(path)}
     #del sys.modules['enum']
     #del sys.modules['re']
     #del sys.modules['sre_compile']
