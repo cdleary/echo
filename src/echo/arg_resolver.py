@@ -67,8 +67,8 @@ def resolve_args(
 
     if attrs.starargs:
         # Note: somewhat surprisingly, the arg slot for the varargs doesn't
-        # live at its corresponding position in the argument list; instead,
-        # Python appears to put it as the last argument, always.
+        # live at its corresponding syntactical position in the argument list;
+        # instead, Python appears to put it as the last argument, always.
         stararg_index = attrs.stararg_index
         arg_slots[stararg_index] = ()
     else:
@@ -132,7 +132,9 @@ def resolve_args(
     #       f(42, c=7) => default_required: [None, 0, None]
     default_required = [None] * attrs.total_argcount_no_skwa
     if defaults:
-        default_required[-len(defaults):] = list(range(len(defaults)))
+        start = attrs.total_argcount_no_skwa-len(defaults)-len(kwarg_defaults)
+        limit = attrs.total_argcount_no_skwa-len(kwarg_defaults)
+        default_required[start:limit] = list(range(len(defaults)))
 
     def in_stararg_position(argno: int) -> Tuple[bool, int]:
         # Determines whether the positional argument 'argno' provided by the
@@ -148,7 +150,7 @@ def resolve_args(
 
     def populate_positional(argno: int, value: Any) -> None:
         assert len(default_required) == attrs.total_argcount_no_skwa, \
-            default_required
+            (default_required, attrs.total_argcount_no_skwa)
         stararg_info = in_stararg_position(argno)
         argno = stararg_info[1]  # Stararg can update the slot index.
         if stararg_info[0]:
@@ -161,7 +163,7 @@ def resolve_args(
             arg_slots[argno] = value
             default_required[argno] = None
 
-    # Populate the positional arguments.
+    # Populate the positionally-passed arguments.
     for argno, arg in enumerate(args):
         populate_positional(argno, arg)
 

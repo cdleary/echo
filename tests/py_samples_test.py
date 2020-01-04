@@ -27,7 +27,6 @@ EVM_FAILING_SAMPLES = [
     'dunder_base',
 
     # positional vs kwarg defaults issues
-    'positional_and_kwarg_defaults',
     'pprint_items',
 ]
 
