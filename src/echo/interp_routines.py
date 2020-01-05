@@ -304,7 +304,8 @@ def compare(opname: Text, lhs, rhs, ictx: ICtx) -> Result[bool]:
             symmetric_isinstance(EBuiltin, DsoPyObject)):
         return Result(False)
 
-    if (opname == '==' and isinstance(lhs, DsoClassProxy) and isinstance(rhs, DsoClassProxy)):
+    if (opname == '==' and isinstance(lhs, DsoClassProxy) and
+            isinstance(rhs, DsoClassProxy)):
         return Result(lhs.wrapped == rhs.wrapped)
 
     raise NotImplementedError(opname, lhs, rhs)
