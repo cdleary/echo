@@ -1,4 +1,4 @@
-from setuptools import setup
+from setuptools import setup, Extension
 
 setup(
     name='echo',
@@ -7,5 +7,8 @@ setup(
     scripts=[
         'bin/echo_vm',
         'bin/echo_repl',
+    ],
+    ext_modules=[
+        Extension('csample', ['ext/csample.c']),
     ],
 )

@@ -6,7 +6,7 @@ import types
 from typing import Text, Any, Union, Dict, Callable
 import weakref
 
-from echo.dso_objects import DsoPyObject
+from echo.dso_objects import DsoPyObject, DsoClassProxy
 from echo.ebuiltins import BUILTIN_VALUE_TYPES_TUP, BUILTIN_VALUE_TYPES
 from echo.elog import log, debugged
 from echo.interp_context import ICtx
@@ -209,7 +209,8 @@ def compare(opname: Text, lhs, rhs, ictx: ICtx) -> Result[bool]:
         return f.invoke((lhs, rhs), {}, {}, ictx)
 
     if opname in ('in', 'not in') and type(rhs) in (
-            tuple, dict, set, frozenset, type(os.environ),
+            tuple, list, dict, set, frozenset, type(os.environ),
+            type({}.values()),
             weakref.WeakSet):
         for e in rhs:
             e_result = compare('==', lhs, e, ictx)
@@ -302,6 +303,9 @@ def compare(opname: Text, lhs, rhs, ictx: ICtx) -> Result[bool]:
     if (symmetric_isinstance(type, DsoPyObject) or
             symmetric_isinstance(EBuiltin, DsoPyObject)):
         return Result(False)
+
+    if (opname == '==' and isinstance(lhs, DsoClassProxy) and isinstance(rhs, DsoClassProxy)):
+        return Result(lhs.wrapped == rhs.wrapped)
 
     raise NotImplementedError(opname, lhs, rhs)
 
