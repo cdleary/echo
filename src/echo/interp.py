@@ -62,6 +62,7 @@ import echo.builtin_enumerate
 import echo.builtin_predicates
 import echo.builtin_object
 import echo.builtin_bytearray
+import echo.oo_builtins
 
 
 @check_result
