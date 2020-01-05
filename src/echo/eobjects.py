@@ -85,7 +85,8 @@ class EFunction(EPyObject):
              args: Tuple[Any, ...],
              kwargs: Dict[Text, Any],
              locals_dict: Dict[Text, Any],
-             ictx: ICtx) -> Result[Any]:
+             ictx: ICtx,
+             globals_: Optional[Dict[Text, Any]] = None) -> Result[Any]:
         assert len(args) == 3, args
         _self, obj, objtype = args
         assert self is _self
@@ -260,11 +261,12 @@ class EMethod(EPyObject):
                args: Tuple[Any, ...],
                kwargs: Dict[Text, Any],
                locals_dict: Dict[Text, Any],
-               ictx: ICtx) -> Result[Any]:
+               ictx: ICtx,
+               globals_: Optional[Dict[Text, Any]] = None) -> Result[Any]:
         assert isinstance(args, tuple), args
         return self.f.invoke(
             (self.bound_self,) + args,
-            kwargs, locals_dict, ictx)
+            kwargs, locals_dict, ictx, globals_=globals_)
 
 
 class NotFoundSentinel:
@@ -965,7 +967,7 @@ def _do_issubclass(
         if isinstance(args[0], type):
             return Result(issubclass(args[0], type))
 
-    if isinstance(args[0], EClass):
+    if isinstance(args[0], EPyType):
         return Result(args[1] in args[0].get_mro())
 
     if isinstance(args[0], type) and isinstance(args[1], type):
@@ -985,7 +987,7 @@ def _do_repr(args: Tuple[Any, ...], ictx: ICtx) -> Result[Any]:
         return frepr
     frepr = frepr.get_value()
     log('eo:do_repr()', f'o: {o} frepr: {frepr}')
-    globals_ = frepr.globals_
+    globals_ = getattr(frepr, 'globals_', None)
     return ictx.call(frepr, args=(o,), kwargs={}, locals_dict={},
                      globals_=globals_)
 
@@ -1226,7 +1228,8 @@ class EBuiltin(EPyType):
              args: Tuple[Any, ...],
              kwargs: Dict[Text, Any],
              locals_dict: Dict[Text, Any],
-             ictx: ICtx) -> Result[Any]:
+             ictx: ICtx,
+             globals_: Optional[Dict[Text, Any]] = None) -> Result[Any]:
         assert len(args) == 3, args
         _self, obj, objtype = args
         assert self is _self

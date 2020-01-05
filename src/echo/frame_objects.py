@@ -896,6 +896,9 @@ class StatefulFrame:
     def _run_INPLACE_ADD(self, arg, argval):
         return self._run_INPLACE('ADD', arg, argval)
 
+    def _run_INPLACE_SUBTRACT(self, arg, argval):
+        return self._run_INPLACE('SUBTRACT', arg, argval)
+
     def _run_SETUP_EXCEPT(self, arg, argval):
         self.block_stack.append(BlockInfo(
             BlockKind.SETUP_EXCEPT, arg+self.pc+self.pc_to_bc_width[self.pc],
@@ -1248,8 +1251,9 @@ class EFrame(EPyObject):
         return self.frame.current_lineno
 
     @property
-    def f_back(self):
-        return self.frame.older_frame
+    def f_back(self) -> Optional['EFrame']:
+        return (EFrame(self.frame.older_frame) if self.frame.older_frame
+                else None)
 
     def __repr__(self) -> Text:
         return (f'<frame, file {self.frame.code.co_filename!r}, '

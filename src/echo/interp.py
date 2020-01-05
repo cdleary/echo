@@ -164,7 +164,7 @@ def interp(code: types.CodeType,
 
 
 def get_sunder_sre() -> types.ModuleType:
-    return importlib.import_module('_sre')
+    return __import__('_sre')
 
 
 @check_result
@@ -214,22 +214,23 @@ def do_call(f,
 
     if f is globals:
         return Result(globals_)
-    elif isinstance(f, (EFunction, EMethod, EClassMethod, EStaticMethod,
-                        NativeFunction, DsoFunctionProxy)):
-        return f.invoke(args, kwargs, locals_dict, ictx)
     elif f is get_sunder_sre().compile:
         return _do_call_sre_compile(args, kwargs, ictx)
-    elif isinstance(f, EBuiltin):
+    elif type(f) in (EFunction, EMethod, EClassMethod, EStaticMethod,
+                     NativeFunction, DsoFunctionProxy):
+        return f.invoke(args, kwargs, locals_dict, ictx)
+    elif type(f) is EBuiltin:
         return f.invoke(args, kwargs, locals_dict, globals_=globals_,
                         ictx=ictx)
-    elif isinstance(f, EClass):
+    elif type(f) is EClass:
         return f.instantiate(args, kwargs, globals_=globals_, ictx=ictx)
-    elif isinstance(f, EPyObject) and f.hasattr('__call__'):
+    elif issubclass(type(f), EPyObject) and f.hasattr('__call__'):
         f_call = f.getattr('__call__', ictx)
         if f_call.is_exception():
             return f_call
         f_call = f_call.get_value()
-        return ictx.call(f_call, args, kwargs, locals_dict, globals_=globals_)
+        return f_call.invoke(args, kwargs, locals_dict, ictx,
+                             globals_=globals_)
     elif not isinstance(f, EPyObject) and callable(f):
         log('interp:do_call:native',
             lambda: f'f: {f} args: {args} kwargs: {kwargs}')

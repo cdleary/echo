@@ -8,7 +8,9 @@ from echo.epy_object import EPyObject, AttrWhere, EPyType
 from echo.eobjects import EFunctionType
 from echo.emodule import EModuleType
 from echo.interp_result import Result, ExceptionData, check_result
-from echo.ebuiltins import BUILTIN_VALUE_TYPES, BUILTIN_CONTAINER_TYPES
+from echo.ebuiltins import (
+    BUILTIN_VALUE_TYPES, BUILTIN_CONTAINER_TYPES, TYPE_TO_EBUILTIN,
+)
 
 
 def _dso_lift_container(o: Any) -> Any:
@@ -19,19 +21,28 @@ def _dso_lift_container(o: Any) -> Any:
     raise NotImplementedError(o, type(o))
 
 
+def _dso_unlift_container(o: Any) -> Any:
+    if type(o) == dict:
+        return {_dso_unlift(k): _dso_unlift(v) for k, v in o.items()}
+    if isinstance(o, tuple):
+        return tuple(_dso_unlift(e) for e in o)
+    raise NotImplementedError(o, type(o))
+
+
 @debugged('dso:lift')
 def _dso_lift(o: Any) -> Any:
     if type(o) in BUILTIN_CONTAINER_TYPES:
         return _dso_lift_container(o)
     if type(o) in BUILTIN_VALUE_TYPES:
         return o
-    if isinstance(o, (types.FunctionType, types.BuiltinFunctionType)):
+    if isinstance(o, (types.FunctionType, types.BuiltinFunctionType,
+                      types.MethodWrapperType)):
         return DsoFunctionProxy(o)
     if type(o).__name__ == 'PyCapsule':
         return o
     if isinstance(o, type):
-        if o in BUILTIN_VALUE_TYPES:
-            return o
+        if o in TYPE_TO_EBUILTIN:
+            return TYPE_TO_EBUILTIN[o]
         else:
             return DsoClassProxy(o)
     return DsoInstanceProxy(o)
@@ -39,9 +50,11 @@ def _dso_lift(o: Any) -> Any:
 
 def _dso_unlift(o: Any) -> Any:
     if type(o) in BUILTIN_CONTAINER_TYPES:
-        raise NotImplementedError(o)
+        return _dso_unlift_container(o)
     if type(o) in BUILTIN_VALUE_TYPES:
         return o
+    if type(o) in (DsoFunctionProxy, DsoInstanceProxy, DsoClassProxy):
+        return o.wrapped
     raise NotImplementedError(o)
 
 
@@ -51,6 +64,8 @@ class DsoPyObject(EPyObject):
 
 class DsoClassProxy(EPyType, DsoPyObject):
     def __init__(self, wrapped: Type):
+        assert wrapped is not type
+        assert wrapped is not object
         self.wrapped = wrapped
 
     def __repr__(self) -> Text:
@@ -60,7 +75,7 @@ class DsoClassProxy(EPyType, DsoPyObject):
         return _dso_lift(self.wrapped.__mro__)
 
     def get_type(self) -> EPyObject:
-        return DsoClassProxy(type(self.wrapped))
+        return _dso_lift(type(self.wrapped))
 
     @debugged('dso:c:ga')
     def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
@@ -84,8 +99,11 @@ class DsoInstanceProxy(DsoPyObject):
     def __init__(self, wrapped: Any):
         self.wrapped = wrapped
 
+    def __repr__(self) -> Text:
+        return f'<pinstance {self.wrapped!r}>'
+
     def get_type(self) -> EPyObject:
-        return DsoClassProxy(type(self.wrapped))
+        return _dso_lift(type(self.wrapped))
 
     @debugged('dso:i:ga')
     def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
@@ -138,9 +156,11 @@ class DsoFunctionProxy(DsoPyObject):
                ictx: ICtx,
                globals_: Optional[Dict[Text, Any]] = None) -> Result[Any]:
         assert isinstance(ictx, ICtx), ictx
+        ulargs = _dso_unlift(args)
+        ulkwargs = _dso_unlift(kwargs)
         with epy_object.establish_ictx(locals_dict, globals_, ictx):
             try:
-                o = self.wrapped(*args, **kwargs)
+                o = self.wrapped(*ulargs, **ulkwargs)
             except BaseException as e:
                 return Result(ExceptionData(None, None, e))
         return Result(_dso_lift(o))

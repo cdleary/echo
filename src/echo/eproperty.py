@@ -31,7 +31,8 @@ class EProperty(EPyObject):
              args: Tuple[Any, ...],
              kwargs: Dict[Text, Any],
              locals_dict: Dict[Text, Any],
-             ictx: ICtx) -> Result[Any]:
+             ictx: ICtx,
+             globals_: Optional[Dict[Text, Any]] = None) -> Result[Any]:
         _self, obj, objtype = args
         if obj is None:
             return Result(self)
@@ -48,7 +49,8 @@ class EProperty(EPyObject):
              args: Tuple[Any, ...],
              kwargs: Dict[Text, Any],
              locals_dict: Dict[Text, Any],
-             ictx: ICtx) -> Result[Any]:
+             ictx: ICtx,
+             globals_: Optional[Dict[Text, Any]] = None) -> Result[Any]:
         log('ep:set', f'fset: {self.fset} args: {args}')
         _self, obj, value = args
         assert _self is self
@@ -63,7 +65,8 @@ class EProperty(EPyObject):
                 args: Tuple[Any, ...],
                 kwargs: Dict[Text, Any],
                 locals_dict: Dict[Text, Any],
-                ictx: ICtx) -> Result[Any]:
+                ictx: ICtx,
+                globals_: Optional[Dict[Text, Any]] = None) -> Result[Any]:
         _self, fset = args
         assert _self is self
         return Result(EProperty(self.fget, fset, self.doc))

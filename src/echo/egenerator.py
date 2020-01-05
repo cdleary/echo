@@ -50,7 +50,8 @@ class EGenerator(EPyObject):
     def get_type(self) -> EPyObject:
         return EGeneratorType.singleton
 
-    def _iter(self, args, kwargs, locals_dict, ictx) -> Result[EPyObject]:
+    def _iter(self, args, kwargs, locals_dict, ictx,
+              globals_=None) -> Result[EPyObject]:
         return Result(self)
 
     def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
@@ -84,7 +85,8 @@ class EGenerator(EPyObject):
         assert v.wrapped is None, v
         return Result(ExceptionData(None, None, StopIteration()))
 
-    def _next(self, args, kwargs, globals_, ictx):
+    def _next(self, args, kwargs, locals_dict, ictx,
+              globals_=None) -> Result[Value]:
         assert len(args) == 1 and not kwargs, (args, kwargs)
         assert args[0] is self
         return self.next(ictx)
