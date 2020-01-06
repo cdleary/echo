@@ -13,7 +13,7 @@ from typing import (
 import weakref
 
 from echo.return_kind import ReturnKind
-from echo.epy_object import EPyObject, AttrWhere, EPyType
+from echo.epy_object import EPyObject, AttrWhere, EPyType, NoContextException
 from echo.elog import log, debugged
 from echo.interpreter_state import InterpreterState
 from echo.interp_context import ICtx
@@ -23,6 +23,15 @@ from echo.value import Value
 from echo.common import memoize
 
 E_PREFIX = 'e' if 'E_PREFIX' not in os.environ else os.environ['E_PREFIX']
+
+
+def safer_repr(x: Any) -> Text:
+    try:
+        return repr(x)
+    except NoContextException:
+        if hasattr(x, 'safer_repr'):
+            return x.safer_repr()
+        return f'<reentrant {type(x)!r}: {id(x)}>'
 
 
 class EFunction(EPyObject):
@@ -283,13 +292,13 @@ def _find_name_in_mro(type_: EPyType, name: Text, ictx: ICtx) -> Any:
         if isinstance(cls, EBuiltin):
             if cls.hasattr(name):
                 return cls.getattr(name, ictx).get_value()
-        elif isinstance(cls, EClass):
-            log('eo:fnim',
-                f'searching for {name} in {cls.name} among {cls.dict_.keys()}')
-            if name in cls.dict_:
-                return cls.dict_[name]
+        elif isinstance(cls, EPyType):
+            d = cls.get_dict()
+            assert isinstance(d, dict), (cls, d)
+            if name in d:
+                return d[name]
         else:
-            assert isinstance(cls, type)
+            assert isinstance(cls, type), cls
             if hasattr(cls, name):
                 return getattr(cls, name)
     return NotFoundSentinel.singleton
@@ -473,10 +482,6 @@ class EInstance(EPyObject):
         return call.invoke(args, kwargs, locals_dict, ictx, globals_=globals_)
 
 
-EClassOrBuiltin = Union['EClass', 'EBuiltin']
-EClassOrEBuiltinOrType = Union['EClass', 'EBuiltin', Type]
-
-
 def _maybe_builtin(b: Type) -> Union['EBuiltin', Type]:
     if b is Exception:
         return get_guest_builtin('Exception')
@@ -485,34 +490,23 @@ def _maybe_builtin(b: Type) -> Union['EBuiltin', Type]:
     return b
 
 
-def _get_bases(c: EClassOrEBuiltinOrType
-               ) -> Tuple[EClassOrEBuiltinOrType, ...]:
+def _get_bases(c: EPyType
+               ) -> Tuple[EPyType, ...]:
     if isinstance(c, type):
         return tuple(_maybe_builtin(b) for b in c.__bases__)
-    assert isinstance(c, (EClass, EBuiltin)), c
-    if isinstance(c, EClass):
-        return c.bases
-    if (_is_type_builtin(c) or _is_dict_builtin(c) or _is_int_builtin(c) or
-            is_list_builtin(c) or is_tuple_builtin(c)):
-        return (get_guest_builtin('object'),)
-    if _is_object_builtin(c):
-        return ()
-    if _is_exception_builtin(c):
-        return (get_guest_builtin('BaseException'),)
-    if _is_base_exception_builtin(c):
-        return (get_guest_builtin('object'),)
-    raise NotImplementedError(c)
+    assert isinstance(c, EPyType), c
+    return c.get_bases()
 
 
 class EClass(EPyType):
     """Represents a user-defined class."""
 
-    bases: Tuple[EClassOrBuiltin, ...]
-    metaclass: Optional[EClassOrBuiltin]
+    bases: Tuple[EPyType, ...]
+    metaclass: Optional[EPyType]
     subclasses: Set['EClass']
 
     def __init__(self, name: Text, dict_: Dict[Text, Any], *,
-                 bases: Optional[Tuple[EClassOrEBuiltinOrType, ...]] = None,
+                 bases: Optional[Tuple[EPyType, ...]] = None,
                  metaclass=None, kwargs=None):
         self.name = name
         self.dict_ = dict_
@@ -522,9 +516,14 @@ class EClass(EPyType):
         self.subclasses = weakref.WeakSet()
 
         for base in self.bases:
-            assert isinstance(base, (EBuiltin, EClass, type))
             if isinstance(base, (EBuiltin, EClass)):
                 base.note_subclass(self)
+
+    def get_bases(self) -> Tuple[EPyType, ...]:
+        return self.bases
+
+    def get_dict(self) -> Dict[Text, Any]:
+        return self.dict_
 
     def note_subclass(self, derived: 'EClass') -> None:
         self.subclasses.add(derived)
@@ -575,7 +574,7 @@ class EClass(EPyType):
             order.append(eobject)
         return tuple(order)
 
-    def get_base(self) -> EClassOrEBuiltinOrType:
+    def get_base(self) -> EPyType:
         if len(self.bases) != 1:
             raise NotImplementedError(self, self.bases)
         return self.bases[0]
@@ -669,6 +668,12 @@ class EFunctionType(EPyType):
     def get_type(self) -> EPyObject:
         return get_guest_builtin('type')
 
+    def get_bases(self):
+        raise NotImplementedError
+
+    def get_dict(self):
+        raise NotImplementedError
+
     def get_mro(self) -> Tuple[EPyObject, ...]:
         return (self,)
 
@@ -710,6 +715,12 @@ class GuestCoroutineType(EPyType):
 
     def __repr__(self) -> Text:
         return "<eclass 'coroutine'>"
+
+    def get_bases(self):
+        raise NotImplementedError
+
+    def get_dict(self):
+        raise NotImplementedError
 
     def get_mro(self) -> Tuple[EPyObject, ...]:
         return (self, get_guest_builtin('type'))
@@ -884,13 +895,24 @@ class EBuiltin(EPyType):
     def register(cls, name: Text, f: Callable, t: Optional[type]) -> None:
         cls._registry[name] = (f, t)
 
-    def __repr__(self):
+    def __repr__(self) -> Text:
         if self.name in self.BUILTIN_TYPES:
             return "<{}class '{}'>".format(E_PREFIX, self.name)
         if self.name in self.BUILTIN_FNS and not self.bound_self:
             return f'<{E_PREFIX}built-in function {self.name}>'
         return 'EBuiltin(name={!r}, bound_self={!r}, ...)'.format(
             self.name, self.bound_self)
+
+    def get_dict(self):
+        raise NotImplementedError
+
+    def get_bases(self):
+        if self.name == 'object':
+            return ()
+        eobject = get_guest_builtin('object')
+        if self.name == 'Exception':
+            return (get_guest_builtin('BaseException'),)
+        return (eobject,)
 
     def get_type(self) -> EPyObject:
         if self.name in self.BUILTIN_FNS:
@@ -1013,12 +1035,16 @@ class EBuiltin(EPyType):
             return Result(_self)
         return Result(EMethod(f=_self, bound_self=obj))
 
+    @check_result
     def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
         if name == '__self__' and self.bound_self is not None:
             return Result(self.bound_self)
 
-        if self.name in self.BUILTIN_TYPES and name == '__module__':
-            return Result('builtins')
+        if self.name in self.BUILTIN_TYPES:
+            if name == '__module__':
+                return Result('builtins')
+            if name == '__bases__':
+                return Result(self.get_bases())
 
         if (self.name in self.BUILTIN_TYPES and
                 name in ('__name__', '__qualname__')):
@@ -1225,11 +1251,11 @@ def do_hasattr(args: Tuple[Any, ...], ictx: ICtx) -> Result[bool]:
 
     if not isinstance(o, EPyObject):
         r = hasattr(o, attr)
-        log('eo:hasattr()', f'{o}, {attr} => {r}')
+        log('eo:hasattr()', lambda: f'{o}, {attr} => {r}')
         return Result(r)
 
     r = o.getattr(attr, ictx)
-    log('eo:hasattr()', f'o {o} attr {attr!r} getattr result: {r}')
+    log('eo:hasattr()', lambda: f'o {o} attr {attr!r} getattr result: {r}')
     if r.is_exception():
         if isinstance(r.get_exception().exception, AttributeError):
             return Result(False)

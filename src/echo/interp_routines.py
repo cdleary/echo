@@ -137,7 +137,7 @@ def run_binop(opname: Text, lhs: Any, rhs: Any, ictx: ICtx) -> Result[Any]:
     etuple = get_guest_builtin('tuple')
     builtin_value_types = {
         ebool, ebytes, estr, eint, elist, edict, ebytearray, eset, etuple,
-        slice, range, ebytearray, type(sys.version_info),
+        float, complex, slice, range, ebytearray, type(sys.version_info),
     }
 
     if (opname in ('BINARY_TRUE_DIVIDE', 'BINARY_MODULO') and rhs_type is eint

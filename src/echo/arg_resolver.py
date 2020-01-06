@@ -187,7 +187,8 @@ def resolve_args(
             print('all_kwargs:', all_kwargs, file=sys.stderr)
             print('varnames:', attrs.varnames, file=sys.stderr)
             raise
-        log('ar', f'updating arg slot at index {index} kw {kw} arg {arg}')
+        log('ar',
+            lambda: f'updating arg slot at index {index} kw {kw} arg {arg}')
         arg_slots[index] = arg
 
     # Add defaults from any slots that still require them.

@@ -25,6 +25,12 @@ class SeqIterType(EPyType):
     def __init__(self):
         self._dict = {}
 
+    def get_bases(self):
+        raise NotImplementedError
+
+    def get_dict(self):
+        raise NotImplementedError
+
     def __repr__(self) -> Text:
         return "<eclass 'iterator'>"
 

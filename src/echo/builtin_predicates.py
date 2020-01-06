@@ -42,12 +42,15 @@ def _do_bool_call(args: Tuple[Any, ...],
             f = f.get_value()
             return f.invoke((), {}, {}, ictx)
 
-        do_len = get_guest_builtin('len')
-        res = do_len.invoke((o,), {}, {}, ictx)
-        if res.is_exception():
-            return res
-        v = res.get_value()
-        return Result(bool(v))
+        if o.get_type().hasattr('__len__'):
+            do_len = get_guest_builtin('len')
+            res = do_len.invoke((o,), {}, {}, ictx)
+            if res.is_exception():
+                return res
+            v = res.get_value()
+            return Result(bool(v))
+
+        return Result(True)
 
     raise NotImplementedError(o)
 

@@ -3,7 +3,7 @@ from typing import Tuple, Any, Dict, Text
 from echo.eobjects import (
     register_builtin, EPyObject, EClass, EBuiltin, EPyType, EFunction,
     is_tuple_builtin, is_list_builtin, get_guest_builtin,
-    GuestCoroutineType, EMethodType,
+    GuestCoroutineType, EMethodType, safer_repr,
     # TODO fix privateness of this
     _is_type_builtin, _is_str_builtin, _is_int_builtin, _is_dict_builtin,
     _is_object_builtin, _is_bool_builtin,
@@ -21,10 +21,12 @@ def _do_isinstance(
         kwargs: Dict[Text, Any],
         ictx: ICtx) -> Result[bool]:
     assert len(args) == 2, args
-    log('eo:isinstance', lambda: f'args: {args}')
+    log('eo:isinstance',
+        lambda: f'args: {safer_repr(args[0])} {safer_repr(args[1])}')
 
     if (isinstance(args[1], EClass) and
             args[1].hasattr('__instancecheck__')):
+        log('eo:isinstance', 'args[1] has __instancecheck__')
         ic = args[1].getattr('__instancecheck__', ictx)
         if ic.is_exception():
             return Result(ic.get_exception())
@@ -99,7 +101,9 @@ def _do_isinstance(
 
     if (isinstance(args[0], EPyObject) and
             isinstance(args[1], EPyType)):
-        return Result(args[1] in args[0].get_type().get_mro())
+        mro = args[0].get_type().get_mro()
+        log('eo:isinstance', f'args[0] EPyObj args[1] EPyType; mro: {mro}')
+        return Result(args[1] in mro)
 
     if isinstance(args[0], EPyObject):
         if isinstance(args[1], (EClass, EBuiltin)):

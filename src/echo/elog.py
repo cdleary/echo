@@ -38,10 +38,10 @@ def debugged(channel: Text,
             sep = ', ' if args and kwargs else ''
 
             if show_start:
-                log(channel, '{}({}{}{}) <start>'.format(
+                log(channel, lambda: '{}({}{}{}) <start>'.format(
                     f.__name__, args_str, sep, kwargs_str))
             result = f(*args, **kwargs)
-            log(channel, '{}({}{}{}) => {}'.format(
+            log(channel, lambda: '{}({}{}{}) => {}'.format(
                 f.__name__, args_str, sep, kwargs_str, result))
             return result
         return wrapper

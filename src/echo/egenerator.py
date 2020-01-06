@@ -21,6 +21,12 @@ class EGeneratorType(EPyType):
     def get_type(self) -> EPyObject:
         return get_guest_builtin('type')
 
+    def get_dict(self):
+        raise NotImplementedError
+
+    def get_bases(self):
+        raise NotImplementedError
+
     def get_mro(self) -> Tuple[EPyObject, ...]:
         return (self, get_guest_builtin('object'))
 

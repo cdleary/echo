@@ -2,10 +2,9 @@ from typing import Union, Text, Any, Optional, Tuple, Dict, Type
 from echo.interp_context import ICtx
 import types
 
-from echo.elog import debugged
 from echo import epy_object
 from echo.epy_object import EPyObject, AttrWhere, EPyType
-from echo.eobjects import EFunctionType
+from echo.eobjects import EFunctionType, EInstance
 from echo.emodule import EModuleType
 from echo.interp_result import Result, ExceptionData, check_result
 from echo.ebuiltins import (
@@ -16,20 +15,24 @@ from echo.ebuiltins import (
 def _dso_lift_container(o: Any) -> Any:
     if type(o) == dict:
         return {_dso_lift(k): _dso_lift(v) for k, v in o.items()}
-    if isinstance(o, tuple):
+    if type(o) is tuple:
         return tuple(_dso_lift(e) for e in o)
+    if type(o) is list:
+        return list(_dso_lift(e) for e in o)
     raise NotImplementedError(o, type(o))
 
 
-def _dso_unlift_container(o: Any) -> Any:
-    if type(o) == dict:
-        return {_dso_unlift(k): _dso_unlift(v) for k, v in o.items()}
-    if isinstance(o, tuple):
-        return tuple(_dso_unlift(e) for e in o)
+def _dso_unlift_container(o: Any, ictx: ICtx) -> Any:
+    if type(o) is dict:
+        return {_dso_unlift(k, ictx): _dso_unlift(v, ictx)
+                for k, v in o.items()}
+    if type(o) is tuple:
+        return tuple(_dso_unlift(e, ictx) for e in o)
+    if type(o) is list:
+        return list(_dso_unlift(e, ictx) for e in o)
     raise NotImplementedError(o, type(o))
 
 
-@debugged('dso:lift')
 def _dso_lift(o: Any) -> Any:
     if type(o) in BUILTIN_CONTAINER_TYPES:
         return _dso_lift_container(o)
@@ -48,13 +51,15 @@ def _dso_lift(o: Any) -> Any:
     return DsoInstanceProxy(o)
 
 
-def _dso_unlift(o: Any) -> Any:
+def _dso_unlift(o: Any, ictx: ICtx) -> Any:
     if type(o) in BUILTIN_CONTAINER_TYPES:
-        return _dso_unlift_container(o)
+        return _dso_unlift_container(o, ictx)
     if type(o) in BUILTIN_VALUE_TYPES:
         return o
     if type(o) in (DsoFunctionProxy, DsoInstanceProxy, DsoClassProxy):
         return o.wrapped
+    if type(o) is EInstance and o.get_type().name == 'partial':
+        return o
     raise NotImplementedError(o)
 
 
@@ -71,13 +76,20 @@ class DsoClassProxy(EPyType, DsoPyObject):
     def __repr__(self) -> Text:
         return f'<pclass {self.wrapped.__qualname__!r}>'
 
+    def get_dict(self) -> Dict[Text, Any]:
+        return _dso_lift(dict(self.wrapped.__dict__))
+
+    def get_bases(self) -> Tuple[EPyType]:
+        v = _dso_lift(self.wrapped.__bases__)
+        assert isinstance(v, tuple), v
+        return v
+
     def get_mro(self) -> Tuple[EPyObject, ...]:
         return _dso_lift(self.wrapped.__mro__)
 
     def get_type(self) -> EPyObject:
         return _dso_lift(type(self.wrapped))
 
-    @debugged('dso:c:ga')
     def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
         try:
             o = getattr(self.wrapped, name)
@@ -86,7 +98,7 @@ class DsoClassProxy(EPyType, DsoPyObject):
         return Result(_dso_lift(o))
 
     def setattr(self, name: Text, value: Any, ictx: ICtx) -> Result[None]:
-        setattr(self.wrapped, name, _dso_unlift(value))
+        setattr(self.wrapped, name, _dso_unlift(value, ictx))
         return Result(None)
 
     def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
@@ -99,19 +111,24 @@ class DsoInstanceProxy(DsoPyObject):
     def __init__(self, wrapped: Any):
         self.wrapped = wrapped
 
+    def safer_repr(self) -> Text:
+        return f'<pinstance {type(self.wrapped)!r}: {id(self.wrapped)}>'
+
     def __repr__(self) -> Text:
         return f'<pinstance {self.wrapped!r}>'
 
     def get_type(self) -> EPyObject:
         return _dso_lift(type(self.wrapped))
 
-    @debugged('dso:i:ga')
     def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
-        o = getattr(self.wrapped, name)
+        try:
+            o = getattr(self.wrapped, name)
+        except AttributeError as e:
+            return Result(ExceptionData(None, None, e))
         return Result(_dso_lift(o))
 
     def setattr(self, name: Text, value: Any, ictx: ICtx) -> Result[None]:
-        setattr(self.wrapped, name, _dso_unlift(value))
+        setattr(self.wrapped, name, _dso_unlift(value, ictx))
         return Result(None)
 
     def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
@@ -139,7 +156,7 @@ class DsoFunctionProxy(DsoPyObject):
         return Result(_dso_lift(o))
 
     def setattr(self, name: Text, value: Any, ictx: ICtx) -> Result[None]:
-        setattr(self.wrapped, name, _dso_unlift(value))
+        setattr(self.wrapped, name, _dso_unlift(value, ictx))
         return Result(None)
 
     def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
@@ -147,7 +164,6 @@ class DsoFunctionProxy(DsoPyObject):
             return AttrWhere.SELF_SPECIAL
         return None
 
-    @debugged('dso:f:invoke')
     @check_result
     def invoke(self,
                args: Tuple[Any, ...],
@@ -156,8 +172,8 @@ class DsoFunctionProxy(DsoPyObject):
                ictx: ICtx,
                globals_: Optional[Dict[Text, Any]] = None) -> Result[Any]:
         assert isinstance(ictx, ICtx), ictx
-        ulargs = _dso_unlift(args)
-        ulkwargs = _dso_unlift(kwargs)
+        ulargs = _dso_unlift(args, ictx)
+        ulkwargs = _dso_unlift(kwargs, ictx)
         with epy_object.establish_ictx(locals_dict, globals_, ictx):
             try:
                 o = self.wrapped(*ulargs, **ulkwargs)

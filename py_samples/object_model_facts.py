@@ -25,3 +25,9 @@ assert (int == frozenset) is False
 assert str.__module__ == 'builtins'
 assert str.__name__ == 'str'
 assert str.__qualname__ == 'str'
+
+assert bool(object()) is True
+
+assert Exception.__bases__ == (BaseException,), Exception.__bases__
+assert BaseException.__bases__ == (object,), BaseException.__bases__
+assert type.__bases__ == (object,), type.__bases__

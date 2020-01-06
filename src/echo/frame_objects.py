@@ -21,7 +21,7 @@ from echo.eobjects import (
     ReturnKind, EBuiltin, EFunction, EPyObject,
     GuestCoroutine, EInstance, get_guest_builtin,
     do_getitem, do_setitem, do_hasattr, do_getattr,
-    do_delitem, do_setattr, E_PREFIX,
+    do_delitem, do_setattr, E_PREFIX, safer_repr,
 )
 from echo import trace_util
 from echo.ecell import ECell
@@ -186,6 +186,7 @@ class StatefulFrame:
         do_issubclass = get_guest_builtin('isinstance')
         r = do_issubclass.invoke((o, t), {}, {}, self.ictx).get_value()
         assert isinstance(r, bool)
+        log('fo:eii', f'o {safer_repr(o)} t {safer_repr(t)} => {r}')
         return r
 
     def _unwind_except_handler(self, b: BlockInfo) -> None:
@@ -286,7 +287,7 @@ class StatefulFrame:
         assert x is not BaseException
         assert not isinstance(x, Value), x
         assert x is not GuestCoroutine
-        log('fo:stack:push()', lambda: repr(x))
+        log('fo:stack:push()', lambda: safer_repr(x))
         self.stack.append(x)
 
     def _push_value(self, x: Value) -> None:
@@ -294,7 +295,7 @@ class StatefulFrame:
 
     def _pop(self) -> Any:
         x = self.stack.pop()
-        log('fo:stack:pop()', lambda: repr(x))
+        log('fo:stack:pop()', lambda: safer_repr(x))
         return x
 
     def _pop_n(self, n: int, tos_is_0: bool = True) -> Tuple[Any, ...]:
@@ -566,17 +567,22 @@ class StatefulFrame:
         self.pc += arg + self.pc_to_bc_width[self.pc]
         return True
 
-    def _is_truthy(self, o: Any) -> bool:
+    def _is_truthy(self, o: Any) -> Result[bool]:
         do_bool = get_guest_builtin('bool')
-        return do_bool.invoke((o,), {}, {}, self.ictx).get_value()
+        return do_bool.invoke((o,), {}, {}, self.ictx)
 
-    def _is_falsy(self, o: Any) -> bool:
-        return not self._is_truthy(o)
+    def _is_falsy(self, o: Any) -> Result[bool]:
+        res = self._is_truthy(o)
+        if res.is_exception():
+            return res
+        v = res.get_value()
+        assert isinstance(v, bool), v
+        return Result(not v)
 
     @sets_pc
     def _run_POP_JUMP_IF_FALSE(self, arg, argval):
         v = self._pop()
-        if self._is_falsy(v):
+        if self._is_falsy(v).get_value():
             log('bc:pjif', f'jumping on falsy: {v}')
             self.pc = arg
             return True
@@ -586,7 +592,7 @@ class StatefulFrame:
     @sets_pc
     def _run_POP_JUMP_IF_TRUE(self, arg, argval):
         v = self._pop()
-        if self._is_truthy(v):
+        if self._is_truthy(v).get_value():
             log('bc:pjit', f'jumping on truthy: {v}')
             self.pc = arg
             return True
@@ -595,7 +601,7 @@ class StatefulFrame:
 
     @sets_pc
     def _run_JUMP_IF_FALSE_OR_POP(self, arg, argval):
-        if self._is_falsy(self._peek()):
+        if self._is_falsy(self._peek()).get_value():
             self.pc = arg
             return True
         else:
@@ -603,8 +609,12 @@ class StatefulFrame:
             return False
 
     @sets_pc
-    def _run_JUMP_IF_TRUE_OR_POP(self, arg, argval):
-        if self._is_truthy(self._peek()):
+    def _run_JUMP_IF_TRUE_OR_POP(
+            self, arg, argval) -> Union[bool, Result[Any]]:
+        res = self._is_truthy(self._peek())
+        if res.is_exception():
+            return res
+        if res.get_value():
             self.pc = arg
             return True
         else:
@@ -827,7 +837,7 @@ class StatefulFrame:
 
     def _run_UNARY_NOT(self, arg, argval) -> None:
         arg = self._pop()
-        self._push(self._is_falsy(arg))
+        self._push(self._is_falsy(arg).get_value())
 
     def _run_UNARY_INVERT(self, arg, argval) -> Result[Any]:
         arg = self._pop()
@@ -947,6 +957,7 @@ class StatefulFrame:
         if exc is _Sentinel:  # Re-raise.
             return Result(self.ictx.exc_info)
 
+        log('bc:rv', f'RAISE_VARARGS exc {safer_repr(exc)}')
         if (isinstance(exc, type) and issubclass(exc, BaseException)):
             ty = exc
             exc = ty()
@@ -1218,6 +1229,12 @@ class StatefulFrame:
 class EFrameType(EPyType):
     def __repr__(self) -> Text:
         return f"<{E_PREFIX}class 'frame'>"
+
+    def get_dict(self):
+        raise NotImplementedError
+
+    def get_bases(self):
+        raise NotImplementedError
 
     def get_mro(self) -> Tuple[EPyObject, ...]:
         return (self,)

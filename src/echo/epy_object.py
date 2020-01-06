@@ -28,7 +28,13 @@ def establish_ictx(locals_dict: Dict[Text, Any],
     assert popped is data
 
 
+class NoContextException(Exception):
+    pass
+
+
 def _find_thread_ictx():
+    if not ictx_data:
+        raise NoContextException
     return ictx_data[-1]
 
 
@@ -84,6 +90,14 @@ class EPyType(EPyObject):
     @abc.abstractmethod
     def get_mro(self) -> Tuple[EPyObject, ...]:
         raise NotImplementedError
+
+    @abc.abstractmethod
+    def get_bases(self) -> Tuple['EPyType', ...]:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def get_dict(self) -> Dict[Text, Any]:
+        raise NotImplementedError(self)
 
     def is_subtype_of(self, other: EPyObject) -> bool:
         mro = self.get_mro()
