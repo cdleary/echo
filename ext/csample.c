@@ -11,7 +11,7 @@ static PyTypeObject CSampleType = {
     .tp_doc = "CSample objects",
     .tp_basicsize = sizeof(CSampleObject),
     .tp_itemsize = 0,
-    .tp_flags = Py_TPFLAGS_DEFAULT,
+    .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,
     .tp_new = PyType_GenericNew,
 };
 

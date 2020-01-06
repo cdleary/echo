@@ -9,6 +9,7 @@ from echo.interp_context import ICtx
 
 SPECIAL_MODULES = (
     'itertools', 'time', 'ctypes', 'subprocess', 'shutil', 'posix', 'errno',
+
     # _ prefixed modules.
     '_collections', '_signal', '_stat', '_weakref', '_weakrefset', '_thread',
     '_sre', '_struct', '_codecs', '_pickle', '_ast', '_io', '_functools',

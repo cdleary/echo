@@ -3,6 +3,7 @@ from echo.interp_context import ICtx
 import types
 
 from echo import epy_object
+from echo.elog import debugged
 from echo.epy_object import EPyObject, AttrWhere, EPyType
 from echo.eobjects import EFunctionType, EInstance
 from echo.emodule import EModuleType
@@ -101,8 +102,13 @@ class DsoClassProxy(EPyType, DsoPyObject):
         setattr(self.wrapped, name, _dso_unlift(value, ictx))
         return Result(None)
 
+    @debugged('dso:class:hasattr_where()')
     def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
         if hasattr(self.wrapped, name):
+            # Hack, we can't tell whether this is type's instancecheck because
+            # it comes back as a built-in method.
+            if name == '__instancecheck__':
+                return None
             return AttrWhere.SELF_SPECIAL
         return None
 

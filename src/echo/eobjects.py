@@ -629,13 +629,10 @@ class EClass(EPyType):
         if self.get_type().hasattr(name):
             return AttrWhere.CLS
         for base in self.get_mro()[1:]:
-            if isinstance(base, EPyObject):
-                haw = base.hasattr_where(name)
-                if haw:
-                    return haw
-            else:
-                if hasattr(base, name):
-                    return AttrWhere.SELF_SPECIAL
+            assert isinstance(base, EPyObject)
+            haw = base.hasattr_where(name)
+            if haw:
+                return haw
 
         return None
 
