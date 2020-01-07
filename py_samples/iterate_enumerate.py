@@ -3,3 +3,8 @@ it = iter(e)
 assert next(it) == (0, 'a')
 assert next(it) == (1, 'b')
 assert next(it) == (2, 'c')
+
+e = enumerate('abc', 1)
+it = iter(e)
+assert next(it) == (1, 'a')
+assert next(it) == (2, 'b')

@@ -19,7 +19,7 @@ print globals abs ord chr open
 
 NameError AttributeError KeyError TypeError IndexError ImportError
 NotImplementedError ValueError AssertionError SystemError RuntimeError
-MemoryError OSError FutureWarning
+MemoryError OSError FutureWarning LookupError
 
 Warning PendingDeprecationWarning ImportWarning ResourceWarning
 UserWarning DeprecationWarning RuntimeWarning

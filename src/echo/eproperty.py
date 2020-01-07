@@ -104,15 +104,19 @@ def _do_property(
         ictx: ICtx) -> Result[Any]:
     doc = kwargs.pop('doc', None)
     fget = kwargs.pop('fget', None)
+    fset = kwargs.pop('fset', None)
     if len(args) == 0:
         pass
     elif len(args) == 1:
         assert fget is None
         fget = args[0]
+    elif len(args) == 2:
+        assert fget is None
+        fget, fset = args
     else:
         raise NotImplementedError(args, kwargs)
     assert not kwargs, kwargs
-    guest_property = EProperty(fget, fset=None, doc=doc)
+    guest_property = EProperty(fget, fset, doc=doc)
     return Result(guest_property)
 
 

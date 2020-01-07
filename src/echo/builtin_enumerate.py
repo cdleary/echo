@@ -46,8 +46,8 @@ class EEnumerate(EPyObject):
 def _do_enumerate(args: Tuple[Any, ...],
                   kwargs: Dict[Text, Any],
                   ictx: ICtx) -> Result[Any]:
-    assert len(args) == 1, args
-    start = kwargs.pop('start', 0)
+    assert 1 <= len(args) <= 2, args
+    start = kwargs.pop('start', 0) if len(args) == 1 else args[1]
     do_iter = get_guest_builtin('iter')
     it = do_iter.invoke((args[0],), {}, {}, ictx)
     if it.is_exception():

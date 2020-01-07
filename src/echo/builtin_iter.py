@@ -1,6 +1,7 @@
+import itertools
 import types
 import weakref
-from typing import Text, Tuple, Any, Dict, Optional
+from typing import Text, Tuple, Any, Dict, Optional, Type
 from collections import OrderedDict as odict
 
 from echo.elog import log
@@ -18,7 +19,8 @@ _ITER_BUILTIN_TYPES = (
     tuple, str, bytes, bytearray, type({}.keys()), type({}.values()),
     type({}.items()), list, type(reversed([])), type(range(0, 0)),
     set, type(zip((), ())), frozenset, weakref.WeakSet, dict,
-)
+    itertools.permutations, itertools.product,
+)  # type: Tuple[Type, ...]
 
 
 class SeqIterType(EPyType):
@@ -152,8 +154,8 @@ BUILTIN_ITERATORS = (
     DICT_KEY_ITERATOR, DICT_ITEM_ITERATOR, DICT_VALUE_ITERATOR, DICT_ITERATOR,
     ZIP_ITERATOR,
     STR_ITERATOR, BYTES_ITERATOR, type(iter(odict())),
-    types.GeneratorType
-)
+    types.GeneratorType, itertools.permutations, itertools.product,
+)  # type: Tuple[Type, ...]
 
 
 @register_builtin('next')

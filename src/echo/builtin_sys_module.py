@@ -9,11 +9,12 @@ from echo.interp_context import ICtx
 
 SPECIAL_MODULES = (
     'itertools', 'time', 'ctypes', 'subprocess', 'shutil', 'posix', 'errno',
+    'atexit',
 
     # _ prefixed modules.
     '_collections', '_signal', '_stat', '_weakref', '_weakrefset', '_thread',
     '_sre', '_struct', '_codecs', '_pickle', '_ast', '_io', '_functools',
-    '_warnings',
+    '_warnings', '_string',
 )
 
 
@@ -59,6 +60,7 @@ def make_sys_module() -> EModule:
         version=sys.version,
         byteorder=sys.byteorder,
         executable=sys.executable,
+        base_prefix=sys.base_prefix,
     )
 
     def _set_paths(v, ictx) -> Result[None]:

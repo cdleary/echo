@@ -1,6 +1,7 @@
 import collections
 import re
 import types
+import _thread
 from typing import Text, Tuple, Any, Dict, Optional
 
 from echo.elog import log
@@ -28,6 +29,7 @@ def _do_bool_call(args: Tuple[Any, ...],
                               types.MethodType, types.BuiltinMethodType,
                               types.BuiltinFunctionType,
                               types.MethodDescriptorType,
+                              getattr(_thread, 'RLock'),
                               type(None), getattr(re, 'Match'))), \
             (o, type(o))
         return Result(bool(o))

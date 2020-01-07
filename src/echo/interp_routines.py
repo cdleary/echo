@@ -31,12 +31,14 @@ OPNAME_TO_SPECIAL = {
     'BINARY_SUBSCR': '__getitem__',
     'BINARY_AND': '__and__',
     'BINARY_MULTIPLY': '__mul__',
+    'BINARY_OR': '__or__',
 }
 OPNAME_TO_SPECIAL_RHS = {
     'BINARY_ADD': '__radd__',
     'BINARY_SUBTRACT': '__rsub__',
     'BINARY_MULTIPLY': '__rmul__',
     'BINARY_AND': '__rand__',
+    'BINARY_OR': '__ror__',
 }
 COMPARE_TO_SPECIAL = {
     '==': '__eq__',

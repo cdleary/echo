@@ -1,3 +1,4 @@
+import atexit
 import functools
 import itertools
 import os
@@ -81,6 +82,7 @@ def run_to_result(path: Text, vm: Text) -> interp_result.Result[Any]:
 
     try:
         r = _run_to_result(path)
+        atexit._run_exitfuncs()
     except Exception as e:
         note_failure()
         raise

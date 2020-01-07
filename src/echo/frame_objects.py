@@ -903,6 +903,9 @@ class StatefulFrame:
     def _run_INPLACE_OR(self, arg, argval):
         return self._run_INPLACE('OR', arg, argval)
 
+    def _run_INPLACE_AND(self, arg, argval):
+        return self._run_INPLACE('AND', arg, argval)
+
     def _run_INPLACE_ADD(self, arg, argval):
         return self._run_INPLACE('ADD', arg, argval)
 
