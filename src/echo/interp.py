@@ -218,13 +218,8 @@ def do_call(f,
     elif f is get_sunder_sre().compile:
         return _do_call_sre_compile(args, kwargs, ictx)
     elif type(f) in (EFunction, EMethod, EClassMethod, EStaticMethod,
-                     NativeFunction, DsoFunctionProxy):
-        return f.invoke(args, kwargs, locals_dict, ictx)
-    elif type(f) is EBuiltin:
-        return f.invoke(args, kwargs, locals_dict, globals_=globals_,
-                        ictx=ictx)
-    elif type(f) is EClass:
-        return f.instantiate(args, kwargs, globals_=globals_, ictx=ictx)
+                     NativeFunction, DsoFunctionProxy, EClass, EBuiltin):
+        return f.invoke(args, kwargs, locals_dict, ictx, globals_=globals_)
     elif issubclass(type(f), EPyObject) and f.hasattr('__call__'):
         f_call = f.getattr('__call__', ictx)
         if f_call.is_exception():

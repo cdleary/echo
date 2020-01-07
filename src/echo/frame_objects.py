@@ -1108,9 +1108,9 @@ class StatefulFrame:
         for i, item in enumerate(reversed(self.stack)):
             item_type = self._etype(item)
             if (isinstance(item, EPyObject) or
-                    isinstance(item, (types.FunctionType,
+                    isinstance(item, (types.FunctionType, types.CodeType,
                                       types.BuiltinFunctionType, type, bool,
-                                      int))):
+                                      int, str, type(None)))):
                 s = '{!r} :: {}'.format(
                     item_type, trace_util.remove_at_hex(repr(item)))
             else:

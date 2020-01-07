@@ -92,6 +92,15 @@ def _do_type_subclasses(
     return Result(sorted(list(c.subclasses)))
 
 
+@register_builtin('type.__call__')
+@check_result
+def _do_type_call(args: Tuple[Any, ...], kwargs: Dict[Text, Any],
+                  globals_: Dict[Text, Any],
+                  ictx: ICtx) -> Result[Any]:
+    assert len(args) >= 1, args
+    return args[0].instantiate(args[1:], kwargs, globals_, ictx)
+
+
 @register_builtin('type')
 @check_result
 def _do_type_call(args: Tuple[Any, ...], kwargs: Dict[Text, Any],

@@ -37,7 +37,8 @@ class EStaticMethod(EPyObject):
              args: Tuple[Any, ...],
              kwargs: Dict[Text, Any],
              locals_dict: Dict[Text, Any],
-             ictx: ICtx) -> Result[Any]:
+             ictx: ICtx,
+             globals_: Optional[Dict[Text, Any]] = None) -> Result[Any]:
         return Result(self.f)
 
     @check_result

@@ -1,5 +1,5 @@
 import sys
-from typing import Tuple, Dict, Any, Text, Callable
+from typing import Tuple, Dict, Any, Text, Callable, Optional
 
 from echo.eobjects import NativeFunction, get_guest_builtin
 from echo.emodule import EModule
@@ -22,7 +22,8 @@ def _get_exc_info(
              args: Tuple[Any, ...],
              kwargs: Dict[Text, Any],
              locals_dict: Dict[Text, Any],
-             ictx: ICtx) -> Result[Any]:
+             ictx: ICtx,
+             globals_: Optional[Dict[Text, Any]] = None) -> Result[Any]:
     exc_info = ictx.exc_info
     if not exc_info:
         return Result((None, None, None))
@@ -37,7 +38,8 @@ def wrap_sys(name: Text, arity: int) -> Callable:
     def f(args: Tuple[Any, ...],
           kwargs: Dict[Text, Any],
           locals_dict: Dict[Text, Any],
-          ictx: ICtx) -> Result[Any]:
+          ictx: ICtx,
+          globals_: Optional[Dict[Text, Any]] = None) -> Result[Any]:
         assert len(args) == arity and not kwargs
         return Result(sys_f(*args))
     return NativeFunction(f, f'sys.{name}')

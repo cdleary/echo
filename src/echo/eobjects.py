@@ -579,6 +579,21 @@ class EClass(EPyType):
             raise NotImplementedError(self, self.bases)
         return self.bases[0]
 
+    @check_result
+    def invoke(self,
+               args: Tuple[Any, ...],
+               kwargs: Dict[Text, Any],
+               locals_dict: Dict[Text, Any],
+               ictx: ICtx,
+               globals_: Optional[Dict[Text, Any]] = None) -> Result[Any]:
+        assert isinstance(ictx, ICtx), ictx
+        call_res = self.get_type().getattr('__call__', ictx)
+        if call_res.is_exception():
+            return call_res
+        call = call_res.get_value()
+        return call.invoke((self,) + args, kwargs, locals_dict, ictx,
+                           globals_=globals_)
+
     def instantiate(self,
                     args: Tuple[Any, ...],
                     kwargs: Dict[Text, Any],
@@ -681,7 +696,8 @@ class EFunctionType(EPyType):
 
     def _get_desc(self, args, kwargs: Dict[Text, Any],
                   locals_dict: Dict[Text, Any],
-                  ictx: ICtx) -> Result[Any]:
+                  ictx: ICtx,
+                  globals_: Optional[Dict[Text, Any]] = None) -> Result[Any]:
         assert not kwargs, kwargs
         assert len(args) == 3, args
         self, obj, objtype = args
@@ -947,17 +963,6 @@ class EBuiltin(EPyType):
                ictx: ICtx,
                globals_: Optional[Dict[Text, Any]] = None) -> Result[Any]:
         assert isinstance(ictx, ICtx), ictx
-        if self.name == 'dict.keys':
-            assert not args, args
-            return Result(self.bound_self.keys())
-        if self.name == 'dict.values':
-            assert not args, args
-            return Result(self.bound_self.values())
-        if self.name == 'dict.items':
-            assert not args, args
-            return Result(self.bound_self.items())
-        if self.name == 'str.format':
-            return Result(self.bound_self.format(*args))
         if self.name == 'zip':
             return Result(zip(*args))
         if self.name == 'reversed':
@@ -970,6 +975,8 @@ class EBuiltin(EPyType):
             return do_hasattr(args, ictx)
         if self.name == 'dir':
             if not args and not kwargs:
+                if locals_dict is None:
+                    assert globals_ is not None
                 return Result(sorted(list(
                     globals_.keys() if locals_dict is None
                     else locals_dict.keys())))
@@ -982,6 +989,10 @@ class EBuiltin(EPyType):
             return do_getattr(args, kwargs, ictx)
         if self.name == 'setattr':
             return do_setattr(args, kwargs, ictx)
+        if self.name == 'type.__call__':
+            if self.bound_self is not None:
+                args = (self.bound_self,) + args
+            return self._registry[self.name][0](args, kwargs, globals_, ictx)
 
         # Check if the builtin has been registered from an external location.
         if self.name in self._registry:
