@@ -224,8 +224,7 @@ class EMethod(EPyObject):
         self.bound_self = bound_self
 
     def __repr__(self) -> Text:
-        return '<ebound method {} of {!r}>'.format(
-            self.f.name, self.bound_self)
+        return f'<{E_PREFIX}bound method {self.f.name} of {self.bound_self!r}>'
 
     def get_type(self) -> EPyObject:
         return EMethodType.singleton
@@ -304,7 +303,10 @@ def _find_name_in_mro(type_: EPyType, name: Text, ictx: ICtx) -> Any:
     return NotFoundSentinel.singleton
 
 
-def _type_getattro(type_: 'EClass', name: Text, ictx: ICtx) -> Result[Any]:
+def _type_getattro(
+        type_: 'EClass', name: Text, ictx: ICtx,
+        do_invoke_desc: bool = True) -> Union[Result[Any], Tuple[bool, Any]]:
+    assert isinstance(type_, EClass), type_
     if name == '__dict__':
         return Result(type_.dict_)
     if name == '__mro__':
@@ -326,6 +328,8 @@ def _type_getattro(type_: 'EClass', name: Text, ictx: ICtx) -> Result[Any]:
         if (isinstance(meta_attr, EPyObject)
                 and meta_attr.hasattr('__get__')
                 and meta_attr.hasattr('__set__')):
+            if not do_invoke_desc:
+                return (True, meta_attr)
             log('gi:ga', f'overriding descriptor: {meta_attr}')
             f = meta_attr.getattr('__get__', ictx)
             if f.is_exception():
@@ -337,6 +341,8 @@ def _type_getattro(type_: 'EClass', name: Text, ictx: ICtx) -> Result[Any]:
     if attr is not NotFoundSentinel.singleton:
         log('eo:ec:ga', f'dict attr {name!r} on {type_}: {attr}')
         if isinstance(attr, EPyObject) and attr.hasattr('__get__'):
+            if not do_invoke_desc:
+                return (True, attr)
             f_result = attr.getattr('__get__', ictx)
             if f_result.is_exception():
                 return Result(f_result.get_exception())
@@ -350,11 +356,15 @@ def _type_getattro(type_: 'EClass', name: Text, ictx: ICtx) -> Result[Any]:
         if (isinstance(meta_attr, EPyObject)
                 and meta_attr.hasattr('__get__')):
             log('gi:ga', f'non-overriding descriptor: {meta_attr}')
+            if not do_invoke_desc:
+                return (True, meta_attr)
             f = meta_attr.getattr('__get__', ictx)
             if f.is_exception():
                 return f
             f = f.get_value()
             return f.invoke((type_, metatype), {}, {}, ictx)
+        if not do_invoke_desc:
+            return (False, meta_attr)
         return Result(meta_attr)
 
     if metatype.hasattr('__getattr__'):
@@ -363,11 +373,16 @@ def _type_getattro(type_: 'EClass', name: Text, ictx: ICtx) -> Result[Any]:
             return meta_ga
         meta_ga = meta_ga.get_value()
         if meta_ga.hasattr('__get__'):
+            if not do_invoke_desc:
+                return meta_ga
             meta_ga = invoke_desc(type_, meta_ga, ictx)
             if meta_ga.is_exception():
                 return meta_ga
             meta_ga = meta_ga.get_value()
         return meta_ga.invoke((name,), {}, {}, ictx)
+
+    if not do_invoke_desc:
+        return (False, None)
 
     msg = f'Class {type_.name} does not have attribute {name!r}'
     return Result(ExceptionData(
@@ -658,7 +673,9 @@ class EClass(EPyType):
 
         This should effectively correspond to type_getattro.
         """
-        return _type_getattro(self, name, ictx)
+        r = _type_getattro(self, name, ictx)
+        assert isinstance(r, Result)
+        return r
 
     def setattr(self, name: Text, value: Any, ictx: ICtx) -> Result[None]:
         sa = _find_name_in_mro(self.get_type(), '__setattr__', ictx)
@@ -684,7 +701,8 @@ class EFunctionType(EPyType):
         raise NotImplementedError
 
     def get_dict(self):
-        raise NotImplementedError
+        # TODO: return mapping proxy
+        return {}
 
     def get_mro(self) -> Tuple[EPyObject, ...]:
         return (self,)
@@ -840,7 +858,7 @@ class EBuiltin(EPyType):
         'object.__repr__',
         'object.__setattr__',
         'object.__format__', 'object.__reduce_ex__',
-        'object.__ne__',
+        'object.__ne__', 'object.__eq__',
         'object.__subclasshook__',
         # type
         'type.__new__', 'type.__init__',

@@ -984,7 +984,8 @@ class StatefulFrame:
         log('bc:lm', f'LOAD_ATTR obj {obj!r} argval {argval} => {attr_result}')
         if (desc_count_before == self.ictx.desc_count
                 and interp_routines.method_requires_self(
-                    obj=obj, name=argval, value=attr_result.get_value())):
+                    obj=obj, name=argval, value=attr_result.get_value(),
+                    ictx=self.ictx)):
             self._push(obj)
         else:
             self._push(StackNullSentinel)

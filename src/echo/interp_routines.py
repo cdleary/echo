@@ -17,7 +17,7 @@ from echo.eobjects import (
     EInstance, EBuiltin, EFunction, EClass,
     EPyObject, EMethod,
     get_guest_builtin,
-    do_hasattr,
+    do_hasattr, _type_getattro,
 )
 from echo.emodule import EModule
 from echo.value import Value
@@ -325,25 +325,15 @@ def _name_is_from_metaclass(cls: EClass, name: Text) -> bool:
 
 
 @debugged('ir:mrs')
-def method_requires_self(obj: Any, name: Text, value: Any) -> bool:
-    if isinstance(value, EBuiltin) and value.bound_self is not None:
+def method_requires_self(obj: Any, name: Text, value: Any, ictx: ICtx) -> bool:
+    do_type = get_guest_builtin('type')
+    if not isinstance(do_type, EClass):
         return False
-    if isinstance(obj, EPyObject):
-        type_ = obj.get_type()
-        if not type_.has_standard_getattr():
-            return False
-        where = obj.hasattr_where(name)
-        log('ir:mrs',
-            f'attr {name} on {obj!r} (type {type_}) is {where} '
-            f'(value {value})')
-        assert where is not None
-        return where == AttrWhere.CLS and not isinstance(value, EMethod)
-
-    result = (
-        hasattr(type(obj), name)
-        and not isinstance(value, (types.BuiltinMethodType, types.MethodType)))
-    log('ir:mrs', f'attr {name} on {obj!r} type {type(obj)} => {result}')
-    return result
+    t = do_type.invoke((obj,), {}, {}, ictx).get_value()
+    r = _type_getattro(t, name, ictx, do_invoke_desc=False)
+    assert isinstance(r, tuple)
+    is_desc, attr = r
+    return False
 
 
 def cprint(msg, color, file=sys.stderr, end='\n') -> None:

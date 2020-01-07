@@ -43,7 +43,7 @@ class EClassMethod(EPyObject):
         assert _self is self
         if obj is not None:
             do_type = get_guest_builtin('type')
-            objtype = do_type((obj,), {})
+            objtype = do_type.invoke((obj,), {}, {}, ictx).get_value()
         return Result(EMethod(self.f, bound_self=objtype))
 
     @check_result

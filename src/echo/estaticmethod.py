@@ -4,7 +4,7 @@ from echo.epy_object import EPyObject, AttrWhere
 from echo.interp_result import Result, ExceptionData, check_result
 from echo.eobjects import (
     EFunction, EMethod, NativeFunction, EBuiltin,
-    get_guest_builtin,
+    get_guest_builtin, E_PREFIX,
 )
 from echo.interp_context import ICtx
 
@@ -15,7 +15,7 @@ class EStaticMethod(EPyObject):
         self.dict_ = {}
 
     def __repr__(self) -> Text:
-        return '<estaticmethod object at {:#x}>'.format(id(self))
+        return f'<{E_PREFIX}staticmethod object at {id(self):#x}>'
 
     def get_type(self) -> EPyObject:
         return get_guest_builtin('staticmethod')
