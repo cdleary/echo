@@ -13,7 +13,9 @@ from typing import (
 import weakref
 
 from echo.return_kind import ReturnKind
-from echo.epy_object import EPyObject, AttrWhere, EPyType, NoContextException
+from echo.epy_object import (
+    EPyObject, AttrWhere, EPyType, NoContextException, safer_repr,
+)
 from echo.elog import log, debugged
 from echo.interpreter_state import InterpreterState
 from echo.interp_context import ICtx
@@ -23,15 +25,6 @@ from echo.value import Value
 from echo.common import memoize
 
 E_PREFIX = 'e' if 'E_PREFIX' not in os.environ else os.environ['E_PREFIX']
-
-
-def safer_repr(x: Any) -> Text:
-    try:
-        return repr(x)
-    except NoContextException:
-        if hasattr(x, 'safer_repr'):
-            return x.safer_repr()
-        return f'<reentrant {type(x)!r}: {id(x)}>'
 
 
 class EFunction(EPyObject):

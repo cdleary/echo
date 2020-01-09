@@ -19,6 +19,7 @@ from typing import (
 )
 
 from echo import epy_object
+from echo.epy_object import safer_repr
 from echo.dso_objects import DsoFunctionProxy
 from echo.common import dis_to_str, get_code, none_filler
 from echo.elog import log
@@ -201,7 +202,9 @@ def do_call(f,
             globals_: Optional[Dict[Text, Any]] = None,
             in_function: bool = True
             ) -> Result[Any]:
-    log('interp:do_call', lambda: f'f: {f} args: {args} kwargs: {kwargs}')
+    log('interp:do_call',
+        lambda: f'f: {f} args: {safer_repr(args)} '
+                f'kwargs: {safer_repr(kwargs)}')
 
     assert in_function
 

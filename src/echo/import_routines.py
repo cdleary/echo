@@ -471,6 +471,10 @@ def run_IMPORT_NAME(importing_path: Text,
         msg = 'Cannot import C-module {}.'.format(multi_module_name)
         return Result(ExceptionData(
             None, None, ImportError(msg)))
+    elif multi_module_name in ('importlib.machinery', 'inspect', 'bdb', 'pdb'):
+        msg = 'Cannot import {}.'.format(multi_module_name)
+        return Result(ExceptionData(
+            None, None, ImportError(msg)))
     elif multi_module_name == 'sys':
         module = builtin_sys_module.make_sys_module()
         ictx.interp_state.sys_modules[multi_module_name] = module

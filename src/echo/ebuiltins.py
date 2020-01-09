@@ -31,6 +31,7 @@ BUILTIN_CONTAINER_TYPES = {
     list,
     set,
     tuple,
+    frozenset,
 }
 BUILTIN_CONTAINER_TYPES_TUP = tuple(BUILTIN_CONTAINER_TYPES)
 BUILTIN_VALUE_TYPES = {

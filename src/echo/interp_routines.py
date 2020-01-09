@@ -32,6 +32,7 @@ OPNAME_TO_SPECIAL = {
     'BINARY_AND': '__and__',
     'BINARY_MULTIPLY': '__mul__',
     'BINARY_OR': '__or__',
+    'BINARY_POWER': '__pow__',
 }
 OPNAME_TO_SPECIAL_RHS = {
     'BINARY_ADD': '__radd__',
@@ -39,6 +40,7 @@ OPNAME_TO_SPECIAL_RHS = {
     'BINARY_MULTIPLY': '__rmul__',
     'BINARY_AND': '__rand__',
     'BINARY_OR': '__ror__',
+    'BINARY_POWER': '__rpow__',
 }
 COMPARE_TO_SPECIAL = {
     '==': '__eq__',
@@ -107,6 +109,7 @@ _BINARY_OPS = {
     'BINARY_SUBSCR': _egetitem,
     'BINARY_TRUE_DIVIDE': operator.truediv,
     'BINARY_FLOOR_DIVIDE': operator.floordiv,
+    'BINARY_POWER': operator.pow,
 }
 _UNARY_OPS = {
     'UNARY_INVERT': operator.invert,
@@ -309,6 +312,14 @@ def compare(opname: Text, lhs, rhs, ictx: ICtx) -> Result[bool]:
     if (opname == '==' and isinstance(lhs, DsoClassProxy) and
             isinstance(rhs, DsoClassProxy)):
         return Result(lhs.wrapped == rhs.wrapped)
+
+    if (isinstance(lhs, EPyObject) and
+            lhs.get_type().hasattr(COMPARE_TO_SPECIAL[opname])):
+        f_cmp = lhs.getattr(COMPARE_TO_SPECIAL[opname], ictx)
+        if f_cmp.is_exception():
+            return f_cmp
+        f_cmp = f_cmp.get_value()
+        return f_cmp.invoke((rhs,), {}, {}, ictx)
 
     raise NotImplementedError(opname, lhs, rhs)
 

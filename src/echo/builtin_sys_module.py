@@ -9,7 +9,9 @@ from echo.interp_context import ICtx
 
 SPECIAL_MODULES = (
     'itertools', 'time', 'ctypes', 'subprocess', 'shutil', 'posix', 'errno',
-    'atexit',
+    'atexit', 'gc',
+    # Ideally would solve the __new__ problem here.
+    'random',
 
     # _ prefixed modules.
     '_collections', '_signal', '_stat', '_weakref', '_weakrefset', '_thread',

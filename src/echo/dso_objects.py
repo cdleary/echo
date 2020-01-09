@@ -1,11 +1,12 @@
+import functools
 from typing import Union, Text, Any, Optional, Tuple, Dict, Type
 from echo.interp_context import ICtx
 import types
 
 from echo import epy_object
 from echo.elog import debugged
-from echo.epy_object import EPyObject, AttrWhere, EPyType
-from echo.eobjects import EFunctionType, EInstance
+from echo.epy_object import EPyObject, AttrWhere, EPyType, safer_repr
+from echo.eobjects import EFunctionType, EInstance, EFunction
 from echo.emodule import EModuleType
 from echo.interp_result import Result, ExceptionData, check_result
 from echo.ebuiltins import (
@@ -20,7 +21,13 @@ def _dso_lift_container(o: Any) -> Any:
         return tuple(_dso_lift(e) for e in o)
     if type(o) is list:
         return list(_dso_lift(e) for e in o)
+    if type(o) is frozenset:
+        return frozenset(_dso_lift(e) for e in o)
     raise NotImplementedError(o, type(o))
+
+
+def _invoke_function(f: EFunction, *args, **kwargs):
+    raise NotImplementedError(f, args, kwargs)
 
 
 def _dso_unlift_container(o: Any, ictx: ICtx) -> Any:
@@ -61,6 +68,8 @@ def _dso_unlift(o: Any, ictx: ICtx) -> Any:
         return o.wrapped
     if type(o) is EInstance and o.get_type().name == 'partial':
         return o
+    if type(o) is EFunction:
+        return functools.partial(_invoke_function, o)
     raise NotImplementedError(o)
 
 
@@ -121,7 +130,8 @@ class DsoInstanceProxy(DsoPyObject):
         return f'<pinstance {type(self.wrapped)!r}: {id(self.wrapped)}>'
 
     def __repr__(self) -> Text:
-        return f'<pinstance {self.wrapped!r}>'
+        return (f'<pinstance {type(self.wrapped)!r}: '
+                f'{safer_repr(self.wrapped)}>')
 
     def get_type(self) -> EPyObject:
         return _dso_lift(type(self.wrapped))
@@ -205,7 +215,10 @@ class DsoModuleProxy(DsoPyObject):
         return EModuleType.singleton
 
     def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
-        o = getattr(self.wrapped, name)
+        try:
+            o = getattr(self.wrapped, name)
+        except AttributeError as e:
+            return Result(ExceptionData(None, None, e))
         return Result(_dso_lift(o))
 
     def setattr(self, name: Text, value: Any, ictx: ICtx) -> Any:

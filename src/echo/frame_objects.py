@@ -890,6 +890,9 @@ class StatefulFrame:
     def _run_BINARY_FLOOR_DIVIDE(self, arg, argval):
         return self._run_binary('BINARY_FLOOR_DIVIDE')
 
+    def _run_BINARY_POWER(self, arg, argval):
+        return self._run_binary('BINARY_POWER')
+
     def _run_INPLACE(self, subopcode: Text, arg, argval) -> Result[Any]:
         rhs = self._pop()
         lhs = self._pop()

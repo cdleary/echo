@@ -8,6 +8,15 @@ from echo.interp_result import Result
 from echo.elog import log
 
 
+def safer_repr(x: Any) -> Text:
+    try:
+        return repr(x)
+    except NoContextException:
+        if hasattr(x, 'safer_repr'):
+            return x.safer_repr()
+        return f'<reentrant {type(x)!r}: {id(x)}>'
+
+
 class AttrWhere(Enum):
     SELF_DICT = 'self_dict'
     SELF_SPECIAL = 'self_special'
