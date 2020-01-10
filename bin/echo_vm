@@ -20,6 +20,7 @@ import sys
 import types
 from typing import Any, Text, Tuple
 
+from echo import call_profiler
 from echo import interp
 from echo import ebuiltins
 from echo import emodule
@@ -129,6 +130,9 @@ def main() -> int:
             sys.exit(-1)
         else:
             raise
+
+    if opts.call_profile:
+        ictx.call_profiler.dump()
 
     return _handle_result(result)
 
