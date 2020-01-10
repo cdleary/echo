@@ -47,7 +47,7 @@ def wrap_sys(name: Text, arity: int) -> Callable:
     return NativeFunction(f, f'sys.{name}')
 
 
-def make_sys_module() -> EModule:
+def make_sys_module(argv: Tuple[Text, ...]) -> EModule:
     globals_ = dict(
         stdout=sys.stdout,
         stderr=sys.stderr,
@@ -65,6 +65,7 @@ def make_sys_module() -> EModule:
         byteorder=sys.byteorder,
         executable=sys.executable,
         base_prefix=sys.base_prefix,
+        argv=list(argv),
     )
 
     def _set_paths(v, ictx) -> Result[None]:

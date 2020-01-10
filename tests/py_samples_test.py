@@ -9,6 +9,7 @@ from typing import Tuple, Any, Text
 
 import pytest
 
+from echo import builtin_sys_module
 from echo import interp
 from echo import interp_result
 from echo import interp_context
@@ -57,7 +58,9 @@ def _run_to_result(path: Text):
 
     builtins = emodule.EModule(
         'builtins', filename='<built-in>', globals_=ebuiltins.make_ebuiltins())
-    ictx = interp_context.ICtx(state, interp.interp, interp.do_call, builtins)
+    esys = builtin_sys_module.make_sys_module(sys.argv)
+    ictx = interp_context.ICtx(state, interp.interp, interp.do_call, builtins,
+                               esys)
 
     result = interp.import_path(path, fully_qualified_name,
                                 fully_qualified_name, ictx)

@@ -19,6 +19,7 @@ from typing import (
 )
 
 from echo import epy_object
+from echo import builtin_sys_module
 from echo.epy_object import safer_repr
 from echo.dso_objects import DsoFunctionProxy
 from echo.common import dis_to_str, get_code, none_filler
@@ -206,6 +207,9 @@ def do_call(f,
         lambda: f'f: {f} args: {safer_repr(args)} '
                 f'kwargs: {safer_repr(kwargs)}')
 
+    if ictx.call_profiler:
+        ictx.call_profiler.note(f, args, kwargs)
+
     assert in_function
 
     kwargs = kwargs or {}
@@ -253,7 +257,8 @@ def run_function(f: types.FunctionType, *args: Tuple[Any, ...],
     globals_ = globals_ or {}
     builtins = builtins or EModule(
         'builtins', filename='<built-in>', globals_=ebuiltins.make_ebuiltins())
-    ictx = ICtx(state, interp, do_call, builtins)
+    esys = builtin_sys_module.make_sys_module([])
+    ictx = ICtx(state, interp, do_call, builtins, esys)
     result = interp(get_code(f), globals_=globals_, defaults=f.__defaults__,
                     args=args, name=f.__name__, ictx=ictx)
     return result.get_value()

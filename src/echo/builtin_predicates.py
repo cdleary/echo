@@ -8,7 +8,7 @@ import _thread
 
 from echo.elog import log
 from echo.epy_object import EPyObject, AttrWhere
-from echo.interp_result import Result, check_result
+from echo.interp_result import Result, check_result, ExceptionData
 from echo import interp_routines
 from echo.eobjects import (
     EFunction, EMethod, NativeFunction, EBuiltin, EClass, EInstance,
@@ -117,12 +117,43 @@ def _do_min(
     return Result(args[0] if res.get_value() else args[1])
 
 
+def _do_max_iterable(iterable: Any, ictx: ICtx) -> Result[Any]:
+    sentinel = object()
+    accum = sentinel
+    do_max = get_guest_builtin('max')
+
+    def cb(o) -> Result[bool]:
+        nonlocal accum
+        if accum is sentinel:
+            accum = o
+        else:
+            res = do_max.invoke((accum, o), {}, {}, ictx)
+            if res.is_exception():
+                return res
+            accum = res.get_value()
+        return Result(True)
+
+    res = iteration_helpers.foreach(iterable, cb, ictx)
+    if res.is_exception():
+        return res
+
+    if accum is sentinel:
+        return Result(ExceptionData(
+            None, None, ValueError('max() arg is an empty sequence')))
+
+    return Result(accum)
+
+
 @register_builtin('max')
 @check_result
 def _do_max(
         args: Tuple[Any, ...],
         kwargs: Dict[Text, Any],
         ictx: ICtx) -> Result[Any]:
+    if len(args) == 1:
+        assert not kwargs
+        return _do_max_iterable(args[0], ictx)
+
     if (not isinstance(args[0], EPyObject) and
             not isinstance(args[1], EPyObject)):
         return Result(max(args[0], args[1]))

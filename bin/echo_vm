@@ -28,6 +28,7 @@ from echo import interp_context
 from echo import import_routines
 from echo import bytecode_trace
 from echo.interp_result import Result
+from echo import builtin_sys_module
 
 import termcolor
 
@@ -77,6 +78,7 @@ def main() -> int:
     parser.add_option('-c', default=None,
                       help='Literal text to execute.')
     parser.add_option('--dump_trace', help='Path to dump bytecode trace to.')
+    parser.add_option('--call_profile', action='store_true', default=False, help='Profile calls.')
     parser.add_option('--preload', default='', help='Modules to pre-load before potentially dumping instructions.')
     opts, args = parser.parse_args()
 
@@ -108,7 +110,10 @@ def main() -> int:
     fully_qualified = '__main__'
 
     builtins = emodule.EModule('builtins', filename='<built-in>', globals_=ebuiltins.make_ebuiltins())
-    ictx = interp_context.ICtx(state, interp.interp, interp.do_call, builtins)
+    esys = builtin_sys_module.make_sys_module(sys.argv)
+    ictx = interp_context.ICtx(state, interp.interp, interp.do_call, builtins, esys)
+    if opts.call_profile:
+        ictx.call_profiler = call_profiler.CallProfiler()
 
     with suppress_env_vars(('ECHO_DUMP_INSTS', 'ECHO_DEBUG')):
         if opts.preload:

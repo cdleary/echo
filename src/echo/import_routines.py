@@ -475,10 +475,6 @@ def run_IMPORT_NAME(importing_path: Text,
         msg = 'Cannot import {}.'.format(multi_module_name)
         return Result(ExceptionData(
             None, None, ImportError(msg)))
-    elif multi_module_name == 'sys':
-        module = builtin_sys_module.make_sys_module()
-        ictx.interp_state.sys_modules[multi_module_name] = module
-        result = _extract_fromlist(module, module, fromlist, ictx)
     elif multi_module_name in builtin_sys_module.SPECIAL_MODULES:
         elog('imp:special', f'importing special module: {multi_module_name!r}')
         module = importlib.import_module(multi_module_name)
