@@ -257,7 +257,7 @@ def run_function(f: types.FunctionType, *args: Tuple[Any, ...],
     globals_ = globals_ or {}
     builtins = builtins or EModule(
         'builtins', filename='<built-in>', globals_=ebuiltins.make_ebuiltins())
-    esys = builtin_sys_module.make_sys_module([])
+    esys = builtin_sys_module.make_sys_module(())
     ictx = ICtx(state, interp, do_call, builtins, esys)
     result = interp(get_code(f), globals_=globals_, defaults=f.__defaults__,
                     args=args, name=f.__name__, ictx=ictx)
