@@ -1295,6 +1295,8 @@ def do_getattr(args: Tuple[Any, ...],
         return Result(get_guest_builtin('tuple'))
     if o is TypeError and attr == '__bases__':
         return Result((get_guest_builtin('Exception'),))
+    if o is None and attr == '__new__':
+        return Result(get_guest_builtin('type.__new__'))
 
     clsname = o.__class__.__name__
     if (type(o) in (int, str, tuple, list, bytearray)

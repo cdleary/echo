@@ -777,16 +777,8 @@ class StatefulFrame:
     def _run_LOAD_ATTR(self, arg, argval) -> Result[Any]:
         obj = self._pop()
         log('bc:la', lambda: f'obj {obj!r} attr {argval}')
-        if isinstance(obj, EInstance):
+        if isinstance(obj, EPyObject):
             r = obj.getattr(argval, self.ictx)
-        elif isinstance(obj, EPyObject):
-            r = obj.getattr(argval, self.ictx)
-        elif obj is None and argval == '__new__':
-            r = Result(get_guest_builtin('type.__new__'))
-        elif obj is sys and argval == 'path':
-            r = Result(self.interp_state.paths)
-        elif obj is sys and argval == 'modules':
-            r = Result(self.interp_state.sys_modules)
         else:
             r = do_getattr((obj, argval), {}, self.ictx)
         if not r.is_exception():
