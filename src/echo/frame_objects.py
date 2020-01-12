@@ -11,6 +11,7 @@ from typing import (
 )
 from enum import Enum
 
+from echo import bc_helpers
 from echo import iteration_helpers
 from echo.elog import log
 from echo.interp_context import ICtx
@@ -629,7 +630,7 @@ class StatefulFrame:
         log('bc:for_iter', f'o: {o} r: {r}')
         if (r.is_exception()
                 and isinstance(r.get_exception().exception, StopIteration)):
-            self._pop()
+            self._pop()  # Pop the extinguished iterator, break the loop.
             self.pc += self.pc_to_bc_width[self.pc] + arg
             new_instruction = self.pc_to_instruction[self.pc]
             assert new_instruction is not None
@@ -677,20 +678,9 @@ class StatefulFrame:
         return Result(f)
 
     def _run_CALL_FUNCTION(self, arg, argval):
-        # https://docs.python.org/3.7/library/dis.html#opcode-CALL_FUNCTION
-        #
-        # Note: As of Python 3.6 this only supports calls for functions with
-        # positional arguments.
-        if sys.version_info >= (3, 6):
-            argc = arg
-            kwargc = 0
-        else:
-            argc = arg & 0xff
-            kwargc = arg >> 8
-        kwarg_stack = self._pop_n(2 * kwargc, tos_is_0=False)
-        kwargs = dict(zip(kwarg_stack[::2], kwarg_stack[1::2]))
-        args = self._pop_n(argc, tos_is_0=False)
-        f = self._pop()
+        fpop_n = functools.partial(self._pop_n, tos_is_0=False)
+        f, args, kwargs = bc_helpers.do_CALL_FUNCTION(fpop_n, arg,
+                                                      sys.version_info)
         log('bc:call',
             lambda: f'{self.code.co_filename}:{self.current_lineno} f: {f} '
                     f'args: {args}')

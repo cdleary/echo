@@ -4,6 +4,7 @@ from operator import itemgetter
 import pprint
 from typing import Tuple, Any, Dict, Text
 from echo.eobjects import EFunction, EPyObject
+from echo.ir import bc2ir
 
 
 class CallProfiler:
@@ -24,6 +25,10 @@ class CallProfiler:
             return  # TODO
         if isinstance(f, EFunction):
             self.profile[f][self._get_types(args)] += 1
+            try:
+                bc2ir.bytecode_to_ir(f.code)
+            except bc2ir.UnhandledConversionError:
+                pass
 
     def _code_pos(self, f):
         if isinstance(f, EFunction):

@@ -34,3 +34,12 @@ def memoize(f):
 
 def none_filler(it: Sequence[Any], count: int) -> Tuple[Any, ...]:
     return tuple(it) + tuple(None for _ in range(count-len(it)))
+
+
+def camel_to_underscores(s: Text):
+    pieces = []
+    for letter in s:
+        if letter.isupper() and pieces:
+            pieces.append('_')
+        pieces.append(letter.lower())
+    return ''.join(pieces)
