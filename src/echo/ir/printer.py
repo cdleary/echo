@@ -9,9 +9,13 @@ def _pprint_control(node: ir.Control, f: io.StringIO) -> None:
     if isinstance(node, ir.JumpAbs):
         print(f'!jump :{node.label}', file=f)
     elif isinstance(node, ir.JumpOnStopIteration):
-        print(f'!jump_on_stop %{node.value.pc}, :{node.on_stop_label}', file=f)
+        print(f'!jump_on_stop %{node.value.ssa_id}, :{node.on_stop_label}',
+              file=f)
+    elif isinstance(node, ir.JumpOnFalse):
+        print(f'!jump_on_false %{node.value.ssa_id}, :{node.on_false_label}',
+              file=f)
     elif isinstance(node, ir.Return):
-        print(f'!return %{node.value.pc}', file=f)
+        print(f'!return %{node.value.ssa_id}', file=f)
     else:
         raise NotImplementedError(node)
 
@@ -19,7 +23,7 @@ def _pprint_control(node: ir.Control, f: io.StringIO) -> None:
 def _pprint_node(node: ir.Node, f: io.StringIO) -> None:
     name = camel_to_underscores(node.__class__.__name__)
     guts = node.printable_guts()
-    print(f'%{node.pc} = {name}({guts})', file=f)
+    print(f'%{node.ssa_id} = {name}({guts})', file=f)
 
 
 def _pprint_block(b: ir.Block, f: io.StringIO) -> None:

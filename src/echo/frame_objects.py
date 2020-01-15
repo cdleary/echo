@@ -306,7 +306,7 @@ class StatefulFrame:
             return tuple(reversed(result))
         return tuple(result)
 
-    def _peek(self):
+    def _peek(self) -> Any:
         return self.stack[-1]
 
     def _get_global_or_builtin(self, name: Text) -> Result[Any]:
@@ -348,20 +348,20 @@ class StatefulFrame:
         pieces = self._pop_n(arg, tos_is_0=False)
         return Result(''.join(pieces))
 
-    def _run_POP_TOP(self, arg, argval):
+    def _run_POP_TOP(self, arg, argval) -> None:
         self._pop()
 
-    def _run_LIST_APPEND(self, arg, argval):
+    def _run_LIST_APPEND(self, arg, argval) -> None:
         tos = self._pop()
         tos_mi = self.stack[-arg]
         list.append(tos_mi, tos)
 
-    def _run_SET_ADD(self, arg, argval):
+    def _run_SET_ADD(self, arg, argval) -> None:
         tos = self._pop()
         tos_mi = self.stack[-arg]
         set.add(tos_mi, tos)
 
-    def _run_POP_BLOCK(self, arg, argval):
+    def _run_POP_BLOCK(self, arg, argval) -> None:
         self.block_stack.pop()
 
     def _run_DELETE_SUBSCR(self, arg, argval):
@@ -378,7 +378,7 @@ class StatefulFrame:
         else:
             raise NotImplementedError(tos, tos1)
 
-    def _run_LOAD_CONST(self, arg, argval):
+    def _run_LOAD_CONST(self, arg, argval) -> Result[Any]:
         return Result(self.consts[arg])
 
     def _run_GET_ITER(self, arg, argval) -> Result[Any]:
@@ -642,39 +642,13 @@ class StatefulFrame:
         assert not r.is_exception(), r
         self._push(r.get_value())
 
-    def _run_MAKE_FUNCTION(self, arg, argval):
-        if sys.version_info >= (3, 6):
-            qualified_name = self._pop()
-            code = self._pop()
-            freevar_cells = self._pop() if arg & 0x08 else None
-            annotation_dict = self._pop() if arg & 0x04 else None
-            kwarg_defaults = self._pop() if arg & 0x02 else None
-            positional_defaults = self._pop() if arg & 0x01 else None
-            if annotation_dict:
-                # TODO(cdleary): 2019-10-26 We just ignore this for now.
-                # raise NotImplementedError(annotation_dict)
-                pass
-        else:
-            # 3.5 documentation:
-            # https://docs.python.org/3.5/library/dis.html#opcode-MAKE_FUNCTION
-            default_argc = arg & 0xff
-            name_and_default_pairs = (arg >> 8) & 0xff
-            annotation_objects = (arg >> 16) & 0x7fff
-            if annotation_objects:
-                raise NotImplementedError(annotation_objects)
-            qualified_name = self._pop()
-            code = self._pop()
-            kwarg_default_items = self._pop_n(2 * name_and_default_pairs,
-                                              tos_is_0=False)
-            kwarg_defaults = dict(zip(kwarg_default_items[::2],
-                                      kwarg_default_items[1::2]))
-            positional_defaults = self._pop_n(default_argc, tos_is_0=False)
-            freevar_cells = None
-
-        f = EFunction(code, self.globals_, qualified_name,
-                      defaults=positional_defaults,
-                      kwarg_defaults=kwarg_defaults,
-                      closure=freevar_cells)
+    def _run_MAKE_FUNCTION(self, arg: int, argval) -> Result[EFunction]:
+        mfd = bc_helpers.do_MAKE_FUNCTION(self._pop, arg, sys.version_info)
+        f = EFunction(mfd.code, self.globals_, mfd.qualified_name,
+                      defaults=mfd.positional_defaults,
+                      kwarg_defaults=(None if mfd.kwarg_defaults is None
+                                      else dict(mfd.kwarg_defaults)),
+                      closure=mfd.freevar_cells)
         return Result(f)
 
     def _run_CALL_FUNCTION(self, arg, argval):
