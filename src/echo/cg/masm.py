@@ -1,12 +1,19 @@
+"""Derived from SpiderMonkey's macroassembler."""
+
 import enum
+from typing import Union
 
 from echo.elog import log
 
 
 class OneByteOpcode(enum.Enum):
     PRE_REX = 0x40
+    PRE_OPERAND_SIZE = 0x66
     OP_GROUP1_EvIz = 0x81
     OP_GROUP1_EvIb = 0x83
+    OP_MOV_EAXIv = 0xb8
+    OP_MOV_EvGv = 0x89
+    OP_MOV_GvEv = 0x8b
 
 
 class GroupOpcode(enum.Enum):
@@ -33,7 +40,15 @@ class Register(enum.Enum):
     R15 = 15
 
 
-def reg_requires_rex(r: int) -> bool:
+HAS_SIB = Register.RSP
+HAS_SIB2 = Register.R12
+NO_BASE = Register.RBP
+NO_BASE2 = Register.R13
+
+
+def reg_requires_rex(r: Union[int, Register]) -> bool:
+    if isinstance(r, Register):
+        r = r.value
     return r >= Register.R8.value
 
 
@@ -63,18 +78,42 @@ class Masm:
         assert imm & 0xff == imm
         self.put_byte(imm)
 
+    def put_int(self, imm: int) -> None:
+        assert imm & 0xffffffff == imm, imm
+        self.put_byte(imm & 0xff)
+        self.put_byte((imm >> 8) & 0xff)
+        self.put_byte((imm >> 16) & 0xff)
+        self.put_byte((imm >> 24) & 0xff)
+
     def immediate32(self, imm: int) -> None:
-        raise NotImplementedError
+        self.put_int(imm)
 
     def put_mod_rm(self, mode: ModRmMode, reg: int, rm: Register):
+        assert isinstance(reg, int), reg
         self.put_byte((mode.value << 6) | ((reg & 7) << 3) | (rm.value & 7))
 
     def register_mod_rm(self, reg: int, rm: Register):
         self.put_mod_rm(ModRmMode.Register, reg, rm)
 
+    def memory_mod_rm(self, reg: int, base: Register, offset: int) -> None:
+        if base == HAS_SIB or base == HAS_SIB2:
+            raise NotImplementedError
+        else:
+            if not offset and base not in (NO_BASE, NO_BASE2):
+                self.put_mod_rm(ModRmMode.MemoryNoDisp, reg, base)
+            elif can_sign_extend_8_32(offset):
+                self.put_mod_rm(ModRmMode.MemoryDisp8, reg, base)
+                self.put_byte(offset)
+            else:
+                self.put_mod_rm(ModRmMode.MemoryDisp32, reg, base)
+                self.put_int(offset)
+
     def emit_rex(self, w: bool, r: int, x: int, b: int) -> None:
+        assert isinstance(r, int), r
+        assert isinstance(x, int), x
+        assert isinstance(b, int), b
         self.put_byte(OneByteOpcode.PRE_REX.value |
-                      (int(w) << 3) | ((r >> 3) << 3) |
+                      (int(w) << 3) | ((r >> 3) << 2) |
                       ((x >> 3) << 1) | (b >> 3))
 
     def emit_rex_if(self, condition: bool, r: int, x: int, b: int) -> None:
@@ -86,11 +125,26 @@ class Masm:
         self.emit_rex_if(reg_requires_rex(r) or reg_requires_rex(x) or
                          reg_requires_rex(b), r, x, b)
 
+    def prefix(self, opcode: OneByteOpcode) -> None:
+        self.put_byte(opcode.value)
+
     def one_byte_op(self, opcode: OneByteOpcode, group_opcode: GroupOpcode,
                     rm: Register) -> None:
         self.emit_rex_if_needed(group_opcode.value, 0, rm.value)
         self.put_byte(opcode.value)
         self.register_mod_rm(group_opcode.value, rm)
+
+    def one_byte_op_or(self, opcode: OneByteOpcode,
+                       reg: Register) -> None:
+        self.emit_rex_if_needed(0, 0, reg.value)
+        self.put_byte(opcode.value + (reg.value & 7))
+
+    def one_byte_op_orri(self, opcode: OneByteOpcode,
+                         reg: Register, base: Register,
+                         offset: int) -> None:
+        self.emit_rex_if_needed(reg.value, 0, base.value)
+        self.put_byte(opcode.value)
+        self.memory_mod_rm(reg.value, base, offset)
 
     def _one_byte_ir(self, group: GroupOpcode, imm: int,
                      dst: Register) -> None:
@@ -105,5 +159,15 @@ class Masm:
         self._one_byte_ir(GroupOpcode.GROUP1_OP_ADD, imm, dst)
 
     def orl_ir(self, imm: int, dst: Register):
-        log('masm', 'orl ${:#x}, {name_ireg(4, dst)}')
         self._one_byte_ir(GroupOpcode.GROUP1_OP_OR, imm, dst)
+
+    def movl_ir(self, imm: int, dst: Register):
+        self.one_byte_op_or(OneByteOpcode.OP_MOV_EAXIv, dst)
+        self.immediate32(imm)
+
+    def movw_rm(self, src: Register, offset: int, base: Register) -> None:
+        self.prefix(OneByteOpcode.PRE_OPERAND_SIZE)
+        self.one_byte_op_orri(OneByteOpcode.OP_MOV_EvGv, src, base, offset)
+
+    def movl_mr(self, offset: int, base: Register, dst: Register) -> None:
+        self.one_byte_op_orri(OneByteOpcode.OP_MOV_GvEv, dst, base, offset)

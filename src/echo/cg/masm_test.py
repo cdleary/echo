@@ -45,3 +45,21 @@ def test_orl():
     masm = Masm()
     masm.orl_ir(0x2, Register.R14)
     assert disassemble(masm) == 'or $0x2,%r14d'
+
+
+def test_movl_ir():
+    masm = Masm()
+    masm.movl_ir(0x2, Register.R14)
+    assert disassemble(masm) == 'mov $0x2,%r14d'
+
+
+def test_movw_rm():
+    masm = Masm()
+    masm.movw_rm(Register.R13, 0x2, Register.R14)
+    assert disassemble(masm) == 'mov %r13w,0x2(%r14)'
+
+
+def test_movl_mr():
+    masm = Masm()
+    masm.movl_mr(0x2, Register.R14, Register.R13)
+    assert disassemble(masm) == 'mov 0x2(%r14),%r13d'
