@@ -156,7 +156,11 @@ class Masm:
             reg = reg.value
         self.put_mod_rm(ModRmMode.Register, reg, rm)
 
-    def memory_mod_rm(self, reg: int, base: Register, offset: int) -> None:
+    def memory_mod_rm(self, reg: Union[Register, int], base: Register,
+                      offset: int) -> None:
+        if isinstance(reg, Register):
+            reg = reg.value
+        assert isinstance(reg, int), reg
         if base == HAS_SIB or base == HAS_SIB2:
             raise NotImplementedError
         else:
@@ -219,6 +223,13 @@ class Masm:
         self.put_byte(opcode.value)
         self.memory_mod_rm(reg.value, base, offset)
 
+    def one_byte_op_64_orri(self, opcode: OneByteOpcode,
+                            reg: Register, base: Register,
+                            offset: int) -> None:
+        self.emit_rex_w(reg.value, 0, base.value)
+        self.put_byte(opcode.value)
+        self.memory_mod_rm(reg, base, offset)
+
     def _one_byte_ir(self, group: GroupOpcode, imm: int,
                      dst: Register) -> None:
         if can_sign_extend_8_32(imm):
@@ -255,6 +266,9 @@ class Masm:
 
     def movq_rr(self, src: Register, dst: Register):
         self.one_byte_op_64_orr(OneByteOpcode.OP_MOV_EvGv, src, dst)
+
+    def movq_mr(self, offset: int, base: Register, dst: Register) -> None:
+        self.one_byte_op_64_orri(OneByteOpcode.OP_MOV_GvEv, dst, base, offset)
 
     def movw_rm(self, src: Register, offset: int, base: Register) -> None:
         self.prefix(OneByteOpcode.PRE_OPERAND_SIZE)

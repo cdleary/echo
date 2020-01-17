@@ -66,6 +66,12 @@ def test_movl_mr():
     assert disassemble(masm) == 'mov 0x2(%r14),%r13d'
 
 
+def test_movq_mr():
+    masm = Masm()
+    masm.movq_mr(0x2, Register.R14, Register.R13)
+    assert disassemble(masm) == 'mov 0x2(%r14),%r13'
+
+
 def test_int_double():
     masm = Masm()
     masm.movq_rr(Register.RDI, Register.RAX)
