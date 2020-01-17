@@ -1,3 +1,4 @@
+import ctypes
 import subprocess
 import tempfile
 from typing import Text
@@ -63,3 +64,19 @@ def test_movl_mr():
     masm = Masm()
     masm.movl_mr(0x2, Register.R14, Register.R13)
     assert disassemble(masm) == 'mov 0x2(%r14),%r13d'
+
+
+def test_int_double():
+    masm = Masm()
+    masm.movq_rr(Register.RDI, Register.RAX)
+    masm.addq_rr(Register.RAX, Register.RAX)
+    masm.ret()
+
+    i64_to_i64 = ctypes.CFUNCTYPE(ctypes.c_int64, ctypes.c_int64)
+    ptr = masm.to_code()
+    casted = ctypes.cast(ptr.buf, i64_to_i64)
+    assert casted(-1) == -2
+    assert casted(1) == 2
+    assert casted(2) == 4
+    assert casted(17) == 34
+    assert casted(int(1 << 32)) == int(2 << 32)
