@@ -66,11 +66,19 @@ def test_movq_mr():
     assert disassemble(masm) == 'mov 0x2(%r14),%r13'
 
 
+def test_shrq_i8r():
+    masm = Masm().shrq_i8r(0x2, Register.R13)
+    assert disassemble(masm) == 'shr $0x2,%r13'
+
+    masm = Masm().shrq_i8r(0x1, Register.R13)
+    assert disassemble(masm) == 'shr %r13'
+
+
 def test_int_double():
     masm = (Masm()
-        .movq_rr(Register.RDI, Register.RAX)
-        .addq_rr(Register.RAX, Register.RAX)
-        .ret())
+            .movq_rr(Register.RDI, Register.RAX)
+            .addq_rr(Register.RAX, Register.RAX)
+            .ret())
 
     i64_to_i64 = ctypes.CFUNCTYPE(ctypes.c_int64, ctypes.c_int64)
     ptr = masm.to_code()
