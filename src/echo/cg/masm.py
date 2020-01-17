@@ -245,40 +245,52 @@ class Masm:
         self.put_byte(opcode.value)
         self.register_mod_rm(reg, rm)
 
-    def addl_ir(self, imm: int, dst: Register):
+    def addl_ir(self, imm: int, dst: Register) -> 'Masm':
         self._one_byte_ir(GroupOpcode.GROUP1_OP_ADD, imm, dst)
+        return self
 
-    def addl_rr(self, src: Register, dst: Register):
+    def addl_rr(self, src: Register, dst: Register) -> 'Masm':
         self.one_byte_op_orr(OneByteOpcode.OP_ADD_EvGv, src, dst)
+        return self
 
-    def addq_rr(self, src: Register, dst: Register):
+    def addq_rr(self, src: Register, dst: Register) -> 'Masm':
         self.one_byte_op_64_orr(OneByteOpcode.OP_ADD_EvGv, src, dst)
+        return self
 
-    def orl_ir(self, imm: int, dst: Register):
+    def orl_ir(self, imm: int, dst: Register) -> 'Masm':
         self._one_byte_ir(GroupOpcode.GROUP1_OP_OR, imm, dst)
+        return self
 
-    def movl_ir(self, imm: int, dst: Register):
+    def movl_ir(self, imm: int, dst: Register) -> 'Masm':
         self.one_byte_op_or(OneByteOpcode.OP_MOV_EAXIv, dst)
         self.immediate32(imm)
+        return self
 
-    def movl_rr(self, src: Register, dst: Register):
+    def movl_rr(self, src: Register, dst: Register) -> 'Masm':
         self.one_byte_op_orr(OneByteOpcode.OP_MOV_EvGv, src, dst)
+        return self
 
-    def movq_rr(self, src: Register, dst: Register):
+    def movq_rr(self, src: Register, dst: Register) -> 'Masm':
         self.one_byte_op_64_orr(OneByteOpcode.OP_MOV_EvGv, src, dst)
+        return self
 
-    def movq_mr(self, offset: int, base: Register, dst: Register) -> None:
+    def movq_mr(self, offset: int, base: Register, dst: Register) -> 'Masm':
         self.one_byte_op_64_orri(OneByteOpcode.OP_MOV_GvEv, dst, base, offset)
+        return self
 
-    def movw_rm(self, src: Register, offset: int, base: Register) -> None:
+    def movw_rm(self, src: Register, offset: int, base: Register) -> 'Masm':
         self.prefix(OneByteOpcode.PRE_OPERAND_SIZE)
         self.one_byte_op_orri(OneByteOpcode.OP_MOV_EvGv, src, base, offset)
+        return self
 
-    def movl_mr(self, offset: int, base: Register, dst: Register) -> None:
+    def movl_mr(self, offset: int, base: Register, dst: Register) -> 'Masm':
         self.one_byte_op_orri(OneByteOpcode.OP_MOV_GvEv, dst, base, offset)
+        return self
 
-    def int3(self):
+    def int3(self) -> 'Masm':
         self.one_byte_op(OneByteOpcode.OP_INT3)
+        return self
 
-    def ret(self):
+    def ret(self) -> 'Masm':
         self.one_byte_op(OneByteOpcode.OP_RET)
+        return self

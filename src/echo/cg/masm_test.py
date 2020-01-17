@@ -37,46 +37,40 @@ def disassemble(masm: Masm) -> Text:
 
 
 def test_addl():
-    masm = Masm()
-    masm.addl_ir(0x2, Register.R14)
+    masm = Masm().addl_ir(0x2, Register.R14)
     assert disassemble(masm) == 'add $0x2,%r14d'
 
 
 def test_orl():
-    masm = Masm()
-    masm.orl_ir(0x2, Register.R14)
+    masm = Masm().orl_ir(0x2, Register.R14)
     assert disassemble(masm) == 'or $0x2,%r14d'
 
 
 def test_movl_ir():
-    masm = Masm()
-    masm.movl_ir(0x2, Register.R14)
+    masm = Masm().movl_ir(0x2, Register.R14)
     assert disassemble(masm) == 'mov $0x2,%r14d'
 
 
 def test_movw_rm():
-    masm = Masm()
-    masm.movw_rm(Register.R13, 0x2, Register.R14)
+    masm = Masm().movw_rm(Register.R13, 0x2, Register.R14)
     assert disassemble(masm) == 'mov %r13w,0x2(%r14)'
 
 
 def test_movl_mr():
-    masm = Masm()
-    masm.movl_mr(0x2, Register.R14, Register.R13)
+    masm = Masm().movl_mr(0x2, Register.R14, Register.R13)
     assert disassemble(masm) == 'mov 0x2(%r14),%r13d'
 
 
 def test_movq_mr():
-    masm = Masm()
-    masm.movq_mr(0x2, Register.R14, Register.R13)
+    masm = Masm().movq_mr(0x2, Register.R14, Register.R13)
     assert disassemble(masm) == 'mov 0x2(%r14),%r13'
 
 
 def test_int_double():
-    masm = Masm()
-    masm.movq_rr(Register.RDI, Register.RAX)
-    masm.addq_rr(Register.RAX, Register.RAX)
-    masm.ret()
+    masm = (Masm()
+        .movq_rr(Register.RDI, Register.RAX)
+        .addq_rr(Register.RAX, Register.RAX)
+        .ret())
 
     i64_to_i64 = ctypes.CFUNCTYPE(ctypes.c_int64, ctypes.c_int64)
     ptr = masm.to_code()
