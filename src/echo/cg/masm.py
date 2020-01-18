@@ -17,7 +17,7 @@ import errno
 import math
 import mmap
 import os
-from typing import Union, Any
+from typing import Union, Any, Tuple, Type, Callable
 
 from echo.elog import log
 
@@ -129,7 +129,20 @@ class Masm:
     def __init__(self):
         self._bytes = []
 
-    def to_code(self):
+    def to_callable(self, arg_types: Tuple[Type, ...],
+                    restype: Type) -> Callable:
+        f_type = ctypes.CFUNCTYPE(restype, *arg_types)
+        ptr = self.to_code()
+        casted = ctypes.cast(ptr.buf, f_type)
+
+        def masm_call(*args):
+            return restype(casted(*args)).value
+
+        masm_call.masm_code = ptr
+
+        return masm_call
+
+    def to_code(self) -> MappedCode:
         libc = ctypes.CDLL('libc.so.6', use_errno=True)
         pages = length = int(math.ceil(len(self._bytes) / PAGE_SIZE))
         assert pages > 0, pages

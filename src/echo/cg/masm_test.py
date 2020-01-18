@@ -127,12 +127,23 @@ def test_hashpointer():
             .cmovzq_rr(Register.RDI, Register.RAX)
             .ret())
 
-    i64_to_i64 = ctypes.CFUNCTYPE(ctypes.c_int64, ctypes.c_uint64)
-    ptr = masm.to_code()
-    casted = ctypes.cast(ptr.buf, i64_to_i64)
-
-    def do_call(x: int) -> int:
-        return ctypes.c_uint64(casted(x)).value
+    do_call = masm.to_callable((ctypes.c_uint64,), ctypes.c_uint64)
 
     assert do_call(-1) == ctypes.c_uint64(-2).value
     assert do_call(0xdeadbeefcafef00d) == 0xddeadbeefcafef00
+
+
+PYDICT_OFFSET_MA_USED = 16
+
+
+def test_dict_size():
+    masm = (Masm()
+            .movq_mr(PYDICT_OFFSET_MA_USED, Register.RDI, Register.RAX)
+            .ret())
+
+    do_call = masm.to_callable((ctypes.c_void_p,), ctypes.c_uint64)
+
+    d = {}
+    assert do_call(id(d)) == 0
+    d = dict(foo=42)
+    assert do_call(id(d)) == 1
