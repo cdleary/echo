@@ -133,17 +133,26 @@ def test_hashpointer():
     assert do_call(0xdeadbeefcafef00d) == 0xddeadbeefcafef00
 
 
-PYDICT_OFFSET_MA_USED = 16
+PYDICT_OFFSET_MA_USED = 16  # ssize_t
+PYDICT_OFFSET_MA_VERSION_TAG = 24  # uint64_t
+PYDICT_OFFSET_MA_KEYS = 32  # PyDictKeysObject*
 
 
 def test_dict_size():
     masm = (Masm()
             .movq_mr(PYDICT_OFFSET_MA_USED, Register.RDI, Register.RAX)
             .ret())
+    get_size = masm.to_callable((ctypes.c_void_p,), ctypes.c_uint64)
 
-    do_call = masm.to_callable((ctypes.c_void_p,), ctypes.c_uint64)
+    masm = (Masm()
+            .movq_mr(PYDICT_OFFSET_MA_VERSION_TAG, Register.RDI, Register.RAX)
+            .ret())
+    get_vtag = masm.to_callable((ctypes.c_void_p,), ctypes.c_uint64)
 
     d = {}
-    assert do_call(id(d)) == 0
-    d = dict(foo=42)
-    assert do_call(id(d)) == 1
+    assert get_size(id(d)) == 0
+    vtag0 = get_vtag(id(d))
+    d['foo'] = 42
+    assert get_size(id(d)) == 1
+    vtag1 = get_vtag(id(d))
+    assert vtag0 != vtag1
