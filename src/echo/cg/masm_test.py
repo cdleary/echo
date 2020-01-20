@@ -3,10 +3,13 @@ import subprocess
 import tempfile
 from typing import Text
 
-from echo.cg.masm import Masm, Register
+from echo.cg.masm import Masm, Register, Scale
+
+import pytest
 
 
 def _extract_asm(text: Text) -> Text:
+
     lines = text.splitlines()
     for i, line in enumerate(lines):
         if line.startswith('Disassembly of section .data'):
@@ -71,6 +74,12 @@ def test_movq_mr():
     assert disassemble(masm) == 'mov 0x2(%r14),%r13'
 
 
+def test_jmp_to_self():
+    masm = Masm().label('label').jmp('label')
+    masm.perform_relocs()
+    assert disassemble(masm) == 'jmp 0x0'
+
+
 def test_binary_mnemonics():
     for case in [
         ('shrq_i8r', 0x2, Register.R13, 'shr $0x2,%r13'),
@@ -79,7 +88,9 @@ def test_binary_mnemonics():
         ('shlq_i8r', 0x1, Register.R13, 'shl %r13'),
         ('cmpq_ir', 0, Register.R13, 'test %r13,%r13'),
         ('cmpq_ir', 0x2, Register.R13, 'cmp $0x2,%r13'),
+        ('cmpq_rr', Register.R14, Register.R13, 'cmp %r14,%r13'),
         ('orq_rr', Register.R14, Register.R13, 'or %r14,%r13'),
+        ('xorl_rr', Register.R14, Register.R13, 'xor %r14d,%r13d'),
         ('cmovzq_rr', Register.R14, Register.R13, 'cmove %r14,%r13'),
         ('cmovzq_rr', Register.RDI, Register.RAX, 'cmove %rdi,%rax'),
         ('movq_i32r', 0xdeadbeef, Register.R14,
@@ -133,9 +144,18 @@ def test_hashpointer():
     assert do_call(0xdeadbeefcafef00d) == 0xddeadbeefcafef00
 
 
-PYDICT_OFFSET_MA_USED = 16  # ssize_t
-PYDICT_OFFSET_MA_VERSION_TAG = 24  # uint64_t
-PYDICT_OFFSET_MA_KEYS = 32  # PyDictKeysObject*
+QUAD_SIZE = 8
+DWORD_SIZE = 4
+PYDICT_OFFSET_MA_USED = 2 * QUAD_SIZE  # ssize_t
+PYDICT_OFFSET_MA_VERSION_TAG = 3 * QUAD_SIZE  # uint64_t
+PYDICT_OFFSET_MA_KEYS = 4 * QUAD_SIZE  # PyDictKeysObject*
+PYDICT_OFFSET_MA_VALUES = 5 * QUAD_SIZE  # PyObject**
+
+PYDICTKEYS_OFFSET_DK_SIZE = 1 * QUAD_SIZE
+
+PYVAR_OFFSET_OB_SIZE = 2 * QUAD_SIZE
+PYVAR_OFFSET_OB_DIGIT = 3 * QUAD_SIZE
+PYLONG_SHIFT = 30
 
 
 def test_dict_size():
@@ -152,7 +172,68 @@ def test_dict_size():
     d = {}
     assert get_size(id(d)) == 0
     vtag0 = get_vtag(id(d))
-    d['foo'] = 42
+    d[64] = 42
     assert get_size(id(d)) == 1
     vtag1 = get_vtag(id(d))
     assert vtag0 != vtag1
+
+
+def test_long_values():
+    masm = (Masm()
+            .movq_mr(PYVAR_OFFSET_OB_SIZE, Register.RDI, Register.RAX)
+            .ret())
+    get_ob_size = masm.to_callable((ctypes.c_void_p,), ctypes.c_uint64)
+
+    masm = (Masm()
+            .movl_mr(PYVAR_OFFSET_OB_DIGIT, Register.RDI, Register.RAX)
+            .ret())
+    get_ob_digit = masm.to_callable((ctypes.c_void_p, ctypes.c_uint64),
+                                    ctypes.c_uint32)
+
+    x = 0
+    assert get_ob_size(id(x)) == 0
+    x = 1
+    assert get_ob_size(id(x)) == 1
+    assert get_ob_digit(id(x), 0) == 1
+    x = 2
+    assert get_ob_size(id(x)) == 1
+    assert get_ob_digit(id(x), 0) == 2
+    x = 0x0eadbeef
+    assert get_ob_size(id(x)) == 1
+    assert get_ob_digit(id(x), 0) == 0xeadbeef
+
+    x = 1 << 29
+    assert get_ob_size(id(x)) == 1
+    assert get_ob_digit(id(x), 0) == 1 << 29
+
+
+@pytest.mark.skip(reason='not working yet, may segfault')
+def test_long_two_digits():
+    masm = (Masm()
+            .int3()
+            # rbx = rdi->ob_size  // holds decrementing size
+            .movl_mr(PYVAR_OFFSET_OB_SIZE, Register.RDI, Register.RBX)
+            # rax = 0  // induction var
+            .xorl_rr(Register.RAX, Register.RAX)
+            # r8 = 0  // accumulator
+            .xorl_rr(Register.R8, Register.R8)
+            # .each_digit:
+            .label('each_digit')
+            .cmpq_rr(Register.R8, Register.RBX)
+            .jle('done')
+            # r8 <<= PYLONG_SHIFT
+            .shlq_i8r(PYLONG_SHIFT, Register.R8)
+            # r8 |= rdi->obj_digit[rax]
+            .orq_mr_bisd(offset=PYVAR_OFFSET_OB_DIGIT, base=Register.RDI,
+                         index=Register.RAX, scale=Scale.SCALE_4,
+                         dst=Register.R8)
+            .incq(Register.RAX)
+            .jmp('each_digit')
+            .label('done')
+            .ret())
+    pylong_as_ulong = masm.to_callable((ctypes.c_void_p,), ctypes.c_uint64)
+
+    # At 30 bits it rolls over to two digits.
+    x = 1 << 30
+    assert get_ob_size(id(x)) == 2
+    assert pylong_as_ulong(id(x)) == 1 << 30

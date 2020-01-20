@@ -10,14 +10,15 @@ A vision:
         return (x == -1).select(quad(-2), x)
 """
 
-
+import collections
 import ctypes
+import dataclasses
 import enum
 import errno
 import math
 import mmap
 import os
-from typing import Union, Any, Tuple, Type, Callable
+from typing import Union, Any, Tuple, Type, Callable, Text, Dict, List, Mapping
 
 from echo.elog import log
 
@@ -34,6 +35,8 @@ class OneByteOpcode(enum.Enum):
     OP_MOV_GvEv = 0x8b
     OP_ADD_EvGv = 0x01
     OP_TEST_EvGv = 0x85
+    OP_XOR_EvGv = 0x31
+    OP_OR_GvEv = 0x0b
     OP_OR_EvGv = 0x09
     OP_CMP_EvGv = 0x39
     OP_CMP_GvEv = 0x3b
@@ -41,15 +44,46 @@ class OneByteOpcode(enum.Enum):
     OP_2BYTE_ESCAPE = 0x0f
     OP_RET = 0xc3
     OP_INT3 = 0xcc
+    OP_INC_EAX = 0x40
+    OP_JMP_BYTE = 0xeb
+
+
+class Scale(enum.Enum):
+    SCALE_2 = 0
+    SCALE_4 = 1
+    SCALE_8 = 2
 
 
 class TwoByteOpcode(enum.Enum):
-    OP_CMOVZ_GvEv = 0x44
+    OP2_CMOVZ_GvEv = 0x44
+    OP2_JCC_rel32 = 0x80
+
+
+class Condition(enum.Enum):
+    OF = 0
+    NOF = 1
+    B = 2
+    AE = 3
+    E = 4
+    NE = 5
+    BE = 6
+    A = 7
+    S = 8
+    NS = 9
+    P = 10
+    NP = 11
+    L = 12
+    GE = 13
+    LE = 14
+    G = 15
+    C = B
+    NC = AE
 
 
 class GroupOpcode(enum.Enum):
     GROUP1_OP_ADD = 0
     GROUP1_OP_OR = 1
+    GROUP1_OP_SUB = 5
     GROUP1_OP_CMP = 7
     GROUP2_OP_SHL = 4
     GROUP2_OP_SHR = 5
@@ -80,6 +114,7 @@ HAS_SIB = Register.RSP
 HAS_SIB2 = Register.R12
 NO_BASE = Register.RBP
 NO_BASE2 = Register.R13
+NO_INDEX = Register.RSP
 PAGE_SIZE = os.sysconf('SC_PAGE_SIZE')
 
 
@@ -96,10 +131,12 @@ class ModRmMode(enum.Enum):
     Register = 3
 
 
-def can_sign_extend_8_32(x: int):
+def can_sign_extend_8_32(x: int) -> bool:
     x = ctypes.c_uint32(x).value
     assert x & 0xffffffff == x, hex(x)
-    def neg(x): return ctypes.c_uint32(-x).value
+
+    def neg(x: int) -> int: return ctypes.c_uint32(-x).value
+
     if x & 0x7f == x:
         return True
     if (x >> 31) and (neg(x) & 0x7f) == neg(x):
@@ -125,9 +162,25 @@ class MappedCode:
         raise OSError(msg)
 
 
+@dataclasses.dataclass
+class Reloc:
+    offset_to_patch: int
+    byte_count: int
+    label: Text
+    delta_to_sub: int
+
+
+@dataclasses.dataclass
 class Masm:
-    def __init__(self):
-        self._bytes = []
+    _bytes: List[int] = dataclasses.field(default_factory=list)
+    _labels: Dict[Text, int] = dataclasses.field(default_factory=dict)
+    _relocs: Mapping[Text, List[Reloc]] = dataclasses.field(
+        default_factory=lambda: collections.defaultdict(list))
+
+    def label(self, name: Text) -> 'Masm':
+        assert name not in self._labels, name
+        self._labels[name] = len(self._bytes)
+        return self
 
     def to_callable(self, arg_types: Tuple[Type, ...],
                     restype: Type) -> Callable:
@@ -142,7 +195,19 @@ class Masm:
 
         return masm_call
 
+    def perform_relocs(self):
+        for label, relocs in self._relocs.items():
+            for reloc in relocs:
+                if reloc.byte_count == 1:
+                    value = ctypes.c_uint8(self._labels[label] -
+                                           reloc.delta_to_sub).value
+                    self._bytes[reloc.offset_to_patch] = value
+                else:
+                    raise NotImplementedError
+
     def to_code(self) -> MappedCode:
+        self.perform_relocs()
+
         libc = ctypes.CDLL('libc.so.6', use_errno=True)
         pages = length = int(math.ceil(len(self._bytes) / PAGE_SIZE))
         assert pages > 0, pages
@@ -174,9 +239,10 @@ class Masm:
             raise OSError(msg)
         return MappedCode(buf, libc)
 
-    def put_byte(self, x: int) -> None:
+    def put_byte(self, x: int) -> 'Masm':
         assert x & 0xff == x
         self._bytes.append(x)
+        return self
 
     def immediate8(self, imm: int) -> 'Masm':
         assert can_sign_extend_8_32(imm), imm
@@ -208,6 +274,23 @@ class Masm:
     def immediate32(self, imm: int) -> 'Masm':
         return self.put_int(imm)
 
+    def immediate_reloc32(self, label: Text, delta_to_sub: int) -> 'Masm':
+        self._relocs[label].append(Reloc(len(self._bytes), 4, label,
+                                         delta_to_sub))
+        self.put_int(0xffff_ffff)
+        return self
+
+    def immediate_reloc8(self, label: Text, delta_to_sub: int) -> 'Masm':
+        """
+        delta_to_sub: Number of bytes to subtract off the label's eventual
+            position.
+        """
+        assert isinstance(label, str), label
+        self._relocs[label].append(Reloc(len(self._bytes), 1, label,
+                                         delta_to_sub))
+        self.put_byte(0xfe)
+        return self
+
     def immediate64(self, imm: int) -> 'Masm':
         return self.put_int64(imm)
 
@@ -221,7 +304,7 @@ class Masm:
         self.put_mod_rm(ModRmMode.Register, reg, rm)
 
     def memory_mod_rm(self, reg: Union[Register, int], base: Register,
-                      offset: int) -> None:
+                      offset: int) -> 'Masm':
         if isinstance(reg, Register):
             reg = reg.value
         assert isinstance(reg, int), reg
@@ -236,6 +319,31 @@ class Masm:
             else:
                 self.put_mod_rm(ModRmMode.MemoryDisp32, reg, base)
                 self.put_int(offset)
+        return self
+
+    def put_mod_rm_sib(self, mode: ModRmMode, reg: int, base: Register,
+                       index: Register, scale: Scale) -> 'Masm':
+        assert isinstance(base, Register), base
+        assert isinstance(index, Register), index
+        self.put_mod_rm(mode, reg, HAS_SIB)
+        self.put_byte((scale.value << 6) | ((index.value & 7) << 3) |
+                      (base.value & 7))
+        return self
+
+    def memory_mod_rm_rrrii(self, reg: int, base: Register, index: Register,
+                            scale: Scale, offset: int) -> 'Masm':
+        assert isinstance(base, Register), base
+        assert index != NO_INDEX
+        if not offset and base != NO_BASE and base != NO_BASE2:
+            raise NotImplementedError
+        elif can_sign_extend_8_32(offset):
+            self.put_mod_rm_sib(ModRmMode.MemoryDisp8, reg, base, index, scale)
+            self.put_byte(offset & 0xff)
+        else:
+            self.put_mod_rm_sib(ModRmMode.MemoryDisp32, reg, base, index,
+                                scale)
+            self.put_int(offset)
+        return self
 
     def emit_rex(self, w: bool, r: int, x: int, b: int) -> None:
         assert isinstance(r, int), r
@@ -266,9 +374,16 @@ class Masm:
     def one_byte_op(self, opcode: OneByteOpcode) -> None:
         self.put_byte(opcode.value)
 
-    def two_byte_op(self, opcode: TwoByteOpcode) -> None:
+    def two_byte_op(self, opcode: Union[TwoByteOpcode, int]) -> 'Masm':
+        """
+        Note: opcodes like 'jmp rel 32' are computed using an opcode as a base,
+        so we accept more than enum values for opcode here.
+        """
         self.put_byte(OneByteOpcode.OP_2BYTE_ESCAPE.value)
-        self.put_byte(opcode.value)
+        if isinstance(opcode, TwoByteOpcode):
+            opcode = opcode.value
+        self.put_byte(opcode)
+        return self
 
     def two_byte_op_orr(self, opcode: TwoByteOpcode, reg: Union[Register, int],
                         rm: Register) -> 'Masm':
@@ -315,21 +430,40 @@ class Masm:
         self.memory_mod_rm(reg.value, base, offset)
         return self
 
+    def one_byte_op_orrrii(self, opcode: OneByteOpcode,
+                           reg: Register, base: Register, index: Register,
+                           scale: Scale, offset: int,
+                           is_64b: bool) -> 'Masm':
+        assert isinstance(reg, Register), reg
+        assert isinstance(base, Register), base
+        assert isinstance(index, Register), index
+        if is_64b:
+            self.emit_rex_w(reg.value, index.value, base.value)
+        else:
+            self.emit_rex_if_needed(reg.value, index.value, base.value)
+        self.put_byte(opcode.value)
+        self.memory_mod_rm_rrrii(reg.value, base, index, scale, offset)
+        return self
+
     def one_byte_op_64_orri(self, opcode: OneByteOpcode,
                             reg: Register, base: Register,
-                            offset: int) -> None:
+                            offset: int) -> 'Masm':
         self.emit_rex_w(reg.value, 0, base.value)
         self.put_byte(opcode.value)
         self.memory_mod_rm(reg, base, offset)
+        return self
 
     def _one_byte_ir(self, group: GroupOpcode, imm: int,
-                     dst: Register) -> None:
+                     dst: Register, is_64b: bool) -> 'Masm':
+        one_byte_op = (self.one_byte_op_64_ogr if is_64b
+                       else self.one_byte_op_ogr)
         if can_sign_extend_8_32(imm):
-            self.one_byte_op_ogr(OneByteOpcode.OP_GROUP1_EvIb, group, dst)
+            one_byte_op(OneByteOpcode.OP_GROUP1_EvIb, group, dst)
             self.immediate8(imm)
         else:
-            self.one_byte_op_ogr(OneByteOpcode.OP_GROUP1_EvIz, group, dst)
+            one_byte_op(OneByteOpcode.OP_GROUP1_EvIz, group, dst)
             self.immediate32(imm)
+        return self
 
     def one_byte_op_64_or(self, opcode: OneByteOpcode,
                           reg: Register) -> 'Masm':
@@ -352,7 +486,7 @@ class Masm:
         return self
 
     def addl_ir(self, imm: int, dst: Register) -> 'Masm':
-        self._one_byte_ir(GroupOpcode.GROUP1_OP_ADD, imm, dst)
+        self._one_byte_ir(GroupOpcode.GROUP1_OP_ADD, imm, dst, is_64b=False)
         return self
 
     def addl_rr(self, src: Register, dst: Register) -> 'Masm':
@@ -362,8 +496,12 @@ class Masm:
     def addq_rr(self, src: Register, dst: Register) -> 'Masm':
         return self.one_byte_op_64_orr(OneByteOpcode.OP_ADD_EvGv, src, dst)
 
+    def subq_ir(self, imm: int, dst: Register) -> 'Masm':
+        return self._one_byte_ir(GroupOpcode.GROUP1_OP_SUB, imm, dst,
+                                 is_64b=True)
+
     def orl_ir(self, imm: int, dst: Register) -> 'Masm':
-        self._one_byte_ir(GroupOpcode.GROUP1_OP_OR, imm, dst)
+        self._one_byte_ir(GroupOpcode.GROUP1_OP_OR, imm, dst, is_64b=False)
         return self
 
     def movl_ir(self, imm: int, dst: Register) -> 'Masm':
@@ -372,8 +510,17 @@ class Masm:
         return self
 
     def movl_rr(self, src: Register, dst: Register) -> 'Masm':
-        self.one_byte_op_orr(OneByteOpcode.OP_MOV_EvGv, src, dst)
-        return self
+        return self.one_byte_op_orr(OneByteOpcode.OP_MOV_EvGv, src, dst)
+
+    def orq_mr_bisd(self, offset: int, base: Register, index: Register,
+                    scale: Scale, dst: Register) -> 'Masm':
+        return self.one_byte_op_orrrii(OneByteOpcode.OP_OR_GvEv, dst, base,
+                                       index, scale, offset, is_64b=True)
+
+    def movl_mr_bisd(self, offset: int, base: Register, index: Register,
+                     scale: Scale, dst: Register) -> 'Masm':
+        return self.one_byte_op_orrrii(OneByteOpcode.OP_MOV_GvEv, dst, base,
+                                       index, scale, offset, is_64b=False)
 
     def movq_rr(self, src: Register, dst: Register) -> 'Masm':
         return self.one_byte_op_64_orr(OneByteOpcode.OP_MOV_EvGv, src, dst)
@@ -393,11 +540,26 @@ class Masm:
                 .one_byte_op_64_or(OneByteOpcode.OP_MOV_EAXIv, dst)
                 .immediate64(imm))
 
+    def incq(self, dst: Register) -> 'Masm':
+        if dst == Register.RAX:
+            return self.put_byte(OneByteOpcode.OP_INC_EAX.value)
+        raise NotImplementedError
+
+    def jmp(self, label: Text) -> 'Masm':
+        self.put_byte(OneByteOpcode.OP_JMP_BYTE.value)
+        return self.immediate_reloc8(label, delta_to_sub=2)
+
     def orq_rr(self, src: Register, dst: Register) -> 'Masm':
         return self.one_byte_op_64_orr(OneByteOpcode.OP_OR_EvGv, src, dst)
 
+    def xorl_rr(self, src: Register, dst: Register) -> 'Masm':
+        return self.one_byte_op_orr(OneByteOpcode.OP_XOR_EvGv, src, dst)
+
     def testq_rr(self, src: Register, dst: Register) -> 'Masm':
         return self.one_byte_op_64_orr(OneByteOpcode.OP_TEST_EvGv, src, dst)
+
+    def cmpq_rr(self, src: Register, dst: Register) -> 'Masm':
+        return self.one_byte_op_64_orr(OneByteOpcode.OP_CMP_EvGv, src, dst)
 
     def cmpq_ir(self, imm: int, dst: Register) -> 'Masm':
         if imm == 0:
@@ -426,7 +588,8 @@ class Masm:
         self.one_byte_op_orri(OneByteOpcode.OP_MOV_GvEv, dst, base, offset)
         return self
 
-    def _shift_i8r(self, group: GroupOpcode, imm: int, dst: Register):
+    def _shift_i8r(self, group: GroupOpcode, imm: int,
+                   dst: Register) -> 'Masm':
         if imm == 1:
             self.one_byte_op_64_ogr(OneByteOpcode.OP_GROUP2_Ev1,
                                     group, dst)
@@ -443,11 +606,25 @@ class Masm:
         return self._shift_i8r(GroupOpcode.GROUP2_OP_SHL, imm, dst)
 
     def cmovzq_rr(self, src: Register, dst: Register) -> 'Masm':
-        return self.two_byte_op64_orr(TwoByteOpcode.OP_CMOVZ_GvEv, dst, src)
+        return self.two_byte_op64_orr(TwoByteOpcode.OP2_CMOVZ_GvEv, dst, src)
 
     def int3(self) -> 'Masm':
         self.one_byte_op(OneByteOpcode.OP_INT3)
         return self
+
+    def jcc(self, condition: Condition, label: Text) -> 'Masm':
+        self.two_byte_op(TwoByteOpcode.OP2_JCC_rel32.value + condition.value)
+        self.immediate_reloc32(label, delta_to_sub=6)
+        return self
+
+    def jne(self, label: Text) -> 'Masm':
+        return self.jcc(Condition.NE, label)
+
+    def jle(self, label: Text) -> 'Masm':
+        return self.jcc(Condition.LE, label)
+
+    def jnz(self, label: Text) -> 'Masm':
+        return self.jne(label)
 
     def ret(self) -> 'Masm':
         self.one_byte_op(OneByteOpcode.OP_RET)
