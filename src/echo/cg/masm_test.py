@@ -1,7 +1,7 @@
 import ctypes
 import subprocess
 import tempfile
-from typing import Text
+from typing import Text, Callable
 
 from echo.cg.masm import Masm, Register, Scale
 
@@ -178,17 +178,21 @@ def test_dict_size():
     assert vtag0 != vtag1
 
 
-def test_long_values():
+def make_get_ob_size() -> Callable:
     masm = (Masm()
             .movq_mr(PYVAR_OFFSET_OB_SIZE, Register.RDI, Register.RAX)
             .ret())
     get_ob_size = masm.to_callable((ctypes.c_void_p,), ctypes.c_uint64)
+    return get_ob_size
 
+
+def test_long_values():
     masm = (Masm()
             .movl_mr(PYVAR_OFFSET_OB_DIGIT, Register.RDI, Register.RAX)
             .ret())
     get_ob_digit = masm.to_callable((ctypes.c_void_p, ctypes.c_uint64),
                                     ctypes.c_uint32)
+    get_ob_size = make_get_ob_size()
 
     x = 0
     assert get_ob_size(id(x)) == 0
@@ -207,31 +211,30 @@ def test_long_values():
     assert get_ob_digit(id(x), 0) == 1 << 29
 
 
-@pytest.mark.skip(reason='not working yet, may segfault')
 def test_long_two_digits():
     masm = (Masm()
-            .int3()
-            # rbx = rdi->ob_size  // holds decrementing size
-            .movl_mr(PYVAR_OFFSET_OB_SIZE, Register.RDI, Register.RBX)
-            # rax = 0  // induction var
+            # rcx = rdi->ob_size  // holds decrementing size
+            .movl_mr(PYVAR_OFFSET_OB_SIZE, Register.RDI, Register.RCX)
+            # rax = 0  // accumulator
             .xorl_rr(Register.RAX, Register.RAX)
-            # r8 = 0  // accumulator
-            .xorl_rr(Register.R8, Register.R8)
             # .each_digit:
             .label('each_digit')
-            .cmpq_rr(Register.R8, Register.RBX)
-            .jle('done')
-            # r8 <<= PYLONG_SHIFT
-            .shlq_i8r(PYLONG_SHIFT, Register.R8)
-            # r8 |= rdi->obj_digit[rax]
-            .orq_mr_bisd(offset=PYVAR_OFFSET_OB_DIGIT, base=Register.RDI,
-                         index=Register.RAX, scale=Scale.SCALE_4,
-                         dst=Register.R8)
-            .incq(Register.RAX)
-            .jmp('each_digit')
-            .label('done')
+            # rcx -= 1
+            .decq(Register.RCX)
+            # rdx = [rdi+offsetof(digits)+rcx<<2]
+            .movl_mr_bisd(offset=PYVAR_OFFSET_OB_DIGIT, base=Register.RDI,
+                          index=Register.RCX, scale=Scale.SCALE_4,
+                          dst=Register.RDX)
+            # rax <<= PYLONG_SHIFT
+            .shlq_i8r(PYLONG_SHIFT, Register.RAX)
+            # rax |= r9
+            .orq_rr(Register.RDX, Register.RAX)
+            # if (rcx != 0) goto each_digit
+            .orq_rr(Register.RCX, Register.RCX)
+            .jnz('each_digit')
             .ret())
     pylong_as_ulong = masm.to_callable((ctypes.c_void_p,), ctypes.c_uint64)
+    get_ob_size = make_get_ob_size()
 
     # At 30 bits it rolls over to two digits.
     x = 1 << 30

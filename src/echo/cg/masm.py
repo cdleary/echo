@@ -18,6 +18,7 @@ import errno
 import math
 import mmap
 import os
+import sys
 from typing import Union, Any, Tuple, Type, Callable, Text, Dict, List, Mapping
 
 from echo.elog import log
@@ -26,10 +27,14 @@ from echo.elog import log
 class OneByteOpcode(enum.Enum):
     PRE_REX = 0x40
     PRE_OPERAND_SIZE = 0x66
+
     OP_GROUP1_EvIz = 0x81
     OP_GROUP1_EvIb = 0x83
     OP_GROUP2_EvIb = 0xc1
     OP_GROUP2_Ev1 = 0xd1
+    OP_GROUP4_Ev = 0xff
+    OP_GROUP11_EvIz = 0xc7
+
     OP_MOV_EAXIv = 0xb8
     OP_MOV_EvGv = 0x89
     OP_MOV_GvEv = 0x8b
@@ -40,18 +45,19 @@ class OneByteOpcode(enum.Enum):
     OP_OR_EvGv = 0x09
     OP_CMP_EvGv = 0x39
     OP_CMP_GvEv = 0x3b
-    OP_GROUP11_EvIz = 0xc7
     OP_2BYTE_ESCAPE = 0x0f
     OP_RET = 0xc3
     OP_INT3 = 0xcc
-    OP_INC_EAX = 0x40
     OP_JMP_BYTE = 0xeb
+    OP_JLE_BYTE = 0x7e
+    OP_JNZ_Jb = 0x75
 
 
 class Scale(enum.Enum):
-    SCALE_2 = 0
-    SCALE_4 = 1
-    SCALE_8 = 2
+    SCALE_1 = 0
+    SCALE_2 = 1
+    SCALE_4 = 2
+    SCALE_8 = 3
 
 
 class TwoByteOpcode(enum.Enum):
@@ -78,6 +84,8 @@ class Condition(enum.Enum):
     G = 15
     C = B
     NC = AE
+    Z = E
+    NZ = NE
 
 
 class GroupOpcode(enum.Enum):
@@ -164,6 +172,11 @@ class MappedCode:
 
 @dataclasses.dataclass
 class Reloc:
+    """
+    offset_to_patch: offset in the byte sequence with data to patch
+    byte_count: data width to patch
+    label: label the reloc is targeting
+    """
     offset_to_patch: int
     byte_count: int
     label: Text
@@ -198,10 +211,21 @@ class Masm:
     def perform_relocs(self):
         for label, relocs in self._relocs.items():
             for reloc in relocs:
+                label_offset = self._labels[label]
+                delta = (label_offset - reloc.delta_to_sub -
+                         reloc.offset_to_patch)
+                print(f'label: {label!r} label offset: {label_offset:#x} '
+                      f'reloc_offset: {reloc.offset_to_patch:#x} '
+                      f'delta: {delta:#x}', file=sys.stderr)
                 if reloc.byte_count == 1:
-                    value = ctypes.c_uint8(self._labels[label] -
-                                           reloc.delta_to_sub).value
+                    value = ctypes.c_uint8(delta).value
                     self._bytes[reloc.offset_to_patch] = value
+                elif reloc.byte_count == 4:
+                    value = ctypes.c_uint32(delta).value
+                    self._bytes[reloc.offset_to_patch+0] = value & 0xff
+                    self._bytes[reloc.offset_to_patch+1] = (value >> 8) & 0xff
+                    self._bytes[reloc.offset_to_patch+2] = (value >> 16) & 0xff
+                    self._bytes[reloc.offset_to_patch+3] = (value >> 24) & 0xff
                 else:
                     raise NotImplementedError
 
@@ -541,13 +565,19 @@ class Masm:
                 .immediate64(imm))
 
     def incq(self, dst: Register) -> 'Masm':
-        if dst == Register.RAX:
-            return self.put_byte(OneByteOpcode.OP_INC_EAX.value)
-        raise NotImplementedError
+        self.put_byte(OneByteOpcode.OP_GROUP4_Ev.value)
+        self.register_mod_rm(0, dst)
+        return self
+
+    def decq(self, dst: Register) -> 'Masm':
+        self.emit_rex_w(0, 0, dst.value)
+        self.put_byte(OneByteOpcode.OP_GROUP4_Ev.value)
+        self.register_mod_rm(1, dst)
+        return self
 
     def jmp(self, label: Text) -> 'Masm':
         self.put_byte(OneByteOpcode.OP_JMP_BYTE.value)
-        return self.immediate_reloc8(label, delta_to_sub=2)
+        return self.immediate_reloc8(label, delta_to_sub=1)
 
     def orq_rr(self, src: Register, dst: Register) -> 'Masm':
         return self.one_byte_op_64_orr(OneByteOpcode.OP_OR_EvGv, src, dst)
@@ -613,8 +643,12 @@ class Masm:
         return self
 
     def jcc(self, condition: Condition, label: Text) -> 'Masm':
-        self.two_byte_op(TwoByteOpcode.OP2_JCC_rel32.value + condition.value)
-        self.immediate_reloc32(label, delta_to_sub=6)
+        if condition == Condition.NZ:
+            opcode = OneByteOpcode.OP_JNZ_Jb
+        else:
+            raise NotImplementedError
+        self.put_byte(opcode.value)
+        self.immediate_reloc8(label, delta_to_sub=1)
         return self
 
     def jne(self, label: Text) -> 'Masm':
