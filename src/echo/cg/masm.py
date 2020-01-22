@@ -51,6 +51,7 @@ class OneByteOpcode(enum.Enum):
     OP_JMP_BYTE = 0xeb
     OP_JLE_BYTE = 0x7e
     OP_JNZ_Jb = 0x75
+    OP_JNS_Jb = 0x79
 
 
 class Scale(enum.Enum):
@@ -63,6 +64,7 @@ class Scale(enum.Enum):
 class TwoByteOpcode(enum.Enum):
     OP2_CMOVZ_GvEv = 0x44
     OP2_JCC_rel32 = 0x80
+    OP2_SETE_Eb = 0x94
 
 
 class Condition(enum.Enum):
@@ -126,6 +128,12 @@ NO_INDEX = Register.RSP
 PAGE_SIZE = os.sysconf('SC_PAGE_SIZE')
 
 
+def byte_reg_requires_rex(r: Union[int, Register]) -> bool:
+    if isinstance(r, Register):
+        r = r.value
+    return r >= Register.RSP.value
+
+
 def reg_requires_rex(r: Union[int, Register]) -> bool:
     if isinstance(r, Register):
         r = r.value
@@ -184,6 +192,11 @@ class Reloc:
 
 
 @dataclasses.dataclass
+class Literal:
+    value: Any
+
+
+@dataclasses.dataclass
 class Masm:
     _bytes: List[int] = dataclasses.field(default_factory=list)
     _labels: Dict[Text, int] = dataclasses.field(default_factory=dict)
@@ -202,7 +215,9 @@ class Masm:
         casted = ctypes.cast(ptr.buf, f_type)
 
         def masm_call(*args):
-            return restype(casted(*args)).value
+            arg_ids = tuple(a.value if isinstance(a, Literal)
+                            else id(a) for a in args)
+            return restype(casted(*arg_ids)).value
 
         masm_call.masm_code = ptr
 
@@ -322,10 +337,12 @@ class Masm:
         assert isinstance(reg, int), reg
         self.put_byte((mode.value << 6) | ((reg & 7) << 3) | (rm.value & 7))
 
-    def register_mod_rm(self, reg: Union[int, Register], rm: Register):
+    def register_mod_rm(self, reg: Union[int, Register],
+                        rm: Register) -> 'Masm':
         if isinstance(reg, Register):
             reg = reg.value
         self.put_mod_rm(ModRmMode.Register, reg, rm)
+        return self
 
     def memory_mod_rm(self, reg: Union[Register, int], base: Register,
                       offset: int) -> 'Masm':
@@ -415,8 +432,16 @@ class Masm:
             reg = reg.value
         self.emit_rex_if_needed(reg, 0, rm.value)
         self.two_byte_op(opcode)
-        self.register_mod_rm(reg, rm)
-        return self
+        return self.register_mod_rm(reg, rm)
+
+    def two_byte_op8_ogr(self, opcode: TwoByteOpcode,
+                         group: Union[GroupOpcode, int],
+                         rm: Register) -> 'Masm':
+        assert isinstance(rm, Register), rm
+        self.emit_rex_if(byte_reg_requires_rex(rm), 0, 0, rm.value)
+        self.put_byte(OneByteOpcode.OP_2BYTE_ESCAPE.value)
+        self.put_byte(opcode.value)
+        return self.register_mod_rm(group, rm)
 
     def two_byte_op64_orr(self, opcode: TwoByteOpcode,
                           reg: Union[Register, int], rm: Register) -> 'Masm':
@@ -588,6 +613,9 @@ class Masm:
     def testq_rr(self, src: Register, dst: Register) -> 'Masm':
         return self.one_byte_op_64_orr(OneByteOpcode.OP_TEST_EvGv, src, dst)
 
+    def sete_r(self, dst: Register) -> 'Masm':
+        return self.two_byte_op8_ogr(TwoByteOpcode.OP2_SETE_Eb, 0, dst)
+
     def cmpq_rr(self, src: Register, dst: Register) -> 'Masm':
         return self.one_byte_op_64_orr(OneByteOpcode.OP_CMP_EvGv, src, dst)
 
@@ -645,11 +673,16 @@ class Masm:
     def jcc(self, condition: Condition, label: Text) -> 'Masm':
         if condition == Condition.NZ:
             opcode = OneByteOpcode.OP_JNZ_Jb
+        elif condition == Condition.NS:
+            opcode = OneByteOpcode.OP_JNS_Jb
         else:
             raise NotImplementedError
         self.put_byte(opcode.value)
         self.immediate_reloc8(label, delta_to_sub=1)
         return self
+
+    def jns(self, label: Text) -> 'Masm':
+        return self.jcc(Condition.NS, label)
 
     def jne(self, label: Text) -> 'Masm':
         return self.jcc(Condition.NE, label)

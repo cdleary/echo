@@ -3,7 +3,9 @@ import subprocess
 import tempfile
 from typing import Text, Callable
 
-from echo.cg.masm import Masm, Register, Scale
+from echo.cg.masm import Masm, Register, Scale, Literal
+from echo.cg.longobject import make_get_ob_size
+from echo.cg.common import *
 
 import pytest
 
@@ -80,28 +82,30 @@ def test_jmp_to_self():
     assert disassemble(masm) == 'jmp 0x0'
 
 
-def test_binary_mnemonics():
+def test_mnemonics():
     for case in [
-        ('shrq_i8r', 0x2, Register.R13, 'shr $0x2,%r13'),
-        ('shrq_i8r', 0x1, Register.R13, 'shr %r13'),
-        ('shlq_i8r', 0x2, Register.R13, 'shl $0x2,%r13'),
-        ('shlq_i8r', 0x1, Register.R13, 'shl %r13'),
-        ('cmpq_ir', 0, Register.R13, 'test %r13,%r13'),
-        ('cmpq_ir', 0x2, Register.R13, 'cmp $0x2,%r13'),
-        ('cmpq_rr', Register.R14, Register.R13, 'cmp %r14,%r13'),
-        ('orq_rr', Register.R14, Register.R13, 'or %r14,%r13'),
-        ('xorl_rr', Register.R14, Register.R13, 'xor %r14d,%r13d'),
-        ('cmovzq_rr', Register.R14, Register.R13, 'cmove %r14,%r13'),
-        ('cmovzq_rr', Register.RDI, Register.RAX, 'cmove %rdi,%rax'),
-        ('movq_i32r', 0xdeadbeef, Register.R14,
+        ('shrq_i8r', (0x2, Register.R13), 'shr $0x2,%r13'),
+        ('shrq_i8r', (0x1, Register.R13), 'shr %r13'),
+        ('shlq_i8r', (0x2, Register.R13), 'shl $0x2,%r13'),
+        ('shlq_i8r', (0x1, Register.R13), 'shl %r13'),
+        ('cmpq_ir', (0, Register.R13), 'test %r13,%r13'),
+        ('cmpq_ir', (0x2, Register.R13), 'cmp $0x2,%r13'),
+        ('cmpq_rr', (Register.R14, Register.R13), 'cmp %r14,%r13'),
+        ('orq_rr', (Register.R14, Register.R13), 'or %r14,%r13'),
+        ('xorl_rr', (Register.R14, Register.R13), 'xor %r14d,%r13d'),
+        ('cmovzq_rr', (Register.R14, Register.R13), 'cmove %r14,%r13'),
+        ('cmovzq_rr', (Register.RDI, Register.RAX), 'cmove %rdi,%rax'),
+        ('movq_i32r', (0xdeadbeef, Register.R14),
          'mov $0xffffffffdeadbeef,%r14'),
-        ('movq_i64r', 0xdeadbeefcafef00d, Register.R14,
+        ('movq_i64r', (0xdeadbeefcafef00d, Register.R14),
          'movabs $0xdeadbeefcafef00d,%r14'),
+        ('sete_r', (Register.RAX,), 'sete %al'),
     ]:
         masm = Masm()
-        f = getattr(masm, case[0])
-        f(case[1], case[2])
-        assert disassemble(masm) == case[3]
+        fn, args, target = case
+        f = getattr(masm, fn)
+        f(*args)
+        assert disassemble(masm) == target
 
 
 def test_int_double():
@@ -140,22 +144,8 @@ def test_hashpointer():
 
     do_call = masm.to_callable((ctypes.c_uint64,), ctypes.c_uint64)
 
-    assert do_call(-1) == ctypes.c_uint64(-2).value
-    assert do_call(0xdeadbeefcafef00d) == 0xddeadbeefcafef00
-
-
-QUAD_SIZE = 8
-DWORD_SIZE = 4
-PYDICT_OFFSET_MA_USED = 2 * QUAD_SIZE  # ssize_t
-PYDICT_OFFSET_MA_VERSION_TAG = 3 * QUAD_SIZE  # uint64_t
-PYDICT_OFFSET_MA_KEYS = 4 * QUAD_SIZE  # PyDictKeysObject*
-PYDICT_OFFSET_MA_VALUES = 5 * QUAD_SIZE  # PyObject**
-
-PYDICTKEYS_OFFSET_DK_SIZE = 1 * QUAD_SIZE
-
-PYVAR_OFFSET_OB_SIZE = 2 * QUAD_SIZE
-PYVAR_OFFSET_OB_DIGIT = 3 * QUAD_SIZE
-PYLONG_SHIFT = 30
+    assert do_call(Literal(-1)) == ctypes.c_uint64(-2).value
+    assert do_call(Literal(0xdeadbeefcafef00d)) == 0xddeadbeefcafef00
 
 
 def test_dict_size():
@@ -170,20 +160,12 @@ def test_dict_size():
     get_vtag = masm.to_callable((ctypes.c_void_p,), ctypes.c_uint64)
 
     d = {}
-    assert get_size(id(d)) == 0
-    vtag0 = get_vtag(id(d))
+    assert get_size(d) == 0
+    vtag0 = get_vtag(d)
     d[64] = 42
-    assert get_size(id(d)) == 1
-    vtag1 = get_vtag(id(d))
+    assert get_size(d) == 1
+    vtag1 = get_vtag(d)
     assert vtag0 != vtag1
-
-
-def make_get_ob_size() -> Callable:
-    masm = (Masm()
-            .movq_mr(PYVAR_OFFSET_OB_SIZE, Register.RDI, Register.RAX)
-            .ret())
-    get_ob_size = masm.to_callable((ctypes.c_void_p,), ctypes.c_uint64)
-    return get_ob_size
 
 
 def test_long_values():
@@ -195,20 +177,20 @@ def test_long_values():
     get_ob_size = make_get_ob_size()
 
     x = 0
-    assert get_ob_size(id(x)) == 0
+    assert get_ob_size(x) == 0
     x = 1
-    assert get_ob_size(id(x)) == 1
-    assert get_ob_digit(id(x), 0) == 1
+    assert get_ob_size(x) == 1
+    assert get_ob_digit(x, Literal(0)) == 1
     x = 2
-    assert get_ob_size(id(x)) == 1
-    assert get_ob_digit(id(x), 0) == 2
+    assert get_ob_size(x) == 1
+    assert get_ob_digit(x, Literal(0)) == 2
     x = 0x0eadbeef
-    assert get_ob_size(id(x)) == 1
-    assert get_ob_digit(id(x), 0) == 0xeadbeef
+    assert get_ob_size(x) == 1
+    assert get_ob_digit(x, Literal(0)) == 0xeadbeef
 
     x = 1 << 29
-    assert get_ob_size(id(x)) == 1
-    assert get_ob_digit(id(x), 0) == 1 << 29
+    assert get_ob_size(x) == 1
+    assert get_ob_digit(x, Literal(0)) == 1 << 29
 
 
 def test_long_two_digits():
@@ -238,5 +220,5 @@ def test_long_two_digits():
 
     # At 30 bits it rolls over to two digits.
     x = 1 << 30
-    assert get_ob_size(id(x)) == 2
-    assert pylong_as_ulong(id(x)) == 1 << 30
+    assert get_ob_size(x) == 2
+    assert pylong_as_ulong(x) == 1 << 30
