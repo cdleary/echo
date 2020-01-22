@@ -581,7 +581,7 @@ class StatefulFrame:
         return Result(not v)
 
     @sets_pc
-    def _run_POP_JUMP_IF_FALSE(self, arg, argval):
+    def _run_POP_JUMP_IF_FALSE(self, arg, argval) -> bool:
         v = self._pop()
         if self._is_falsy(v).get_value():
             log('bc:pjif', f'jumping on falsy: {v}')
