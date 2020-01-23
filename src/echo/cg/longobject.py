@@ -55,7 +55,6 @@ def make_long_eq() -> Callable[[int, int], bool]:
 def make_long_add() -> Callable[[int, int], int]:
     libpython = ctypes.CDLL('libpython3.7m.so')
     addr = ctypes.cast(libpython.PyNumber_Add, ctypes.c_void_p).value
-    print('addr:', hex(addr))
     masm = (Masm()
             .movq_i64r(addr, Register.RAX)
             .callq_r(Register.RAX)
