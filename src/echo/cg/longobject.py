@@ -13,6 +13,17 @@ def make_get_ob_size() -> Callable:
     return get_ob_size
 
 
+def make_get_ob_digit() -> Callable[[int, int], int]:
+    masm = (Masm()
+            .movl_mr_bisd(offset=PYVAR_OFFSET_OB_DIGIT, base=Register.RDI,
+                          index=Register.RSI, scale=Scale.SCALE_4,
+                          dst=Register.RAX)
+            .ret())
+    get_ob_digit = masm.to_callable((ctypes.c_void_p, ctypes.c_uint64),
+                                    ctypes.c_uint32)
+    return get_ob_digit
+
+
 def make_long_eq() -> Callable[[int, int], bool]:
     masm = (Masm()
             .movq_mr(PYVAR_OFFSET_OB_SIZE, Register.RDI, Register.RAX)
@@ -39,3 +50,16 @@ def make_long_eq() -> Callable[[int, int], bool]:
     get_long_eq = masm.to_callable((ctypes.c_void_p, ctypes.c_void_p),
                                    ctypes.c_bool)
     return get_long_eq
+
+
+def make_long_add() -> Callable[[int, int], int]:
+    libpython = ctypes.CDLL('libpython3.7m.so')
+    addr = ctypes.cast(libpython.PyNumber_Add, ctypes.c_void_p).value
+    print('addr:', hex(addr))
+    masm = (Masm()
+            .movq_i64r(addr, Register.RAX)
+            .callq_r(Register.RAX)
+            .ret())
+    long_add = masm.to_callable((ctypes.c_void_p, ctypes.c_void_p),
+                                ctypes.py_object)
+    return long_add

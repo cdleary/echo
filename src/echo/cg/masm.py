@@ -33,6 +33,7 @@ class OneByteOpcode(enum.Enum):
     OP_GROUP2_EvIb = 0xc1
     OP_GROUP2_Ev1 = 0xd1
     OP_GROUP4_Ev = 0xff
+    OP_GROUP5_Ev = 0xff
     OP_GROUP11_EvIz = 0xc7
 
     OP_MOV_EAXIv = 0xb8
@@ -98,6 +99,7 @@ class GroupOpcode(enum.Enum):
     GROUP2_OP_SHL = 4
     GROUP2_OP_SHR = 5
     GROUP2_OP_SAR = 7
+    GROUP5_OP_CALLN = 2
     GROUP11_MOV = 0
 
 
@@ -453,10 +455,10 @@ class Masm:
         return self
 
     def one_byte_op_ogr(self, opcode: OneByteOpcode, group_opcode: GroupOpcode,
-                        rm: Register) -> None:
+                        rm: Register) -> 'Masm':
         self.emit_rex_if_needed(group_opcode.value, 0, rm.value)
         self.put_byte(opcode.value)
-        self.register_mod_rm(group_opcode.value, rm)
+        return self.register_mod_rm(group_opcode.value, rm)
 
     def one_byte_op_or(self, opcode: OneByteOpcode,
                        reg: Register) -> 'Masm':
@@ -588,6 +590,10 @@ class Masm:
         return (self
                 .one_byte_op_64_or(OneByteOpcode.OP_MOV_EAXIv, dst)
                 .immediate64(imm))
+
+    def callq_r(self, src: Register) -> 'Masm':
+        return self.one_byte_op_ogr(OneByteOpcode.OP_GROUP5_Ev,
+                                    GroupOpcode.GROUP5_OP_CALLN, src)
 
     def incq(self, dst: Register) -> 'Masm':
         self.put_byte(OneByteOpcode.OP_GROUP4_Ev.value)

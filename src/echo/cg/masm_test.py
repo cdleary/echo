@@ -4,7 +4,7 @@ import tempfile
 from typing import Text, Callable
 
 from echo.cg.masm import Masm, Register, Scale, Literal
-from echo.cg.longobject import make_get_ob_size
+from echo.cg.longobject import make_get_ob_size, make_get_ob_digit
 from echo.cg.common import *
 
 import pytest
@@ -100,6 +100,8 @@ def test_mnemonics():
         ('movq_i64r', (0xdeadbeefcafef00d, Register.R14),
          'movabs $0xdeadbeefcafef00d,%r14'),
         ('sete_r', (Register.RAX,), 'sete %al'),
+        ('callq_r', (Register.RAX,), 'callq *%rax'),
+        ('callq_r', (Register.R14,), 'callq *%r14'),
     ]:
         masm = Masm()
         fn, args, target = case
@@ -169,11 +171,7 @@ def test_dict_size():
 
 
 def test_long_values():
-    masm = (Masm()
-            .movl_mr(PYVAR_OFFSET_OB_DIGIT, Register.RDI, Register.RAX)
-            .ret())
-    get_ob_digit = masm.to_callable((ctypes.c_void_p, ctypes.c_uint64),
-                                    ctypes.c_uint32)
+    get_ob_digit = make_get_ob_digit()
     get_ob_size = make_get_ob_size()
 
     x = 0
@@ -191,6 +189,12 @@ def test_long_values():
     x = 1 << 29
     assert get_ob_size(x) == 1
     assert get_ob_digit(x, Literal(0)) == 1 << 29
+
+    x = 0xffff_ffff_ffff_ffff
+    assert get_ob_size(x) == 3
+    assert get_ob_digit(x, Literal(0)) == 0x3fff_ffff
+    assert get_ob_digit(x, Literal(1)) == 0x3fff_ffff
+    assert hex(get_ob_digit(x, Literal(2))) == '0xf'
 
 
 def test_long_two_digits():
