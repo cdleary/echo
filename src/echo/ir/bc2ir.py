@@ -29,7 +29,7 @@ def bytecode_to_ir(code: types.CodeType) -> ir.Cfg:
     print('freevars:', code.co_freevars)
 
     for i in range(code.co_argcount):
-        locals_[i] = ir.Param(code.co_varnames[i])
+        locals_[i] = cfg.add_param(code.co_varnames[i])
 
     def fpop_n(n: int) -> Tuple[ir.Node, ...]:
         return tuple(virtual_stack.pop() for _ in range(n))

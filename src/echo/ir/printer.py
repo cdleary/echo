@@ -23,7 +23,8 @@ def _pprint_control(node: ir.Control, f: io.StringIO) -> None:
 def _pprint_node(node: ir.Node, f: io.StringIO) -> None:
     name = camel_to_underscores(node.__class__.__name__)
     guts = node.printable_guts()
-    print(f'%{node.ssa_id} = {name}({guts})', file=f)
+    type_str = f': {node.type.__name__}' if node.type is not None else ''
+    print(f'%{node.ssa_id}{type_str} = {name}({guts})', file=f)
 
 
 def _pprint_block(b: ir.Block, f: io.StringIO) -> None:

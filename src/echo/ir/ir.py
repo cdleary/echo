@@ -1,4 +1,4 @@
-from typing import Tuple, Text, Any, Dict, Union, Optional
+from typing import Tuple, Text, Any, Dict, Union, Optional, Callable
 
 import enum
 import types
@@ -15,6 +15,7 @@ class Node:
             operands
         self._ssa_id = str(ssa_id) if isinstance(ssa_id, int) else ssa_id
         self.operands = operands
+        self.type = None
 
     @property
     def ssa_id(self) -> Text:
@@ -49,17 +50,31 @@ class Block:
 
 class Cfg:
     def __init__(self):
+        self.params = []
         self.blocks = []
         self.dependent = {}  # type: Dict[types.CodeType, Cfg]
+
+    def add_param(self, name: Text) -> 'Param':
+        self.params.append(Param(name, len(self.params)))
+        return self.params[-1]
 
     def add_block(self, label: Text) -> Block:
         self.blocks.append(Block(label))
         return self.blocks[-1]
 
+    def walk(self, f: Callable[[Node], None]):
+        for param in self.params:
+            f(param)
+        for block in self.blocks:
+            for node in block.nodes:
+                f(node)
+
+
 
 class Param(Node):
-    def __init__(self, name: Text):
+    def __init__(self, name: Text, paramno: int):
         super().__init__(name, ())
+        self.paramno = paramno
 
 
 class LoadConst(Node):
@@ -135,14 +150,26 @@ class StoreAttr(Node):
                 f'value={ssa_id_or_none(self.value)}')
 
 
-class Add(Node):
+class BinaryNode(Node):
     def __init__(self, pc: int, lhs: Node, rhs: Node):
         super().__init__(pc, (lhs, rhs))
 
+    @property
+    def lhs(self) -> Node:
+        return self.operands[0]
 
-class Mul(Node):
-    def __init__(self, pc: int, lhs: Node, rhs: Node):
-        super().__init__(pc, (lhs, rhs))
+    @property
+    def rhs(self) -> Node:
+        return self.operands[1]
+        
+
+
+class Add(BinaryNode):
+    pass
+
+
+class Mul(BinaryNode):
+    pass
 
 
 class ListAppend(Node):

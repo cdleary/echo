@@ -1,5 +1,6 @@
 import ctypes
 import subprocess
+import sys
 import tempfile
 from typing import Text, Callable
 
@@ -102,11 +103,13 @@ def test_mnemonics():
         ('sete_r', (Register.RAX,), 'sete %al'),
         ('callq_r', (Register.RAX,), 'callq *%rax'),
         ('callq_r', (Register.R14,), 'callq *%r14'),
+        ('xbegin', ('done',), 'xbeginq 0x5'),
+        ('xabort_i8', (0xab,), 'xabort $0xab'),
     ]:
         masm = Masm()
         fn, args, target = case
         f = getattr(masm, fn)
-        f(*args)
+        f(*args).label('done')
         assert disassemble(masm) == target
 
 
@@ -226,3 +229,28 @@ def test_long_two_digits():
     x = 1 << 30
     assert get_ob_size(x) == 2
     assert pylong_as_ulong(x) == 1 << 30
+
+
+
+def test_tsx_basic():
+    libc = ctypes.CDLL('libc.so.6')
+    libc.malloc.restype = ctypes.c_void_p
+    buf = libc.malloc(64)
+    print('buf:', hex(buf), file=sys.stderr)
+
+    m = Masm()
+    (m
+      .movl_ir(0xf00, Register.RAX)
+      .movq_rm(Register.RAX, 0, Register.RDI)
+      .xbegin('done')
+      .movl_ir(0xba5, Register.RAX)
+      .movq_rm(Register.RAX, 0, Register.RDI)
+      .xabort_i8(0xcd)
+      .ret()
+      .label('done')
+      .nop()
+      .ret())
+    
+    f = m.to_callable((ctypes.c_void_p,), ctypes.c_uint64)
+    assert f(Literal(buf)) == 0xcd << 24 | 1
+    assert ctypes.cast(buf, ctypes.POINTER(ctypes.c_uint64))[0] == 0xf00

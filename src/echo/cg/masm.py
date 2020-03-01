@@ -28,6 +28,8 @@ class OneByteOpcode(enum.Enum):
     PRE_REX = 0x40
     PRE_OPERAND_SIZE = 0x66
 
+    OP_NOP = 0x90
+
     OP_GROUP1_EvIz = 0x81
     OP_GROUP1_EvIb = 0x83
     OP_GROUP2_EvIb = 0xc1
@@ -49,10 +51,10 @@ class OneByteOpcode(enum.Enum):
     OP_2BYTE_ESCAPE = 0x0f
     OP_RET = 0xc3
     OP_INT3 = 0xcc
-    OP_JMP_BYTE = 0xeb
-    OP_JLE_BYTE = 0x7e
+    OP_JMP_Jb = 0xeb
     OP_JNZ_Jb = 0x75
     OP_JNS_Jb = 0x79
+    OP_JLE_Jb = 0x7e
 
 
 class Scale(enum.Enum):
@@ -352,7 +354,7 @@ class Masm:
             reg = reg.value
         assert isinstance(reg, int), reg
         if base == HAS_SIB or base == HAS_SIB2:
-            raise NotImplementedError
+            raise NotImplementedError(base)
         else:
             if not offset and base not in (NO_BASE, NO_BASE2):
                 self.put_mod_rm(ModRmMode.MemoryNoDisp, reg, base)
@@ -414,8 +416,12 @@ class Masm:
     def prefix(self, opcode: OneByteOpcode) -> None:
         self.put_byte(opcode.value)
 
-    def one_byte_op(self, opcode: OneByteOpcode) -> None:
+    def one_byte_op(self, opcode: OneByteOpcode) -> 'Masm':
         self.put_byte(opcode.value)
+        return self
+
+    def nop(self) -> 'Masm':
+        return self.one_byte_op(OneByteOpcode.OP_NOP)
 
     def two_byte_op(self, opcode: Union[TwoByteOpcode, int]) -> 'Masm':
         """
@@ -591,6 +597,11 @@ class Masm:
                 .one_byte_op_64_or(OneByteOpcode.OP_MOV_EAXIv, dst)
                 .immediate64(imm))
 
+    def pushq(self, src: Register) -> 'Masm':
+        if src == Register.RAX:
+            return self.put_byte(0x50)
+        raise NotImplementedError(src)
+
     def callq_r(self, src: Register) -> 'Masm':
         return self.one_byte_op_ogr(OneByteOpcode.OP_GROUP5_Ev,
                                     GroupOpcode.GROUP5_OP_CALLN, src)
@@ -606,8 +617,20 @@ class Masm:
         self.register_mod_rm(1, dst)
         return self
 
+    def xbegin(self, label: Text) -> 'Masm':
+        self.put_byte(0xc7)
+        self.put_byte(0xf8)
+        return self.immediate_reloc32(label, delta_to_sub=4)
+
+    def xabort_i8(self, imm: int) -> 'Masm':
+        self.put_byte(0xc6)
+        self.put_byte(0xf8)
+        assert imm & 0xff == imm, imm
+        self.put_byte(imm)
+        return self
+
     def jmp(self, label: Text) -> 'Masm':
-        self.put_byte(OneByteOpcode.OP_JMP_BYTE.value)
+        self.put_byte(OneByteOpcode.OP_JMP_Jb.value)
         return self.immediate_reloc8(label, delta_to_sub=1)
 
     def orq_rr(self, src: Register, dst: Register) -> 'Masm':
@@ -641,6 +664,10 @@ class Masm:
 
     def movq_mr(self, offset: int, base: Register, dst: Register) -> 'Masm':
         self.one_byte_op_64_orri(OneByteOpcode.OP_MOV_GvEv, dst, base, offset)
+        return self
+
+    def movq_rm(self, src: Register, offset: int, base: Register) -> 'Masm':
+        self.one_byte_op_64_orri(OneByteOpcode.OP_MOV_EvGv, src, base, offset)
         return self
 
     def movw_rm(self, src: Register, offset: int, base: Register) -> 'Masm':
