@@ -35,15 +35,15 @@ class CodeGenerator:
     """Very simple code generator for call-threaded dispatch.
 
     It attempts to do direct IR-to-assembly conversion, where the assembly
-    simply calls the Python API routines that implement the bytecode, potentially
-    specialized on deduced type.
+    simply calls the Python API routines that implement the bytecode,
+    potentially specialized on deduced type.
 
     This is somewhat analogous to a 'baseline' code emitter in some JITs, where
-    we just want to get into assembly quickly, perhaps using type information that
-    can be deduced from the parameter type set.
+    we just want to get into assembly quickly, perhaps using type information
+    that can be deduced from the parameter type set.
 
-    Generally values are homed on the stack -- for a given node to execute it loads
-    its operands, performs its call, and stores its result value out to
+    Generally values are homed on the stack -- for a given node to execute it
+    loads its operands, performs its call, and stores its result value out to
     its corresponding stack location.
 
     This is not expected to be very good, but will get us experience with the
@@ -56,24 +56,26 @@ class CodeGenerator:
         self.node_to_stack_loc = {}
         self.next_slot = 0
 
-    def get_or_create_stack_loc(self, node: ir.Node) -> int:
+    def get_or_create_stack_loc(self, node: ir.Node) -> StackLoc:
         if node in self.node_to_stack_loc:
             return self.node_to_stack_loc[node]
         slot = self.next_slot
         self.next_slot += 1
-        self.node_to_stack_loc[node] = slot
-        return slot
+        result = self.node_to_stack_loc[node] = StackLoc(slot)
+        return result
 
     def push_to_stack(self, node: ir.Node, src: Register) -> None:
         """Pushes result value for 'node', given by 'src' reg, to the stack."""
-        self.node_to_loc[node] = self.node_to_stack_loc[node] = StackLoc(self.next_slot)
+        self.node_to_loc[node] = self.node_to_stack_loc[node] \
+            = StackLoc(self.next_slot)
         self.masm.pushq(src)
         self.next_slot += 1
 
     def spill_node_at(self, reg: Register) -> None:
         if reg not in self.node_to_loc.values():
             return
-        node = next(node for node, home in self.node_to_loc.items() if home == reg)
+        node = next(node for node, home in self.node_to_loc.items()
+                    if home == reg)
         stack_loc = self.get_or_create_stack_loc(node)
         raise NotImplementedError(reg)
 
@@ -118,10 +120,10 @@ class CodeGenerator:
             raise NotImplementedError(node)
 
 
-
 def compile(code: types.CodeType, arg_types: Tuple[Type, ...]) -> Callable:
     cfg = bc2ir.bytecode_to_ir(code)
     typeinfer.typeinfer(cfg, arg_types)
     print(printer.pprint_cfg(cfg))
     cg = CodeGenerator()
     cfg.walk(cg.handle_node)
+    raise NotImplementedError

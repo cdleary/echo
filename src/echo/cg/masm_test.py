@@ -231,7 +231,6 @@ def test_long_two_digits():
     assert pylong_as_ulong(x) == 1 << 30
 
 
-
 def test_tsx_basic():
     libc = ctypes.CDLL('libc.so.6')
     libc.malloc.restype = ctypes.c_void_p
@@ -240,17 +239,17 @@ def test_tsx_basic():
 
     m = Masm()
     (m
-      .movl_ir(0xf00, Register.RAX)
-      .movq_rm(Register.RAX, 0, Register.RDI)
-      .xbegin('done')
-      .movl_ir(0xba5, Register.RAX)
-      .movq_rm(Register.RAX, 0, Register.RDI)
-      .xabort_i8(0xcd)
-      .ret()
-      .label('done')
-      .nop()
-      .ret())
-    
+     .movl_ir(0xf00, Register.RAX)
+     .movq_rm(Register.RAX, 0, Register.RDI)
+     .xbegin('done')
+     .movl_ir(0xba5, Register.RAX)
+     .movq_rm(Register.RAX, 0, Register.RDI)
+     .xabort_i8(0xcd)
+     .ret()
+     .label('done')
+     .nop()
+     .ret())
+
     f = m.to_callable((ctypes.c_void_p,), ctypes.c_uint64)
     assert f(Literal(buf)) == 0xcd << 24 | 1
     assert ctypes.cast(buf, ctypes.POINTER(ctypes.c_uint64))[0] == 0xf00

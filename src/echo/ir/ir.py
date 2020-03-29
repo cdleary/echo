@@ -70,7 +70,6 @@ class Cfg:
                 f(node)
 
 
-
 class Param(Node):
     def __init__(self, name: Text, paramno: int):
         super().__init__(name, ())
@@ -161,7 +160,6 @@ class BinaryNode(Node):
     @property
     def rhs(self) -> Node:
         return self.operands[1]
-        
 
 
 class Add(BinaryNode):
