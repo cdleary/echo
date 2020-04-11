@@ -9,6 +9,7 @@ import sys
 import types
 from typing import (
     Text, Any, Dict, Iterable, Tuple, Optional, Set, Callable, Union, Type,
+    Deque, List
 )
 import weakref
 
@@ -400,13 +401,11 @@ def _type_getattro(
 
 class EInstance(EPyObject):
 
-    builtin_storage: Dict[type, Any]
-
     def __init__(self, cls: Union['EClass', 'EBuiltin']):
         assert isinstance(cls, (EClass, EBuiltin)), cls
         self.cls = cls
         self.dict_: Dict[str, Any] = {}
-        self.builtin_storage = {}
+        self.builtin_storage: Dict[type, Any] = {}
 
     def __repr__(self) -> Text:
         return '<{} eobject>'.format(self.cls.name)
@@ -474,7 +473,7 @@ class EInstance(EPyObject):
 
     @check_result
     def setattr(self, name: Text, value: Any, ictx: ICtx) -> Result[None]:
-        cls_attr = None
+        cls_attr: Optional[Any] = None
         if name in self.cls.dict_:
             cls_attr = self.cls.dict_[name]
             log('eo:ei:sa', f'cls_attr {cls_attr!r}')
@@ -512,8 +511,7 @@ def _maybe_builtin(b: Type) -> Union['EBuiltin', Type]:
     return b
 
 
-def _get_bases(c: EPyType
-               ) -> Tuple[EPyType, ...]:
+def _get_bases(c: Union[EPyType, Type]) -> Tuple[Union[EPyType, Type], ...]:
     if isinstance(c, type):
         return tuple(_maybe_builtin(b) for b in c.__bases__)
     assert isinstance(c, EPyType), c
@@ -523,19 +521,16 @@ def _get_bases(c: EPyType
 class EClass(EPyType):
     """Represents a user-defined class."""
 
-    bases: Tuple[EPyType, ...]
-    metaclass: Optional[EPyType]
-    subclasses: Set['EClass']
-
     def __init__(self, name: Text, dict_: Dict[Text, Any], *,
                  bases: Optional[Tuple[EPyType, ...]] = None,
-                 metaclass=None, kwargs=None):
+                 metaclass: Optional[EPyType] = None, kwargs=None):
         self.name = name
         self.dict_ = dict_
-        self.bases = bases or (get_guest_builtin('object'),)
-        self.metaclass = metaclass
+        self.bases: Tuple[EPyType, ...] = \
+            bases or (get_guest_builtin('object'),)
+        self.metaclass: Optional[EPyType] = metaclass
         self.kwargs = kwargs
-        self.subclasses = weakref.WeakSet()
+        self.subclasses: Set['EClass'] = weakref.WeakSet()
 
         for base in self.bases:
             if isinstance(base, (EBuiltin, EClass)):
@@ -562,10 +557,10 @@ class EClass(EPyType):
     def get_type(self) -> 'EPyType':
         return self.metaclass or get_guest_builtin('type')
 
-    def get_mro(self) -> Tuple['EPyObject', ...]:
+    def get_mro(self) -> Tuple[Union[EPyType, Type], ...]:
         """The MRO is a preorder DFS of the 'derives from' relation."""
         derives_from = []  # (cls, base)
-        frontier = collections.deque([self])
+        frontier: Deque[Union[EPyType, Type]] = collections.deque([self])
         while frontier:
             cls = frontier.popleft()
             bases = _get_bases(cls)
@@ -578,8 +573,8 @@ class EClass(EPyType):
             cls_to_subclasses_[base].append(cls)
         cls_to_subclasses = dict(cls_to_subclasses_)
 
-        ready = collections.deque([self])
-        order = []
+        ready: Deque[Union[EPyType, Type]] = collections.deque([self])
+        order: List[Union[EPyType, Type]] = []
 
         def is_ready(c) -> bool:
             return all(sc in order for sc in cls_to_subclasses.get(c, []))
@@ -625,24 +620,28 @@ class EClass(EPyType):
                     globals_: Dict[Text, Any],
                     ictx: ICtx) -> Result[EInstance]:
         """Creates an instance of this user-defined class."""
-        log('eo:gc',
+        log('eo:ec',
             lambda: f'instantiate self: {self} args: {args} kwargs: {kwargs}')
-        guest_instance = None
+        guest_instance: Optional[EInstance] = None
         if self.hasattr('__new__'):
             new_f = self.getattr('__new__', ictx).get_value()
-            log('gc:new', f'new_f {new_f}')
+            log('eo:ec:new', f'new_f {new_f}')
             result = ictx.call(new_f, (self,) + args, kwargs, locals_dict={},
                                globals_=globals_)
             if result.is_exception():
                 return Result(result.get_exception())
-            guest_instance = result.get_value()
+
+            new_guest_instance = result.get_value()
             do_isinstance = get_guest_builtin('isinstance')
-            ii_result = do_isinstance.invoke((guest_instance, self), {}, {},
-                                             ictx)
+            ii_result = do_isinstance.invoke(
+                    (new_guest_instance, self), {}, {}, ictx)
             if ii_result.is_exception():
                 return ii_result
+            assert isinstance(ii_result.get_value(), bool), \
+                ii_result.get_value()
             if not ii_result.get_value():
-                return Result(guest_instance)
+                return Result(new_guest_instance)
+            guest_instance = new_guest_instance
         guest_instance = (EInstance(self) if guest_instance is None
                           else guest_instance)
         if self.hasattr('__init__'):
@@ -650,16 +649,14 @@ class EClass(EPyType):
             # TODO(cdleary, 2019-01-26) What does Python do when you return
             # something non-None from initializer? Ignore?
             assert isinstance(guest_instance, EPyObject), guest_instance
-            result = ictx.call(init_f,
-                               (guest_instance,) + args,
-                               kwargs,
-                               {},
-                               globals_=globals_)
-            if result.is_exception():
-                return result
+            init_res = ictx.call(
+                init_f, (guest_instance,) + args, kwargs, {},
+                globals_=globals_)
+            if init_res.is_exception():
+                return Result(init_res.get_exception())
         return Result(guest_instance)
 
-    @debugged('eo:eclass:hasattr_where()')
+    @debugged('eo:ec:hasattr_where()')
     def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
         if name in self.dict_:
             return AttrWhere.SELF_DICT
@@ -716,7 +713,7 @@ class EFunctionType(EPyType):
         # TODO: return mapping proxy
         return {}
 
-    def get_mro(self) -> Tuple[EPyObject, ...]:
+    def get_mro(self) -> Tuple[EPyType, ...]:
         return (self,)
 
     def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
@@ -730,10 +727,10 @@ class EFunctionType(EPyType):
                   globals_: Optional[Dict[Text, Any]] = None) -> Result[Any]:
         assert not kwargs, kwargs
         assert len(args) == 3, args
-        self, obj, objtype = args
+        eself, obj, objtype = args
         if obj is None:
-            return Result(self)
-        return Result(EMethod(self, bound_self=obj))
+            return Result(eself)
+        return Result(EMethod(eself, bound_self=obj))
 
     def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
         if name in ('__code__', '__globals__'):
@@ -768,10 +765,10 @@ class GuestCoroutineType(EPyType):
     def get_dict(self):
         raise NotImplementedError
 
-    def get_mro(self) -> Tuple[EPyObject, ...]:
+    def get_mro(self) -> Tuple[EPyType, ...]:
         return (self, get_guest_builtin('type'))
 
-    def get_type(self) -> EPyObject:
+    def get_type(self) -> EPyType:
         return get_guest_builtin('type')
 
     def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
@@ -840,11 +837,11 @@ def _do_len(
     assert len(args) == 1
     if not isinstance(args[0], EPyObject):
         return Result(len(args[0]))
-    do_len = args[0].getattr('__len__', ictx)
-    if do_len.is_exception():
-        return do_len
-    do_len = do_len.get_value()
-    res = do_len.invoke((), {}, {}, ictx)
+    do_len_ = args[0].getattr('__len__', ictx)
+    if do_len_.is_exception():
+        return do_len_
+    do_len = do_len_.get_value()
+    res: Result[Any] = do_len.invoke((), {}, {}, ictx)
     if res.is_exception():
         return res
     v = res.get_value()
@@ -917,7 +914,7 @@ class EBuiltin(EPyType):
     def __init__(self, name: Text, bound_self: Any, singleton_ok: bool = True):
         self.name = name
         self.bound_self = bound_self
-        self.dict: Dict[Text, Any] = {}
+        self.dict_: Dict[Text, Any] = {}
         self.globals_: Dict[Text, Any] = {}
 
     def get_name(self) -> str:
@@ -963,7 +960,7 @@ class EBuiltin(EPyType):
             return (get_guest_builtin('BaseException'),)
         return (eobject,)
 
-    def get_type(self) -> EPyObject:
+    def get_type(self) -> EPyType:
         if self.name in self.BUILTIN_FNS:
             if self.bound_self:
                 return EMethodType_singleton
@@ -973,7 +970,7 @@ class EBuiltin(EPyType):
             return get_guest_builtin('type')
         raise NotImplementedError(self)
 
-    def get_mro(self) -> Tuple['EPyObject', ...]:
+    def get_mro(self) -> Tuple[EPyType, ...]:
         if self.name == 'object':
             return (get_guest_builtin('object'),)
         elif self.name in self.BUILTIN_TYPES:
@@ -1037,7 +1034,7 @@ class EBuiltin(EPyType):
         raise NotImplementedError(self.name)
 
     def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
-        if name in self.dict:
+        if name in self.dict_:
             return AttrWhere.SELF_DICT
         if (self.name in self.BUILTIN_TYPES
                 and f'{self.name}.{name}' in self.BUILTIN_FNS):
@@ -1198,7 +1195,7 @@ class NativeFunction(EPyObject):
     def __repr__(self) -> Text:
         return f'<built-in function {self.name}>'
 
-    def get_type(self) -> EPyObject:
+    def get_type(self) -> EPyType:
         return EFunctionType_singleton
 
     def hasattr_where(self, name: Text) -> Optional[AttrWhere]:

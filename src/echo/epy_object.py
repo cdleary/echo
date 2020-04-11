@@ -1,7 +1,7 @@
 import abc
 import contextlib
 from enum import Enum
-from typing import Text, Any, Optional, Tuple, Dict
+from typing import Text, Any, Optional, Tuple, Dict, Union, Type
 
 from echo.interp_context import ICtx
 from echo.interp_result import Result, ExceptionData
@@ -102,7 +102,7 @@ class EPyType(EPyObject):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def get_mro(self) -> Tuple[EPyObject, ...]:
+    def get_mro(self) -> Tuple[Union['EPyType', Type], ...]:
         raise NotImplementedError
 
     @abc.abstractmethod
@@ -113,7 +113,7 @@ class EPyType(EPyObject):
     def get_dict(self) -> Dict[Text, Any]:
         raise NotImplementedError(self)
 
-    def is_subtype_of(self, other: EPyObject) -> bool:
+    def is_subtype_of(self, other: 'EPyType') -> bool:
         mro = self.get_mro()
         log('epyo:iso', f'other: {other} mro: {mro}')
         is_subtype = other in mro

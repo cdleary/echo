@@ -20,6 +20,7 @@ def _do_dict_new(
         ictx: ICtx) -> Result[Any]:
     assert len(args) == 1 and not kwargs, (args, kwargs)
     if isinstance(args[0], EClass):
+        log('bd:dn', f'creating new instance for eclass: {args[0]}')
         inst = EInstance(args[0])
         inst.builtin_storage[dict] = {}
         return Result(inst)
@@ -29,7 +30,7 @@ def _do_dict_new(
 
 
 def _resolve(x: Any) -> Dict:
-    if isinstance(x, EPyObject):
+    if isinstance(x, EInstance):
         return x.builtin_storage[dict]
     if isinstance(x, dict):
         return x
@@ -141,7 +142,8 @@ def _do_dict_setitem(
     assert not kwargs, kwargs
     lhs, k, v = args
     d = _resolve(lhs)
-    return Result(d.__setitem__(k, v))
+    d.__setitem__(k, v)
+    return Result(None)
 
 
 @register_builtin('dict.__delitem__')
@@ -154,7 +156,8 @@ def _do_dict_delitem(
     assert not kwargs, kwargs
     lhs, k = args
     d = _resolve(lhs)
-    return Result(d.__delitem__(k))
+    d.__delitem__(k)
+    return Result(None)
 
 
 @register_builtin('dict.__contains__')
@@ -209,7 +212,7 @@ def _do_dict_pop(
 def _do_dict_fromkeys(
         args: Tuple[Any, ...],
         kwargs: Dict[Text, Any],
-        ictx: ICtx) -> Result[None]:
+        ictx: ICtx) -> Result[dict]:
     assert 1 <= len(args) <= 2 and not kwargs, (args, kwargs)
     value = args[1] if len(args) == 2 else None
     d = {}
@@ -220,7 +223,7 @@ def _do_dict_fromkeys(
 
     res = iteration_helpers.foreach(args[0], cb, ictx)
     if res.is_exception():
-        return res
+        return Result(res.get_exception())
 
     return Result(d)
 
@@ -233,6 +236,6 @@ def _do_dict_instancecheck(
         ictx: ICtx) -> Result[Any]:
     if isinstance(args[0], dict):
         return Result(True)
-    if isinstance(args[0], EInstance):
+    if isinstance(args[0], EClass):
         return Result(get_guest_builtin('dict') in args[0].get_mro())
     return Result(False)

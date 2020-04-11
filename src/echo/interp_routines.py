@@ -315,10 +315,10 @@ def compare(opname: Text, lhs, rhs, ictx: ICtx) -> Result[bool]:
 
     if (isinstance(lhs, EPyObject) and
             lhs.get_type().hasattr(COMPARE_TO_SPECIAL[opname])):
-        f_cmp = lhs.getattr(COMPARE_TO_SPECIAL[opname], ictx)
-        if f_cmp.is_exception():
-            return f_cmp
-        f_cmp = f_cmp.get_value()
+        f_cmp_ = lhs.getattr(COMPARE_TO_SPECIAL[opname], ictx)
+        if f_cmp_.is_exception():
+            return f_cmp_
+        f_cmp = f_cmp_.get_value()
         return try_invoke(f_cmp, (rhs,), {}, {}, ictx)
 
     raise NotImplementedError(opname, lhs, rhs)

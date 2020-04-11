@@ -16,7 +16,7 @@ class EModuleType(EPyType):
     def get_name(self) -> str:
         return 'module'
 
-    def get_type(self) -> EPyObject:
+    def get_type(self) -> EPyType:
         return get_guest_builtin('type')
 
     def get_dict(self):
@@ -25,7 +25,7 @@ class EModuleType(EPyType):
     def get_bases(self):
         raise NotImplementedError
 
-    def get_mro(self) -> Tuple[EPyObject, ...]:
+    def get_mro(self) -> Tuple[EPyType, ...]:
         return (self,)
 
     def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
@@ -55,7 +55,7 @@ class EModule(EPyObject):
                     else f'from {self.filename!r}')
         return (f'<{E_PREFIX}module {self.fully_qualified_name!r} {from_str}>')
 
-    def get_type(self) -> EPyObject:
+    def get_type(self) -> EPyType:
         return EModuleType_singleton
 
     def keys(self) -> Iterable[Text]:
