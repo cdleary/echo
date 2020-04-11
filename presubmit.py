@@ -41,6 +41,8 @@ subprocess.check_call([
     'src/echo/eobjects.py',
     'src/echo/epy_object.py',
     'src/echo/etraceback.py',
+    'src/echo/eclassmethod.py',
+    'src/echo/estaticmethod.py',
     'src/echo/guest_objects_test.py',
     'src/echo/__init__.py',
     'src/echo/interp_context.py',

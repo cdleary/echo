@@ -1,6 +1,6 @@
 from typing import Text, Tuple, Any, Dict, Optional
 
-from echo.epy_object import EPyObject, AttrWhere
+from echo.epy_object import EPyObject, AttrWhere, EPyType
 from echo.interp_result import Result, ExceptionData, check_result
 from echo.eobjects import (
     EFunction, EMethod, NativeFunction, EBuiltin,
@@ -12,12 +12,12 @@ from echo.interp_context import ICtx
 class EStaticMethod(EPyObject):
     def __init__(self, f: EPyObject):
         self.f = f
-        self.dict_ = {}
+        self.dict_: Dict[str, Any] = {}
 
     def __repr__(self) -> Text:
         return f'<{E_PREFIX}staticmethod object at {id(self):#x}>'
 
-    def get_type(self) -> EPyObject:
+    def get_type(self) -> EPyType:
         return get_guest_builtin('staticmethod')
 
     def invoke(self, *args, **kwargs) -> Result[Any]:
@@ -50,7 +50,7 @@ class EStaticMethod(EPyObject):
             return Result(self.f)
         raise NotImplementedError(name)
 
-    def setattr(self, name: Text, value: Any) -> Result[None]:
+    def setattr(self, name: Text, value: Any, ictx: ICtx) -> Result[None]:
         raise NotImplementedError(name, value)
 
 

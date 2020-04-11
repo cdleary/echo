@@ -60,6 +60,8 @@ jobs:
                 src/echo/emodule.py \
                 src/echo/eobjects.py \
                 src/echo/epy_object.py \
+                src/echo/eclassmethod.py \
+                src/echo/estaticmethod.py \
                 src/echo/etraceback.py \
                 src/echo/guest_objects_test.py \
                 src/echo/__init__.py \
