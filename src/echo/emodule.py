@@ -19,11 +19,8 @@ class EModuleType(EPyType):
     def get_type(self) -> EPyType:
         return get_guest_builtin('type')
 
-    def get_dict(self):
-        raise NotImplementedError
-
-    def get_bases(self):
-        raise NotImplementedError
+    def get_dict(self): raise NotImplementedError
+    def get_bases(self): raise NotImplementedError
 
     def get_mro(self) -> Tuple[EPyType, ...]:
         return (self,)

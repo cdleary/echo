@@ -29,6 +29,7 @@ subprocess.check_call([
     'src/echo/elog.py',
     'src/echo/emap.py',
     'src/echo/emodule.py',
+    'src/echo/etraceback.py',
     'src/echo/epy_object.py',
 ])
 print('=== mypy ok!')

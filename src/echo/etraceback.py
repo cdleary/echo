@@ -1,7 +1,7 @@
 import os
 from typing import Text, Tuple, Any, Dict, Optional
 
-from echo.epy_object import EPyObject, AttrWhere
+from echo.epy_object import EPyObject, AttrWhere, EPyType
 from echo.interp_result import Result, ExceptionData, check_result
 from echo.eobjects import (
     EFunction, EMethod, NativeFunction, EBuiltin,
@@ -12,11 +12,16 @@ from echo.interp_context import ICtx
 E_PREFIX = 'e' if 'E_PREFIX' not in os.environ else os.environ['E_PREFIX']
 
 
-class ETracebackType(EPyObject):
+class ETracebackType(EPyType):
     def __repr__(self) -> Text:
         return f"<{E_PREFIX}class 'traceback'>"
 
-    def get_type(self) -> EPyObject:
+    def get_name(self) -> str: return 'traceback'
+    def get_dict(self): raise NotImplementedError
+    def get_bases(self): raise NotImplementedError
+    def get_mro(self) -> Tuple[EPyType, ...]: raise NotImplementedError
+
+    def get_type(self) -> EPyType:
         return get_guest_builtin('type')
 
     def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
@@ -41,7 +46,7 @@ class ETraceback(EPyObject):
     def __repr__(self) -> Text:
         return f'<{E_PREFIX}traceback object>'
 
-    def get_type(self) -> EPyObject:
+    def get_type(self) -> EPyType:
         return ETracebackType_singleton
 
     def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
