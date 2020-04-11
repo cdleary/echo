@@ -391,7 +391,7 @@ def _import_name(multi_module_name: Text,
                  fromlist: Optional[Tuple[str, ...]],
                  importing_path: Text,
                  importing_fully_qualified_name: Text,
-                 search_paths: Sequence[Text],
+                 search_paths: Tuple[str, ...],
                  ictx: ICtx,
                  ) -> Result[Tuple[ModuleT, ModuleT, Tuple[Any, ...]]]:
     """Acts similarly to the IMPORT_NAME bytecode.
@@ -484,7 +484,7 @@ def run_IMPORT_NAME(importing_path: Text,
     else:
         result = _import_name(
             multi_module_name, level, fromlist, importing_path,
-            globals_['__name__'], ictx.interp_state.paths, ictx)
+            globals_['__name__'], tuple(ictx.interp_state.paths), ictx)
 
     if result.is_exception():
         return result

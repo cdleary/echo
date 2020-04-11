@@ -14,7 +14,7 @@ import weakref
 
 from echo.return_kind import ReturnKind
 from echo.epy_object import (
-    EPyObject, AttrWhere, EPyType, NoContextException, safer_repr,
+    EPyObject, AttrWhere, EPyType, NoContextException, safer_repr, try_invoke,
 )
 from echo.elog import log, debugged
 from echo.interpreter_state import InterpreterState
@@ -151,6 +151,9 @@ class EAsyncGeneratorType(EPyType):
     def __repr__(self) -> Text:
         return "<eclass 'async_generator'>"
 
+    def get_name(self) -> str:
+        return 'async_generator'
+
     def get_bases(self): raise NotImplementedError
     def get_dict(self): raise NotImplementedError
     def get_mro(self): raise NotImplementedError
@@ -197,6 +200,9 @@ class EAsyncGenerator(EPyObject):
 class EMethodType(EPyType):
     def __repr__(self) -> Text:
         return "<{}class 'method'>".format(E_PREFIX)
+
+    def get_name(self) -> str:
+        return 'method'
 
     def get_bases(self): raise NotImplementedError
     def get_dict(self): raise NotImplementedError
@@ -304,15 +310,6 @@ def _find_name_in_mro(type_: EPyType, name: Text, ictx: ICtx) -> Any:
     return NotFoundSentinel_singleton
 
 
-def _try_invoke(o: EPyObject, args, kwargs, locals_dict,
-                ictx: ICtx) -> Result[Any]:
-    if not hasattr(o, 'invoke'):
-        return Result(ExceptionData(
-            None, None, TypeError(
-                'type {!r} is not callable'.format(o.get_type().name))))
-    return o.invoke(args, kwargs, locals_dict, ictx)
-
-
 def _type_getattro(
         type_: 'EClass', name: Text, ictx: ICtx,
         do_invoke_desc: bool = True) -> Union[Result[Any], Tuple[bool, Any]]:
@@ -344,8 +341,8 @@ def _type_getattro(
             f = meta_attr.getattr('__get__', ictx)
             if f.is_exception():
                 return f
-            f = f.get_value()
-            return f.invoke((type_, metatype), {}, {}, ictx)
+            v = f.get_value()
+            return try_invoke(v, (type_, metatype), {}, {}, ictx)
 
     attr = _find_name_in_mro(type_, name, ictx)
     if attr is not NotFoundSentinel_singleton:
@@ -356,9 +353,9 @@ def _type_getattro(
             f_result = attr.getattr('__get__', ictx)
             if f_result.is_exception():
                 return Result(f_result.get_exception())
-            f_result = f_result.get_value()
-            res = f_result.invoke((None, type_), {}, {}, ictx)
-            log('eo:ec:ga', f'invoked descriptor getter {f_result} => {res}')
+            v = f_result.get_value()
+            res = try_invoke(v, (None, type_), {}, {}, ictx)
+            log('eo:ec:ga', f'invoked descriptor getter {v} => {res}')
             return res
         return Result(attr)
 
@@ -371,17 +368,17 @@ def _type_getattro(
             f = meta_attr.getattr('__get__', ictx)
             if f.is_exception():
                 return f
-            f = f.get_value()
-            return f.invoke((type_, metatype), {}, {}, ictx)
+            v = f.get_value()
+            return try_invoke(v, (type_, metatype), {}, {}, ictx)
         if not do_invoke_desc:
             return (False, meta_attr)
         return Result(meta_attr)
 
     if metatype.hasattr('__getattr__'):
-        meta_ga = metatype.getattr('__getattr__', ictx)
-        if meta_ga.is_exception():
-            return meta_ga
-        meta_ga = meta_ga.get_value()
+        meta_ga_ = metatype.getattr('__getattr__', ictx)
+        if meta_ga_.is_exception():
+            return meta_ga_
+        meta_ga = meta_ga_.get_value()
         if meta_ga.hasattr('__get__'):
             if not do_invoke_desc:
                 return meta_ga
@@ -389,7 +386,7 @@ def _type_getattro(
             if meta_ga.is_exception():
                 return meta_ga
             meta_ga = meta_ga.get_value()
-        return _try_invoke(meta_ga, (name,), {}, {}, ictx)
+        return try_invoke(meta_ga, (name,), {}, {}, ictx)
 
     if not do_invoke_desc:
         return (False, None)
@@ -546,6 +543,9 @@ class EClass(EPyType):
 
     def get_bases(self) -> Tuple[EPyType, ...]:
         return self.bases
+
+    def get_name(self) -> str:
+        return self.name
 
     def get_dict(self) -> Dict[Text, Any]:
         return self.dict_
@@ -704,6 +704,8 @@ class EFunctionType(EPyType):
     def __repr__(self) -> Text:
         return "<{}class 'function'>".format(E_PREFIX)
 
+    def get_name(self) -> str: return 'function'
+
     def get_type(self) -> EPyType:
         return get_guest_builtin('type')
 
@@ -753,6 +755,9 @@ class GuestCoroutineType(EPyType):
 
     def __init__(self):
         self.dict_ = {}
+
+    def get_name(self) -> str:
+        return 'coroutine'
 
     def __repr__(self) -> Text:
         return "<eclass 'coroutine'>"
@@ -914,6 +919,9 @@ class EBuiltin(EPyType):
         self.bound_self = bound_self
         self.dict: Dict[Text, Any] = {}
         self.globals_: Dict[Text, Any] = {}
+
+    def get_name(self) -> str:
+        return 'builtin_type'
 
     def has_standard_getattr(self) -> bool:
         if self.name in ('super',):

@@ -33,6 +33,9 @@ class SeqIterType(EPyType):
     def get_dict(self):
         raise NotImplementedError
 
+    def get_name(self) -> str:
+        return 'iterator'
+
     def __repr__(self) -> Text:
         return "<eclass 'iterator'>"
 

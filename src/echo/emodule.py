@@ -13,6 +13,9 @@ class EModuleType(EPyType):
     def __repr__(self) -> Text:
         return f"<{E_PREFIX}class 'module'>"
 
+    def get_name(self) -> str:
+        return 'module'
+
     def get_type(self) -> EPyObject:
         return get_guest_builtin('type')
 

@@ -15,6 +15,9 @@ class EGeneratorType(EPyType):
     def __init__(self):
         self._dict = {}
 
+    def get_name(self) -> str:
+        return 'generator'
+
     def __repr__(self) -> Text:
         return "<eclass 'generator'>"
 
@@ -52,6 +55,9 @@ EGeneratorType_singleton = EGeneratorType()
 class EGenerator(EPyObject):
     def __init__(self, f):
         self.f = f
+
+    def get_name(self) -> str:
+        return 'generator'
 
     def get_type(self) -> EPyObject:
         return EGeneratorType_singleton

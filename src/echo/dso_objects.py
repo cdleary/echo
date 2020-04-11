@@ -86,6 +86,9 @@ class DsoClassProxy(EPyType, DsoPyObject):
     def __repr__(self) -> Text:
         return f'<pclass {self.wrapped.__qualname__!r}>'
 
+    def get_name(self):
+        return self.wrapped.__name__
+
     def get_dict(self) -> Dict[Text, Any]:
         return _dso_lift(dict(self.wrapped.__dict__))
 
@@ -97,7 +100,7 @@ class DsoClassProxy(EPyType, DsoPyObject):
     def get_mro(self) -> Tuple[EPyObject, ...]:
         return _dso_lift(self.wrapped.__mro__)
 
-    def get_type(self) -> EPyObject:
+    def get_type(self) -> EPyType:
         return _dso_lift(type(self.wrapped))
 
     def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
@@ -133,7 +136,7 @@ class DsoInstanceProxy(DsoPyObject):
         return (f'<pinstance {type(self.wrapped)!r}: '
                 f'{safer_repr(self.wrapped)}>')
 
-    def get_type(self) -> EPyObject:
+    def get_type(self) -> EPyType:
         return _dso_lift(type(self.wrapped))
 
     def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
@@ -161,7 +164,7 @@ class DsoFunctionProxy(DsoPyObject):
     def __repr__(self) -> Text:
         return '<built-in pfunction {}>'.format(self.wrapped.__name__)
 
-    def get_type(self) -> EPyObject:
+    def get_type(self) -> EPyType:
         return EFunctionType_singleton
 
     def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
@@ -211,7 +214,7 @@ class DsoModuleProxy(DsoPyObject):
     def fully_qualified_name(self) -> Text:
         return self.wrapped.__name__
 
-    def get_type(self) -> EPyObject:
+    def get_type(self) -> EPyType:
         return EModuleType_singleton
 
     def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:

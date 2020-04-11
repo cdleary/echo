@@ -11,7 +11,7 @@ from echo.ebuiltins import BUILTIN_VALUE_TYPES_TUP, BUILTIN_VALUE_TYPES
 from echo.elog import log, debugged
 from echo.interp_context import ICtx
 from echo.interp_result import Result, check_result, ExceptionData
-from echo.epy_object import AttrWhere
+from echo.epy_object import AttrWhere, try_invoke
 from echo.interpreter_state import InterpreterState
 from echo.eobjects import (
     EInstance, EBuiltin, EFunction, EClass,
@@ -319,7 +319,7 @@ def compare(opname: Text, lhs, rhs, ictx: ICtx) -> Result[bool]:
         if f_cmp.is_exception():
             return f_cmp
         f_cmp = f_cmp.get_value()
-        return f_cmp.invoke((rhs,), {}, {}, ictx)
+        return try_invoke(f_cmp, (rhs,), {}, {}, ictx)
 
     raise NotImplementedError(opname, lhs, rhs)
 

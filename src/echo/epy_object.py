@@ -4,7 +4,7 @@ from enum import Enum
 from typing import Text, Any, Optional, Tuple, Dict
 
 from echo.interp_context import ICtx
-from echo.interp_result import Result
+from echo.interp_result import Result, ExceptionData
 from echo.elog import log
 
 
@@ -98,6 +98,10 @@ class EPyType(EPyObject):
         return True
 
     @abc.abstractmethod
+    def get_name(self) -> str:
+        raise NotImplementedError
+
+    @abc.abstractmethod
     def get_mro(self) -> Tuple[EPyObject, ...]:
         raise NotImplementedError
 
@@ -116,3 +120,12 @@ class EPyType(EPyObject):
         if self is other:
             assert is_subtype
         return is_subtype
+
+
+def try_invoke(o: EPyObject, args: Tuple[Any, ...], kwargs: Dict[str, Any],
+               locals_dict: Dict[str, Any], ictx: ICtx) -> Result[Any]:
+    if not hasattr(o, 'invoke'):
+        return Result(ExceptionData(
+            None, None, TypeError(
+                'type {!r} is not callable'.format(o.get_type().get_name()))))
+    return o.invoke(args, kwargs, locals_dict, ictx)

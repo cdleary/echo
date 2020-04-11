@@ -1196,6 +1196,9 @@ class EFrameType(EPyType):
     def __repr__(self) -> Text:
         return f"<{E_PREFIX}class 'frame'>"
 
+    def get_name(self) -> str:
+        return 'frame'
+
     def get_dict(self):
         raise NotImplementedError
 
@@ -1205,7 +1208,7 @@ class EFrameType(EPyType):
     def get_mro(self) -> Tuple[EPyObject, ...]:
         return (self,)
 
-    def get_type(self) -> EPyObject:
+    def get_type(self) -> EPyType:
         return get_guest_builtin('type')
 
     def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
