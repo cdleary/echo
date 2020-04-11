@@ -9,7 +9,8 @@ import termcolor
 
 
 parser = optparse.OptionParser()
-parser.add_option('--skip-tests', dest='do_test', action='store_false', default=True, help='Skip test phase')
+parser.add_option('--skip-tests', dest='do_test', action='store_false',
+                  default=True, help='Skip test phase')
 opts, args = parser.parse_args()
 
 
@@ -22,16 +23,17 @@ subprocess.check_call([
     'src/echo/builtin_type.py',
     'src/echo/epy_object.py',
     'src/echo/dso_objects.py',
+    'src/echo/builtin_str.py',
 ])
 print('=== mypy ok!')
 
+subprocess.check_call(['pycodestyle', 'src/', 'tests/'])
 if opts.do_test:
     subprocess.check_call(['pytest'])
 subprocess.check_call([
     'pytype', '--config=pytype.cfg',
     '--python-version=%s' % VERSION_MAJOR_MINOR,
 ])
-subprocess.check_call(['pycodestyle', 'src/', 'tests/'])
 
 if opts.do_test:
     PASS_BANNER = 'PRESUBMIT PASS!'

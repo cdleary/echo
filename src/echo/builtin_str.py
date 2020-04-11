@@ -1,4 +1,4 @@
-from typing import Text, Tuple, Any, Dict, Optional
+from typing import Text, Tuple, Any, Dict, Optional, List
 
 from echo.elog import log
 from echo.epy_object import EPyObject
@@ -21,12 +21,13 @@ def _do_str_call(args: Tuple[Any, ...],
     if not isinstance(o, EPyObject):
         return Result(str(*args))
     assert len(args) == 1
-    fstr = o.getattr('__str__')
-    if fstr.is_exception():
-        return fstr
-    fstr = fstr.get_value()
-    globals_ = fstr.getattr('__globals__')
-    return ictx.call(fstr, args=(), globals_=globals_)
+    fstr_ = o.getattr('__str__', ictx=ictx)
+    if fstr_.is_exception():
+        return fstr_
+    fstr = fstr_.get_value()
+    globals_ = fstr.getattr('__globals__', ictx=ictx)
+    return ictx.call(fstr, args=(), kwargs={}, locals_dict={},
+                     globals_=globals_)
 
 
 @register_builtin('str.join')
@@ -37,7 +38,7 @@ def _do_str_join(args: Tuple[Any, ...],
     joiner, it = args
     assert isinstance(joiner, str), joiner
     do_str = get_guest_builtin('str')
-    pieces = []
+    pieces: List[str] = []
 
     def cb(item: Any) -> Result[bool]:
         assert isinstance(item, str), item

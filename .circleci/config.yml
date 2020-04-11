@@ -41,6 +41,7 @@ jobs:
                 src/echo/bc_helpers.py \
                 src/echo/builtin_int.py \
                 src/echo/builtin_type.py \
+                src/echo/builtin_str.py \
                 src/echo/epy_object.py \
                 src/echo/dso_objects.py
 
