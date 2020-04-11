@@ -42,6 +42,7 @@ jobs:
                 src/echo/builtin_bytearray.py \
                 src/echo/builtin_enumerate.py \
                 src/echo/builtin_int.py \
+                src/echo/builtin_iter.py \
                 src/echo/builtin_object.py \
                 src/echo/builtin_predicates.py \
                 src/echo/builtin_str.py \

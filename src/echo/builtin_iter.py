@@ -5,7 +5,7 @@ from typing import Text, Tuple, Any, Dict, Optional, Type
 from collections import OrderedDict as odict
 
 from echo.elog import log
-from echo.epy_object import EPyObject, AttrWhere, EPyType
+from echo.epy_object import EPyObject, AttrWhere, EPyType, try_invoke
 from echo.interp_result import Result, ExceptionData, check_result
 from echo import interp_routines
 from echo.eobjects import (
@@ -15,12 +15,13 @@ from echo.eobjects import (
 from echo.interp_context import ICtx
 
 
-_ITER_BUILTIN_TYPES = (
-    tuple, str, bytes, bytearray, type({}.keys()), type({}.values()),
-    type({}.items()), list, type(reversed([])), type(range(0, 0)),
-    set, type(zip((), ())), frozenset, weakref.WeakSet, dict,
-    itertools.permutations, itertools.product,
-)  # type: Tuple[Type, ...]
+_ITER_BUILTIN_TYPES: Tuple[Type, ...] = (
+    tuple, type(''), type(b''), type(bytearray()), type({}.keys()),
+    type({}.values()), type({}.items()), type([]), type(reversed([])),
+    type(range(0, 0)), type(set()), type(zip((), ())), type(frozenset()),
+    type(weakref.WeakSet()), type(dict()),
+    type(itertools.permutations(())),
+)
 
 
 class SeqIterType(EPyType):
@@ -39,10 +40,10 @@ class SeqIterType(EPyType):
     def __repr__(self) -> Text:
         return "<eclass 'iterator'>"
 
-    def get_type(self) -> EPyObject:
+    def get_type(self) -> EPyType:
         return get_guest_builtin('type')
 
-    def get_mro(self) -> Tuple[EPyObject, ...]:
+    def get_mro(self) -> Tuple[EPyType, ...]:
         return (self, get_guest_builtin('object'))
 
     def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
@@ -52,7 +53,7 @@ class SeqIterType(EPyType):
             return Result(self._dict)
         raise NotImplementedError(self, name)
 
-    def setattr(self, name: Text, value: Any) -> Any:
+    def setattr(self, name: Text, value: Any, ictx: ICtx) -> Any:
         raise NotImplementedError
 
     def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
@@ -69,7 +70,7 @@ class SeqIter(EPyObject):
         self.subject = subject
         self.next_index = 0
 
-    def get_type(self) -> EPyObject:
+    def get_type(self) -> EPyType:
         return SeqIterType_singleton
 
     def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
@@ -84,7 +85,7 @@ class SeqIter(EPyObject):
             return AttrWhere.SELF_SPECIAL
         return None
 
-    def setattr(self, name: Text, value: Any) -> Any:
+    def setattr(self, name: Text, value: Any, ictx: ICtx) -> Any:
         raise NotImplementedError(self, name, value)
 
     def next(self, args: Tuple[Any, ...],
@@ -93,11 +94,11 @@ class SeqIter(EPyObject):
              ictx: ICtx,
              globals_: Optional[Dict[Text, Any]] = None) -> Result[Any]:
         assert len(args) == 1 and not kwargs, (args, kwargs)
-        gi = self.subject.getattr('__getitem__', ictx)
-        if gi.is_exception():
-            return gi
-        gi = gi.get_value()
-        res = gi.invoke((self.next_index,), {}, {}, ictx)
+        gi_ = self.subject.getattr('__getitem__', ictx)
+        if gi_.is_exception():
+            return gi_
+        gi = gi_.get_value()
+        res = try_invoke(gi, (self.next_index,), {}, {}, ictx)
         if (res.is_exception() and
                 isinstance(res.get_exception().exception,
                            (IndexError, StopIteration))):
@@ -119,46 +120,44 @@ def _do_iter(args: Tuple[Any, ...],
         return Result(iter(args[0]))
 
     if isinstance(args[0], EPyObject) and args[0].hasattr('__iter__'):
-        iter_f = args[0].getattr('__iter__', ictx)
-        if iter_f.is_exception():
-            return iter_f
-        iter_f = iter_f.get_value()
-        return iter_f.invoke((), {}, {}, ictx)
+        iter_f_ = args[0].getattr('__iter__', ictx)
+        if iter_f_.is_exception():
+            return iter_f_
+        iter_f = iter_f_.get_value()
+        return try_invoke(iter_f, (), {}, {}, ictx)
 
     if isinstance(args[0], EPyObject):
-        if hasattr(args[0], 'iter'):
-            return args[0].iter(ictx)
+        it = getattr(args[0], 'iter', None)
+        if it is not None:
+            return it(ictx)
 
         if args[0].hasattr('__getitem__'):
             return Result(SeqIter(args[0]))
 
-        type_name = args[0].get_type().name
+        type_name = args[0].get_type().get_name()
         return Result(ExceptionData(
             None, None, TypeError(f'{type_name!r} object is not iterable')))
 
     raise NotImplementedError(args[0], type(args[0]))
 
 
-TUPLE_ITERATOR = type(iter(()))
-STR_ITERATOR = type(iter(''))
-BYTES_ITERATOR = type(iter(b''))
-LIST_ITERATOR = type(iter([]))
-LIST_REV_ITERATOR = type(reversed([]))
-DICT_ITERATOR = type(iter({}))
-DICT_ITERATOR = type(iter(set([])))
-DICT_KEY_ITERATOR = type(iter({}.keys()))
-DICT_VALUE_ITERATOR = type(iter({}.values()))
-DICT_ITEM_ITERATOR = type(iter({}.items()))
-RANGE_ITERATOR = type(iter(range(0)))
-ZIP_ITERATOR = type(iter(zip((), ())))
-BUILTIN_ITERATORS = (
-    TUPLE_ITERATOR, LIST_ITERATOR, LIST_REV_ITERATOR,
-    RANGE_ITERATOR,
-    DICT_KEY_ITERATOR, DICT_ITEM_ITERATOR, DICT_VALUE_ITERATOR, DICT_ITERATOR,
-    ZIP_ITERATOR,
-    STR_ITERATOR, BYTES_ITERATOR, type(iter(odict())),
-    types.GeneratorType, itertools.permutations, itertools.product,
-)  # type: Tuple[Type, ...]
+BUILTIN_ITERATORS: Tuple[Type, ...] = (
+    type(iter(())),
+    type(iter('')),
+    type(iter(b'')),
+    type(iter([])),
+    type(reversed([])),
+    type(iter({})),
+    type(iter(set([]))),
+    type(iter({}.keys())),
+    type(iter({}.values())),
+    type(iter({}.items())),
+    type(iter(range(0))),
+    type(iter(zip((), ()))),
+    type(iter(odict())),
+    types.GeneratorType,
+    type(itertools.permutations(())),
+)
 
 
 @register_builtin('next')
@@ -173,9 +172,9 @@ def _do_next(args: Tuple[Any, ...],
         except StopIteration as e:
             return Result(ExceptionData(None, None, e))
     if isinstance(g, EPyObject) and g.hasattr('__next__'):
-        f = g.getattr('__next__', ictx)
-        if f.is_exception():
-            return f
-        f = f.get_value()
-        return f.invoke((), {}, {}, ictx)
+        f_ = g.getattr('__next__', ictx)
+        if f_.is_exception():
+            return f_
+        f = f_.get_value()
+        return try_invoke(f, (), {}, {}, ictx)
     return g.next(ictx)
