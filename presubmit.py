@@ -24,6 +24,8 @@ subprocess.check_call([
     'src/echo/epy_object.py',
     'src/echo/dso_objects.py',
     'src/echo/builtin_str.py',
+    'src/echo/builtin_predicates.py',
+    'src/echo/builtin_enumerate.py',
 ])
 print('=== mypy ok!')
 

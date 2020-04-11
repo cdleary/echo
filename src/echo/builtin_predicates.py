@@ -7,7 +7,7 @@ import io
 import _thread
 
 from echo.elog import log
-from echo.epy_object import EPyObject, AttrWhere
+from echo.epy_object import EPyObject, AttrWhere, try_invoke
 from echo.interp_result import Result, check_result, ExceptionData
 from echo import interp_routines
 from echo.eobjects import (
@@ -40,10 +40,10 @@ def _do_bool_call(args: Tuple[Any, ...],
         return Result(True)
     if isinstance(o, EPyObject):
         if o.get_type().hasattr('__bool__'):
-            f = o.getattr('__bool__', ictx)
-            if f.is_exception():
-                return f
-            f = f.get_value()
+            f_ = o.getattr('__bool__', ictx)
+            if f_.is_exception():
+                return f_
+            f = f_.get_value()
             return f.invoke((), {}, {}, ictx)
 
         if o.get_type().hasattr('__len__'):
@@ -107,10 +107,10 @@ def _do_min(
             not isinstance(args[1], EPyObject)):
         return Result(min(args[0], args[1]))
     do_getattr = get_guest_builtin('getattr')
-    do_lt = do_getattr.invoke((args[0], '__lt__',), {}, {}, ictx)
-    if do_lt.is_exception():
-        return do_lt
-    do_lt = do_lt.get_value()
+    do_lt_ = do_getattr.invoke((args[0], '__lt__',), {}, {}, ictx)
+    if do_lt_.is_exception():
+        return do_lt_
+    do_lt = do_lt_.get_value()
     res = do_lt.invoke((args[1],), {}, {}, ictx)
     if res.is_exception():
         return res
@@ -162,7 +162,8 @@ def _do_max(
     if do_lt.is_exception():
         return do_lt
     do_lt = do_lt.get_value()
-    res = do_lt.invoke((args[1],), {}, {}, ictx)
+    assert isinstance(do_lt, EPyObject), do_lt
+    res = try_invoke(do_lt, (args[1],), {}, {}, ictx)
     if res.is_exception():
         return res
     return Result(args[1] if res.get_value() else args[0])

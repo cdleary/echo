@@ -2,7 +2,7 @@ import itertools
 from typing import Text, Tuple, Any, Dict, Optional
 
 from echo.elog import log
-from echo.epy_object import EPyObject, AttrWhere
+from echo.epy_object import EPyObject, EPyType, AttrWhere
 from echo.interp_result import Result, check_result
 from echo import interp_routines
 from echo.eobjects import (
@@ -17,7 +17,7 @@ class EEnumerate(EPyObject):
         self.iterator = iterator
         self._count = itertools.count(start)
 
-    def get_type(self) -> 'EPyObject':
+    def get_type(self) -> EPyType:
         return get_guest_builtin('enumerate')
 
     def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
