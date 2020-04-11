@@ -231,6 +231,7 @@ def test_long_two_digits():
     assert pylong_as_ulong(x) == 1 << 30
 
 
+@pytest.mark.skip(reason="TSX is not universally available")
 def test_tsx_basic():
     libc = ctypes.CDLL('libc.so.6')
     libc.malloc.restype = ctypes.c_void_p
