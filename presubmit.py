@@ -15,6 +15,15 @@ opts, args = parser.parse_args()
 
 VERSION_MAJOR_MINOR = '.'.join(str(e) for e in sys.version_info[:2])
 
+subprocess.check_call([
+    'mypy',
+    'src/echo/bc_helpers.py',
+    'src/echo/builtin_int.py',
+    'src/echo/builtin_type.py',
+    'src/echo/epy_object.py',
+    'src/echo/dso_objects.py',
+])
+print('=== mypy ok!')
 
 if opts.do_test:
     subprocess.check_call(['pytest'])

@@ -13,7 +13,7 @@ from echo.interp_context import ICtx
 
 
 def _resolve(x: Any) -> int:
-    if isinstance(x, EPyObject):
+    if isinstance(x, EInstance):
         return x.builtin_storage[int]
     if isinstance(x, int):
         return x
@@ -52,7 +52,7 @@ def _do_int_new(
     value = args[1] if len(args) > 1 else 0
     if isinstance(cls, EClass):
         assert get_guest_builtin('int') in cls.get_mro()
-        globals_ = {}
+        globals_: Dict[str, Any] = {}
         o = EInstance(cls)
         o.builtin_storage[int] = value
         return Result(o)
@@ -82,7 +82,7 @@ def _do_int_add(
 
 @register_builtin('int.__radd__')
 @check_result
-def _do_int_add(
+def _do_int_radd(
         args: Tuple[Any, ...],
         kwargs: Dict[Text, Any],
         ictx: ICtx) -> Result[Any]:
@@ -94,7 +94,7 @@ def _do_int_add(
 
 @register_builtin('int.__bool__')
 @check_result
-def _do_int_add(
+def _do_int_bool(
         args: Tuple[Any, ...],
         kwargs: Dict[Text, Any],
         ictx: ICtx) -> Result[Any]:
@@ -165,7 +165,7 @@ def _do_int_str(
 
 @register_builtin('int.__int__')
 @check_result
-def _do_int_str(
+def _do_int_int(
         args: Tuple[Any, ...],
         kwargs: Dict[Text, Any],
         ictx: ICtx) -> Result[Any]:

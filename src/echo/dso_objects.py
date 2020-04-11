@@ -97,7 +97,7 @@ class DsoClassProxy(EPyType, DsoPyObject):
         assert isinstance(v, tuple), v
         return v
 
-    def get_mro(self) -> Tuple[EPyObject, ...]:
+    def get_mro(self) -> Tuple[EPyType, ...]:
         return _dso_lift(self.wrapped.__mro__)
 
     def get_type(self) -> EPyType:
@@ -158,6 +158,7 @@ class DsoInstanceProxy(DsoPyObject):
 
 class DsoFunctionProxy(DsoPyObject):
     def __init__(self, wrapped: Union[types.FunctionType,
+                                      types.MethodWrapperType,
                                       types.BuiltinFunctionType]):
         self.wrapped = wrapped
 

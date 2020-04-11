@@ -29,10 +29,11 @@ def _do_type_new(
             TypeError(msg)))
     metaclass, name, bases, ns = args
     do_dict = get_guest_builtin('dict')
-    ns_copy = do_dict.invoke((ns,), {}, {}, ictx)
-    if ns_copy.is_exception():
-        return ns_copy
-    ns_copy = ns_copy.get_value()
+    ns_copy_ = do_dict.invoke((ns,), {}, {}, ictx)
+    if ns_copy_.is_exception():
+        return ns_copy_
+    ns_copy = ns_copy_.get_value()
+    assert isinstance(ns_copy, dict), ns_copy
     cls = EClass(name, dict_=ns_copy, bases=bases, metaclass=metaclass)
     return Result(cls)
 
@@ -103,8 +104,8 @@ def _do_type_call(args: Tuple[Any, ...], kwargs: Dict[Text, Any],
 
 @register_builtin('type')
 @check_result
-def _do_type_call(args: Tuple[Any, ...], kwargs: Dict[Text, Any],
-                  ictx: ICtx) -> Result[Any]:
+def _do_type(args: Tuple[Any, ...], kwargs: Dict[Text, Any],
+             ictx: ICtx) -> Result[Any]:
     assert not kwargs, kwargs
     assert isinstance(args, tuple), args
     log('go:type()', lambda: f'args: {args}')

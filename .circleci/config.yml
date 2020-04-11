@@ -34,6 +34,17 @@ jobs:
           key: v1-dependencies-{{ checksum "requirements.txt" }}
 
       - run:
+          name: mypy
+          command: |
+            . venv/bin/activate
+            mypy \
+                src/echo/bc_helpers.py \
+                src/echo/builtin_int.py \
+                src/echo/builtin_type.py \
+                src/echo/epy_object.py \
+                src/echo/dso_objects.py
+
+      - run:
           name: pytest
           command: |
             . venv/bin/activate

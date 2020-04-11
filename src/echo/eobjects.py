@@ -530,7 +530,7 @@ class EClass(EPyType):
             bases or (get_guest_builtin('object'),)
         self.metaclass: Optional[EPyType] = metaclass
         self.kwargs = kwargs
-        self.subclasses: Set['EClass'] = weakref.WeakSet()
+        self.subclasses: weakref.WeakSet = weakref.WeakSet()
 
         for base in self.bases:
             if isinstance(base, (EBuiltin, EClass)):
