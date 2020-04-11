@@ -1,6 +1,6 @@
 from typing import Text, Tuple, Any, Dict, Optional
 
-from echo.epy_object import EPyObject, AttrWhere
+from echo.epy_object import EPyObject, AttrWhere, EPyType
 from echo.interp_result import Result, ExceptionData, check_result
 from echo.eobjects import (
     EFunction, EMethod, NativeFunction, EBuiltin,
@@ -19,7 +19,7 @@ class EMap(EPyObject):
     def __repr__(self) -> Text:
         return f'<{E_PREFIX}map object>'
 
-    def get_type(self) -> EPyObject:
+    def get_type(self) -> EPyType:
         return get_guest_builtin('map')
 
     def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
@@ -27,15 +27,9 @@ class EMap(EPyObject):
 
     @check_result
     def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
-        if name == '__get__':
-            return Result(EMethod(NativeFunction(
-                self._get, 'emap.__get__'), bound_self=self))
-        if name == '__get__':
-            return Result(EMethod(NativeFunction(
-                self._iter, 'emap.__iter__'), bound_self=self))
         return Result(ExceptionData(None, name, AttributeError(name)))
 
-    def setattr(self, name: Text, value: Any) -> Result[None]:
+    def setattr(self, name: Text, value: Any, ictx: ICtx) -> Result[None]:
         raise NotImplementedError
 
     def iter(self, ictx: ICtx) -> Result[Any]:

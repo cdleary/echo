@@ -19,13 +19,17 @@ VERSION_MAJOR_MINOR = '.'.join(str(e) for e in sys.version_info[:2])
 subprocess.check_call([
     'mypy',
     'src/echo/bc_helpers.py',
-    'src/echo/builtin_int.py',
-    'src/echo/builtin_type.py',
-    'src/echo/epy_object.py',
-    'src/echo/dso_objects.py',
-    'src/echo/builtin_str.py',
-    'src/echo/builtin_predicates.py',
     'src/echo/builtin_enumerate.py',
+    'src/echo/builtin_int.py',
+    'src/echo/builtin_predicates.py',
+    'src/echo/builtin_str.py',
+    'src/echo/builtin_type.py',
+    'src/echo/dso_objects.py',
+    'src/echo/ecell.py',
+    'src/echo/elog.py',
+    'src/echo/emap.py',
+    'src/echo/emodule.py',
+    'src/echo/epy_object.py',
 ])
 print('=== mypy ok!')
 

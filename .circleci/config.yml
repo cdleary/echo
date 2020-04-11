@@ -39,13 +39,17 @@ jobs:
             . venv/bin/activate
             mypy \
                 src/echo/bc_helpers.py \
-                src/echo/builtin_int.py \
-                src/echo/builtin_type.py \
-                src/echo/builtin_str.py \
                 src/echo/builtin_enumerate.py \
+                src/echo/builtin_int.py \
                 src/echo/builtin_predicates.py \
-                src/echo/epy_object.py \
-                src/echo/dso_objects.py
+                src/echo/builtin_str.py \
+                src/echo/builtin_type.py \
+                src/echo/dso_objects.py \
+                src/echo/ecell.py \
+                src/echo/elog.py \
+                src/echo/emap.py \
+                src/echo/emodule.py \
+                src/echo/epy_object.py
 
       - run:
           name: pytest
