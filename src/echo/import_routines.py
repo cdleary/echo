@@ -71,10 +71,11 @@ def _import_module_at_path(
     log(ictx, f'importing module {fully_qualified_name} at path {path}')
 
     if path.endswith('.so'):
-        module = DsoModuleProxy(importlib.import_module(fully_qualified_name))
+        dso_module = DsoModuleProxy(
+                importlib.import_module(fully_qualified_name))
         # Place the imported module into the module dictionary.
-        ictx.interp_state.sys_modules[fully_qualified_name] = module
-        return Result(module)
+        ictx.interp_state.sys_modules[fully_qualified_name] = dso_module
+        return Result(dso_module)
 
     with open(path) as f:
         contents = f.read()
