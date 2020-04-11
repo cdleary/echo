@@ -4,8 +4,13 @@ import dis
 import itertools
 import functools
 import types
-from typing import Any, Text, Iterable, Sequence, Tuple
+from typing import (
+    Any, Text, Iterable, Sequence, Tuple, List, TypeVar, Callable, Dict
+)
 from io import StringIO
+
+
+T = TypeVar('T')
 
 
 def get_code(x: Any) -> types.CodeType:
@@ -18,8 +23,8 @@ def dis_to_str(x: Any) -> Text:
     return out.getvalue()
 
 
-def memoize(f):
-    cache = {}
+def memoize(f: Callable[..., T]) -> Callable[..., T]:
+    cache: Dict[Tuple, Any] = {}
 
     @functools.wraps(f)
     def wrapper(*args):
@@ -36,8 +41,8 @@ def none_filler(it: Sequence[Any], count: int) -> Tuple[Any, ...]:
     return tuple(it) + tuple(None for _ in range(count-len(it)))
 
 
-def camel_to_underscores(s: Text):
-    pieces = []
+def camel_to_underscores(s: str) -> str:
+    pieces: List[str] = []
     for letter in s:
         if letter.isupper() and pieces:
             pieces.append('_')

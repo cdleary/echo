@@ -51,8 +51,8 @@ class EFunction(EPyObject):
             '__name__': name,
         }
 
-    def get_type(self) -> EPyObject:
-        return EFunctionType.singleton
+    def get_type(self) -> EPyType:
+        return EFunctionType_singleton
 
     def __repr__(self):
         return '<{}function {} at {:#x}>'.format(E_PREFIX, self.name, id(self))
@@ -98,7 +98,7 @@ class EFunction(EPyObject):
 
     def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
         if name == '__class__':
-            return Result(EFunctionType.singleton)
+            return Result(EFunctionType_singleton)
         if name == '__dict__':
             return Result(self.dict_)
         if name == '__defaults__':
@@ -123,8 +123,8 @@ class GuestCoroutine(EPyObject):
     def __init__(self, f: EFunction):
         self.f = f
 
-    def get_type(self) -> EPyObject:
-        return GuestCoroutineType.singleton
+    def get_type(self) -> EPyType:
+        return GuestCoroutineType_singleton
 
     def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
         if name == 'close':
@@ -140,18 +140,22 @@ class GuestCoroutine(EPyObject):
             return Result(guest_m)
         raise NotImplementedError
 
-    def setattr(self, name: Text, value: Any) -> Any:
+    def setattr(self, name: Text, value: Any, ictx: ICtx) -> Any:
         raise NotImplementedError
 
 
-class EAsyncGeneratorType(EPyObject):
+class EAsyncGeneratorType(EPyType):
     def __init__(self):
         self._dict = {}
 
     def __repr__(self) -> Text:
         return "<eclass 'async_generator'>"
 
-    def get_type(self) -> EPyObject:
+    def get_bases(self): raise NotImplementedError
+    def get_dict(self): raise NotImplementedError
+    def get_mro(self): raise NotImplementedError
+
+    def get_type(self) -> EPyType:
         return get_guest_builtin('type')
 
     def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
@@ -161,7 +165,7 @@ class EAsyncGeneratorType(EPyObject):
             return Result(self._dict)
         raise NotImplementedError(self, name)
 
-    def setattr(self, name: Text, value: Any) -> Any:
+    def setattr(self, name: Text, value: Any, ictx: ICtx) -> Any:
         raise NotImplementedError
 
     def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
@@ -170,15 +174,15 @@ class EAsyncGeneratorType(EPyObject):
         return None
 
 
-EAsyncGeneratorType.singleton = EAsyncGeneratorType()
+EAsyncGeneratorType_singleton = EAsyncGeneratorType()
 
 
 class EAsyncGenerator(EPyObject):
     def __init__(self, f):
         self.f = f
 
-    def get_type(self) -> EPyObject:
-        return EAsyncGeneratorType.singleton
+    def get_type(self) -> EPyType:
+        return EAsyncGeneratorType_singleton
 
     def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
         return None
@@ -186,28 +190,32 @@ class EAsyncGenerator(EPyObject):
     def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
         raise NotImplementedError
 
-    def setattr(self, name: Text, value: Any) -> Any:
+    def setattr(self, name: Text, value: Any, ictx: ICtx) -> Any:
         raise NotImplementedError
 
 
-class EMethodType(EPyObject):
+class EMethodType(EPyType):
     def __repr__(self) -> Text:
         return "<{}class 'method'>".format(E_PREFIX)
 
-    def get_type(self) -> EPyObject:
+    def get_bases(self): raise NotImplementedError
+    def get_dict(self): raise NotImplementedError
+    def get_mro(self): raise NotImplementedError
+
+    def get_type(self) -> EPyType:
         return get_guest_builtin('type')
 
     def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
         raise NotImplementedError
 
-    def setattr(self, name: Text, value: Any) -> Any:
+    def setattr(self, name: Text, value: Any, ictx: ICtx) -> Any:
         raise NotImplementedError
 
     def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
         return None
 
 
-EMethodType.singleton = EMethodType()
+EMethodType_singleton = EMethodType()
 
 
 class EMethod(EPyObject):
@@ -219,8 +227,8 @@ class EMethod(EPyObject):
     def __repr__(self) -> Text:
         return f'<{E_PREFIX}bound method {self.f.name} of {self.bound_self!r}>'
 
-    def get_type(self) -> EPyObject:
-        return EMethodType.singleton
+    def get_type(self) -> EPyType:
+        return EMethodType_singleton
 
     @property
     def code(self): return self.f.code
@@ -274,7 +282,7 @@ class NotFoundSentinel:
     pass
 
 
-NotFoundSentinel.singleton = NotFoundSentinel()
+NotFoundSentinel_singleton = NotFoundSentinel()
 
 
 def _find_name_in_mro(type_: EPyType, name: Text, ictx: ICtx) -> Any:
@@ -293,7 +301,16 @@ def _find_name_in_mro(type_: EPyType, name: Text, ictx: ICtx) -> Any:
             assert isinstance(cls, type), cls
             if hasattr(cls, name):
                 return getattr(cls, name)
-    return NotFoundSentinel.singleton
+    return NotFoundSentinel_singleton
+
+
+def _try_invoke(o: EPyObject, args, kwargs, locals_dict,
+                ictx: ICtx) -> Result[Any]:
+    if not hasattr(o, 'invoke'):
+        return Result(ExceptionData(
+            None, None, TypeError(
+                'type {!r} is not callable'.format(o.get_type().name))))
+    return o.invoke(args, kwargs, locals_dict, ictx)
 
 
 def _type_getattro(
@@ -317,7 +334,7 @@ def _type_getattro(
     meta_attr = _find_name_in_mro(metatype, name, ictx)
     log('eo:ec:ga', f'type_: {type_} name: {name!r} metaclass: {metatype} '
                     f'meta_attr: {meta_attr}')
-    if meta_attr is not NotFoundSentinel.singleton:
+    if meta_attr is not NotFoundSentinel_singleton:
         if (isinstance(meta_attr, EPyObject)
                 and meta_attr.hasattr('__get__')
                 and meta_attr.hasattr('__set__')):
@@ -331,7 +348,7 @@ def _type_getattro(
             return f.invoke((type_, metatype), {}, {}, ictx)
 
     attr = _find_name_in_mro(type_, name, ictx)
-    if attr is not NotFoundSentinel.singleton:
+    if attr is not NotFoundSentinel_singleton:
         log('eo:ec:ga', f'dict attr {name!r} on {type_}: {attr}')
         if isinstance(attr, EPyObject) and attr.hasattr('__get__'):
             if not do_invoke_desc:
@@ -345,7 +362,7 @@ def _type_getattro(
             return res
         return Result(attr)
 
-    if meta_attr is not NotFoundSentinel.singleton:
+    if meta_attr is not NotFoundSentinel_singleton:
         if (isinstance(meta_attr, EPyObject)
                 and meta_attr.hasattr('__get__')):
             log('gi:ga', f'non-overriding descriptor: {meta_attr}')
@@ -372,7 +389,7 @@ def _type_getattro(
             if meta_ga.is_exception():
                 return meta_ga
             meta_ga = meta_ga.get_value()
-        return meta_ga.invoke((name,), {}, {}, ictx)
+        return _try_invoke(meta_ga, (name,), {}, {}, ictx)
 
     if not do_invoke_desc:
         return (False, None)
@@ -391,7 +408,7 @@ class EInstance(EPyObject):
     def __init__(self, cls: Union['EClass', 'EBuiltin']):
         assert isinstance(cls, (EClass, EBuiltin)), cls
         self.cls = cls
-        self.dict_ = {}
+        self.dict_: Dict[str, Any] = {}
         self.builtin_storage = {}
 
     def __repr__(self) -> Text:
@@ -440,12 +457,12 @@ class EInstance(EPyObject):
             log('gi:ga', f'non-overriding descriptor: {cls_attr}')
             return invoke_desc(self, cls_attr, ictx)
 
-        if cls_attr is not NotFoundSentinel.singleton:
+        if cls_attr is not NotFoundSentinel_singleton:
             return Result(cls_attr)
 
         dunder_getattr = _find_name_in_mro(self.get_type(), '__getattr__',
                                            ictx)
-        if dunder_getattr is not NotFoundSentinel.singleton:
+        if dunder_getattr is not NotFoundSentinel_singleton:
             log('eo:ei:ga', f'__getattr__: {dunder_getattr}')
             if (isinstance(dunder_getattr, EPyObject)
                     and dunder_getattr.hasattr('__get__')):
@@ -540,9 +557,9 @@ class EClass(EPyType):
         if isinstance(self.dict_, dict) and '__module__' in self.dict_:
             return '<{}class \'{}.{}\'>'.format(
                 E_PREFIX, self.dict_['__module__'], self.name)
-        return '<class \'{}\">'.format(E_PREFIX, self.name)
+        return '<{}class \'{}\">'.format(E_PREFIX, self.name)
 
-    def get_type(self) -> 'EClass':
+    def get_type(self) -> 'EPyType':
         return self.metaclass or get_guest_builtin('type')
 
     def get_mro(self) -> Tuple['EPyObject', ...]:
@@ -556,10 +573,10 @@ class EClass(EPyType):
                 derives_from.append((cls, base))
                 frontier.append(base)
 
-        cls_to_subclasses = collections.defaultdict(list)
+        cls_to_subclasses_ = collections.defaultdict(list)
         for cls, base in derives_from:
-            cls_to_subclasses[base].append(cls)
-        cls_to_subclasses = dict(cls_to_subclasses)
+            cls_to_subclasses_[base].append(cls)
+        cls_to_subclasses = dict(cls_to_subclasses_)
 
         ready = collections.deque([self])
         order = []
@@ -672,7 +689,7 @@ class EClass(EPyType):
 
     def setattr(self, name: Text, value: Any, ictx: ICtx) -> Result[None]:
         sa = _find_name_in_mro(self.get_type(), '__setattr__', ictx)
-        if (sa is NotFoundSentinel.singleton
+        if (sa is NotFoundSentinel_singleton
                 or sa is get_guest_builtin('object.__setattr__')):
             self.dict_[name] = value
             log('eo:ec:setattr',
@@ -687,7 +704,7 @@ class EFunctionType(EPyType):
     def __repr__(self) -> Text:
         return "<{}class 'function'>".format(E_PREFIX)
 
-    def get_type(self) -> EPyObject:
+    def get_type(self) -> EPyType:
         return get_guest_builtin('type')
 
     def get_bases(self):
@@ -725,11 +742,11 @@ class EFunctionType(EPyType):
 
         raise NotImplementedError
 
-    def setattr(self, name: Text, value: Any) -> Any:
+    def setattr(self, name: Text, value: Any, ictx: ICtx) -> Any:
         raise NotImplementedError
 
 
-EFunctionType.singleton = EFunctionType()
+EFunctionType_singleton = EFunctionType()
 
 
 class GuestCoroutineType(EPyType):
@@ -764,11 +781,11 @@ class GuestCoroutineType(EPyType):
             return Result(self.dict_)
         raise NotImplementedError(name)
 
-    def setattr(self, name: Text, value: Any) -> Any:
+    def setattr(self, name: Text, value: Any, ictx: ICtx) -> Any:
         raise NotImplementedError(name, value)
 
 
-GuestCoroutineType.singleton = GuestCoroutineType()
+GuestCoroutineType_singleton = GuestCoroutineType()
 
 
 def _is_type_builtin(x) -> bool:
@@ -895,8 +912,8 @@ class EBuiltin(EPyType):
     def __init__(self, name: Text, bound_self: Any, singleton_ok: bool = True):
         self.name = name
         self.bound_self = bound_self
-        self.dict = {}
-        self.globals_ = {}
+        self.dict: Dict[Text, Any] = {}
+        self.globals_: Dict[Text, Any] = {}
 
     def has_standard_getattr(self) -> bool:
         if self.name in ('super',):
@@ -941,9 +958,9 @@ class EBuiltin(EPyType):
     def get_type(self) -> EPyObject:
         if self.name in self.BUILTIN_FNS:
             if self.bound_self:
-                return EMethodType.singleton
+                return EMethodType_singleton
             else:
-                return EFunctionType.singleton
+                return EFunctionType_singleton
         if self.name in self.BUILTIN_TYPES:
             return get_guest_builtin('type')
         raise NotImplementedError(self)
@@ -986,11 +1003,10 @@ class EBuiltin(EPyType):
             return do_hasattr(args, ictx)
         if self.name == 'dir':
             if not args and not kwargs:
-                if locals_dict is None:
-                    assert globals_ is not None
-                return Result(sorted(list(
-                    globals_.keys() if locals_dict is None
-                    else locals_dict.keys())))
+                if locals_dict is not None:
+                    return Result(list(locals_dict.keys()))
+                assert globals_ is not None
+                return Result(list(globals_.keys()))
             return _do_dir(args, kwargs, ictx)
         if self.name == 'vars':
             if len(args) == 0 and not kwargs:
@@ -1143,7 +1159,7 @@ class EBuiltin(EPyType):
 
         raise NotImplementedError(self, name)
 
-    def setattr(self, name: Text, value: Any) -> Any:
+    def setattr(self, name: Text, value: Any, ictx: ICtx) -> Any:
         raise NotImplementedError(self, name, value)
 
 
@@ -1175,7 +1191,7 @@ class NativeFunction(EPyObject):
         return f'<built-in function {self.name}>'
 
     def get_type(self) -> EPyObject:
-        return EFunctionType.singleton
+        return EFunctionType_singleton
 
     def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
         return None
@@ -1183,7 +1199,7 @@ class NativeFunction(EPyObject):
     def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
         raise NotImplementedError
 
-    def setattr(self, name: Text, value: Any) -> Result[None]:
+    def setattr(self, name: Text, value: Any, ictx: ICtx) -> Result[None]:
         raise NotImplementedError
 
     @check_result
@@ -1198,10 +1214,10 @@ def _do_dir(args: Tuple[Any, ...],
     assert len(args) == 1, args
     o = args[0]
     if isinstance(o, EPyObject):
-        d = o.getattr('__dict__', ictx)
-        if d.is_exception():
-            return d.get_exception()
-        d = d.get_value()
+        d_result = o.getattr('__dict__', ictx)
+        if d_result.is_exception():
+            return Result(d_result.get_exception())
+        d: Dict[Text, Any] = d_result.get_value()
         keys = set(d.keys())
         keys.add('__class__')
         keys.add('__dict__')
@@ -1269,16 +1285,16 @@ def do_hasattr(args: Tuple[Any, ...], ictx: ICtx) -> Result[bool]:
     assert isinstance(attr, str), attr
 
     if not isinstance(o, EPyObject):
-        r = hasattr(o, attr)
-        log('eo:hasattr()', lambda: f'{o}, {attr} => {r}')
-        return Result(r)
+        b = hasattr(o, attr)
+        log('eo:hasattr()', lambda: f'{o}, {attr} => {b}')
+        return Result(b)
 
-    r = o.getattr(attr, ictx)
+    r: Result[Any] = o.getattr(attr, ictx)
     log('eo:hasattr()', lambda: f'o {o} attr {attr!r} getattr result: {r}')
     if r.is_exception():
         if isinstance(r.get_exception().exception, AttributeError):
             return Result(False)
-        return r
+        return Result(r.get_exception())
 
     return Result(True)
 

@@ -31,11 +31,11 @@ class EModuleType(EPyType):
     def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
         raise NotImplementedError
 
-    def setattr(self, name: Text, value: Any) -> Any:
+    def setattr(self, name: Text, value: Any, ictx: ICtx) -> Any:
         raise NotImplementedError
 
 
-EModuleType.singleton = EModuleType()
+EModuleType_singleton = EModuleType()
 
 
 class EModule(EPyObject):
@@ -53,7 +53,7 @@ class EModule(EPyObject):
         return (f'<{E_PREFIX}module {self.fully_qualified_name!r} {from_str}>')
 
     def get_type(self) -> EPyObject:
-        return EModuleType.singleton
+        return EModuleType_singleton
 
     def keys(self) -> Iterable[Text]:
         return self.globals_.keys()

@@ -46,7 +46,7 @@ class EGeneratorType(EPyType):
         return None
 
 
-EGeneratorType.singleton = EGeneratorType()
+EGeneratorType_singleton = EGeneratorType()
 
 
 class EGenerator(EPyObject):
@@ -54,7 +54,7 @@ class EGenerator(EPyObject):
         self.f = f
 
     def get_type(self) -> EPyObject:
-        return EGeneratorType.singleton
+        return EGeneratorType_singleton
 
     def _iter(self, args, kwargs, locals_dict, ictx,
               globals_=None) -> Result[EPyObject]:

@@ -63,16 +63,16 @@ def resolve_args(
 
     # The functionality of this method is to populate these arg slots
     # appropriately.
-    arg_slots = [_Sentinel] * attrs.total_argcount
+    arg_slots: List[Any] = [_Sentinel] * attrs.total_argcount
 
     if attrs.starargs:
         # Note: somewhat surprisingly, the arg slot for the varargs doesn't
         # live at its corresponding syntactical position in the argument list;
         # instead, Python appears to put it as the last argument, always.
-        stararg_index = attrs.stararg_index
+        stararg_index: Optional[int] = attrs.stararg_index
         arg_slots[stararg_index] = ()
     else:
-        stararg_index = None
+        stararg_index: Optional[int] = None
         permitted_args = attrs.total_argcount_no_skwa - attrs.kwonlyargcount
         log('ar', f'given args: {len(args)} permitted: {permitted_args}')
         if len(args) > permitted_args:
@@ -86,10 +86,10 @@ def resolve_args(
                 exception=TypeError(msg)))
 
     if attrs.starkwargs:
-        starkwarg_index = attrs.starkwarg_index
+        starkwarg_index: Optional[int] = attrs.starkwarg_index
         arg_slots[starkwarg_index] = {}
     else:
-        starkwarg_index = None
+        starkwarg_index: Optional[int] = None
 
     # Check for keyword-only arguments that were not provided.
     if attrs.kwonlyargcount:
@@ -154,6 +154,7 @@ def resolve_args(
         stararg_info = in_stararg_position(argno)
         argno = stararg_info[1]  # Stararg can update the slot index.
         if stararg_info[0]:
+            assert stararg_index is not None
             arg_slots[stararg_index] = arg_slots[stararg_index] + (value,)
         else:
             assert argno < len(arg_slots), (

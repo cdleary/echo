@@ -3,7 +3,7 @@ from typing import Tuple, Any, Dict, Text
 from echo.eobjects import (
     register_builtin, EPyObject, EClass, EBuiltin, EPyType, EFunction,
     is_tuple_builtin, is_list_builtin, get_guest_builtin,
-    GuestCoroutineType, EMethodType, safer_repr,
+    GuestCoroutineType, EMethodType_singleton, safer_repr,
     # TODO fix privateness of this
     _is_type_builtin, _is_str_builtin, _is_int_builtin, _is_dict_builtin,
     _is_object_builtin, _is_bool_builtin,
@@ -35,7 +35,7 @@ def _do_isinstance(
                            globals_=getattr(ic, 'globals_', None))
         return result
 
-    if isinstance(args[0], EFunction) and args[1] is EMethodType.singleton:
+    if isinstance(args[0], EFunction) and args[1] is EMethodType_singleton:
         return Result(False)
 
     for t in (bool, int, str, float, dict, list, tuple, set):

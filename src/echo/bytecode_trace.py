@@ -38,10 +38,10 @@ class BytecodeTraceEntry:
 
     def __init__(self, instruction: dis.Instruction):
         self.instruction = Instruction(instruction)
-        self.block_stack = None  # type: Optional[List[BlockStackEntry]]
+        self.block_stack: Optional[List[BlockStackEntry]] = None
 
     def get_block_stack_str(self) -> Text:
-        return '[{}]'.format(', '.join(str(e) for e in self.block_stack))
+        return '[{}]'.format(', '.join(str(e) for e in self.block_stack or []))
 
 
 class AbstractTraceDumper(metaclass=abc.ABCMeta):

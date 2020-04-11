@@ -68,7 +68,7 @@ class EPyObject(abc.ABC):
         raise NotImplementedError(self)
 
     @abc.abstractmethod
-    def get_type(self) -> 'EPyObject':
+    def get_type(self) -> 'EPyType':
         raise NotImplementedError
 
     @abc.abstractmethod
@@ -76,7 +76,7 @@ class EPyObject(abc.ABC):
         raise NotImplementedError(self, name)
 
     @abc.abstractmethod
-    def setattr(self, name: Text, value: Any) -> Any:
+    def setattr(self, name: Text, value: Any, ictx: ICtx) -> Result[None]:
         raise NotImplementedError(self, name, value)
 
     @abc.abstractmethod
@@ -92,6 +92,7 @@ class EPyObject(abc.ABC):
 
 
 class EPyType(EPyObject):
+    """Abstract base class for type objects -- it is itself an EPyObject."""
 
     def has_standard_getattr(self) -> bool:
         return True

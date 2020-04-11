@@ -22,14 +22,14 @@ class ETracebackType(EPyObject):
     def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
         raise NotImplementedError
 
-    def setattr(self, name: Text, value: Any) -> Any:
+    def setattr(self, name: Text, value: Any, ictx: ICtx) -> Any:
         raise NotImplementedError
 
     def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
         return None
 
 
-ETracebackType.singleton = ETracebackType()
+ETracebackType_singleton = ETracebackType()
 
 
 class ETraceback(EPyObject):
@@ -42,7 +42,7 @@ class ETraceback(EPyObject):
         return f'<{E_PREFIX}traceback object>'
 
     def get_type(self) -> EPyObject:
-        return ETracebackType.singleton
+        return ETracebackType_singleton
 
     def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
         if name in ('tb_frame', 'tb_lasti', 'tb_lineno'):
@@ -54,7 +54,7 @@ class ETraceback(EPyObject):
             return Result(self.frame)
         raise NotImplementedError
 
-    def setattr(self, name: Text, value: Any) -> Any:
+    def setattr(self, name: Text, value: Any, ictx: ICtx) -> Any:
         raise NotImplementedError
 
 

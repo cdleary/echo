@@ -6,8 +6,8 @@ import types
 from echo import epy_object
 from echo.elog import debugged
 from echo.epy_object import EPyObject, AttrWhere, EPyType, safer_repr
-from echo.eobjects import EFunctionType, EInstance, EFunction
-from echo.emodule import EModuleType
+from echo.eobjects import EFunctionType_singleton, EInstance, EFunction
+from echo.emodule import EModuleType_singleton
 from echo.interp_result import Result, ExceptionData, check_result
 from echo.ebuiltins import (
     BUILTIN_VALUE_TYPES, BUILTIN_CONTAINER_TYPES, TYPE_TO_EBUILTIN,
@@ -89,7 +89,7 @@ class DsoClassProxy(EPyType, DsoPyObject):
     def get_dict(self) -> Dict[Text, Any]:
         return _dso_lift(dict(self.wrapped.__dict__))
 
-    def get_bases(self) -> Tuple[EPyType]:
+    def get_bases(self) -> Tuple[EPyType, ...]:
         v = _dso_lift(self.wrapped.__bases__)
         assert isinstance(v, tuple), v
         return v
@@ -162,7 +162,7 @@ class DsoFunctionProxy(DsoPyObject):
         return '<built-in pfunction {}>'.format(self.wrapped.__name__)
 
     def get_type(self) -> EPyObject:
-        return EFunctionType.singleton
+        return EFunctionType_singleton
 
     def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
         try:
@@ -212,7 +212,7 @@ class DsoModuleProxy(DsoPyObject):
         return self.wrapped.__name__
 
     def get_type(self) -> EPyObject:
-        return EModuleType.singleton
+        return EModuleType_singleton
 
     def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
         try:

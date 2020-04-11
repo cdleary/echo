@@ -118,6 +118,11 @@ def wrap_with_push(frame: 'StatefulFrame', state: InterpreterState,
     return push_wrapper
 
 
+def _sets_pc(f):
+    f._sets_pc = True
+    return f
+
+
 class StatefulFrame:
     """A frame is the context in which some code executes.
 
@@ -130,7 +135,7 @@ class StatefulFrame:
     def __init__(self,
                  code: types.CodeType,
                  pc_to_instruction: List[Optional[dis.Instruction]],
-                 pc_to_bc_width: List[Optional[int]],
+                 pc_to_bc_width: List[int],
                  locals_: List[Any],
                  locals_dict: Optional[Dict[Text, Any]],
                  globals_: Dict[Text, Any],
@@ -141,8 +146,8 @@ class StatefulFrame:
             (len(locals_), len(code.co_varnames))
         self.code = code
         self.pc = 0
-        self.stack = []
-        self.block_stack = []  # type: List[BlockInfo]
+        self.stack: List[Any] = []
+        self.block_stack: List[BlockInfo] = []
         self.pc_to_instruction = pc_to_instruction
         self.pc_to_bc_width = pc_to_bc_width
         self.locals_ = locals_
@@ -488,10 +493,6 @@ class StatefulFrame:
     def _run_LOAD_CLOSURE(self, arg, argval):
         return Result(self.cellvars[arg])
 
-    def sets_pc(f):
-        f._sets_pc = True
-        return f
-
     def _run_SETUP_WITH(self, arg, argval) -> Result[Any]:
         mgr = self._peek()
         do_getattr = get_guest_builtin('getattr')
@@ -549,7 +550,7 @@ class StatefulFrame:
         else:
             raise NotImplementedError
 
-    @sets_pc
+    @_sets_pc
     def _run_BREAK_LOOP(self, arg, argval):
         loop_block = self.block_stack.pop()
         assert loop_block.kind == BlockKind.SETUP_LOOP
@@ -558,12 +559,12 @@ class StatefulFrame:
         self.pc = loop_block.handler
         return True
 
-    @sets_pc
+    @_sets_pc
     def _run_JUMP_ABSOLUTE(self, arg, argval):
         self.pc = arg
         return True
 
-    @sets_pc
+    @_sets_pc
     def _run_JUMP_FORWARD(self, arg, argval):
         self.pc += arg + self.pc_to_bc_width[self.pc]
         return True
@@ -580,7 +581,7 @@ class StatefulFrame:
         assert isinstance(v, bool), v
         return Result(not v)
 
-    @sets_pc
+    @_sets_pc
     def _run_POP_JUMP_IF_FALSE(self, arg, argval) -> bool:
         v = self._pop()
         if self._is_falsy(v).get_value():
@@ -590,7 +591,7 @@ class StatefulFrame:
         log('bc:pjif', f'not jumping, truthy: {v}')
         return False
 
-    @sets_pc
+    @_sets_pc
     def _run_POP_JUMP_IF_TRUE(self, arg, argval):
         v = self._pop()
         if self._is_truthy(v).get_value():
@@ -600,7 +601,7 @@ class StatefulFrame:
         log('bc:pjit', f'not jumping, falsy: {v}')
         return False
 
-    @sets_pc
+    @_sets_pc
     def _run_JUMP_IF_FALSE_OR_POP(self, arg, argval):
         if self._is_falsy(self._peek()).get_value():
             self.pc = arg
@@ -609,7 +610,7 @@ class StatefulFrame:
             self._pop()
             return False
 
-    @sets_pc
+    @_sets_pc
     def _run_JUMP_IF_TRUE_OR_POP(
             self, arg, argval) -> Union[bool, Result[Any]]:
         res = self._is_truthy(self._peek())
@@ -622,7 +623,7 @@ class StatefulFrame:
             self._pop()
             return False
 
-    @sets_pc
+    @_sets_pc
     def _run_FOR_ITER(self, arg, argval):
         o = self._peek()
         do_next = get_guest_builtin('next')
@@ -760,7 +761,7 @@ class StatefulFrame:
             return interp_routines.compare(
                 argval, lhs, rhs, self.ictx)
 
-    @sets_pc
+    @_sets_pc
     def _run_END_FINALLY(self, arg, argval) -> Result[bool]:
         status = self._pop()
         log('bc:ef', f'END_FINALLY status {status!r}')
@@ -904,7 +905,7 @@ class StatefulFrame:
             BlockKind.SETUP_LOOP, arg + self.pc + self.pc_to_bc_width[self.pc],
             len(self.stack)))
 
-    @sets_pc
+    @_sets_pc
     def _run_CONTINUE_LOOP(self, arg, argval) -> bool:
         assert self._handle_exception(WhyStatus.CONTINUE, None, arg)
         return True
@@ -1044,6 +1045,8 @@ class StatefulFrame:
         for item in reversed(seen):
             self._push(item)
 
+        return None
+
     def _run_EXTENDED_ARG(self, arg, argval):
         pass  # The to-instruction decoding step already extended the args?
 
@@ -1098,7 +1101,7 @@ class StatefulFrame:
             log('bc:line',
                 f'{self.code.co_filename}:{instruction.starts_line}')
 
-        log('bc:inst', instruction)
+        log('bc:inst', lambda: str(instruction))
         if os.getenv('ECHO_DUMP_INSTS'):
             self._dump_inst(instruction)
 
@@ -1178,8 +1181,8 @@ class StatefulFrame:
         return r
 
     def run_to_return_or_yield(self) -> Result[Tuple[Value, ReturnKind]]:
-        if (os.getenv('ECHO_DUMP_CODE')
-                and os.getenv('ECHO_DUMP_CODE') in str(self.code)):
+        echo_dump_code: Optional[str] = os.getenv('ECHO_DUMP_CODE')
+        if (echo_dump_code and echo_dump_code in str(self.code)):
             print(self.code, file=sys.stderr)
             dis.dis(self.code)
         while True:
@@ -1211,11 +1214,11 @@ class EFrameType(EPyType):
     def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
         raise NotImplementedError
 
-    def setattr(self, name: Text, value: Any) -> Any:
+    def setattr(self, name: Text, value: Any, ictx: ICtx) -> Any:
         raise NotImplementedError
 
 
-EFrameType.singleton = EFrameType()
+EFrameType_singleton = EFrameType()
 
 
 class EFrame(EPyObject):
@@ -1241,7 +1244,7 @@ class EFrame(EPyObject):
                 f'code {self.frame.code.co_name}>')
 
     def get_type(self) -> EPyType:
-        return EFrameType.singleton
+        return EFrameType_singleton
 
     def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
         return None
@@ -1249,5 +1252,5 @@ class EFrame(EPyObject):
     def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
         raise NotImplementedError
 
-    def setattr(self, name: Text, value: Any) -> Any:
+    def setattr(self, name: Text, value: Any, ictx: ICtx) -> Any:
         raise NotImplementedError

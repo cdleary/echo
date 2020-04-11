@@ -124,7 +124,7 @@ def _subimport_module_at_path(
     Side effects:
         Sets the subimported module name on the containing package.
     """
-    assert isinstance(containing_package, EModule), module
+    assert isinstance(containing_package, EModule)
     log(ictx, f'path {path} fqn {fully_qualified_name} '
               f'containing_package {containing_package}')
 
@@ -341,7 +341,7 @@ def _import_name_with_level(
         return Result(start_mod_result.get_exception())
     start_mod, start_dirpath = start_mod_result.get_value()
 
-    multi_module_pieces = tuple(multi_module_name.split('.'))
+    multi_module_pieces: Tuple[str, ...] = tuple(multi_module_name.split('.'))
     current_mod = _traverse_module_pieces(
         start_mod, start_dirpath, multi_module_pieces, ictx)
     if current_mod.is_exception():
@@ -388,7 +388,7 @@ def _import_name_without_level(
 
 def _import_name(multi_module_name: Text,
                  level: int,
-                 fromlist: Optional[Sequence[Text]],
+                 fromlist: Optional[Tuple[str, ...]],
                  importing_path: Text,
                  importing_fully_qualified_name: Text,
                  search_paths: Sequence[Text],

@@ -58,7 +58,7 @@ class SeqIterType(EPyType):
         return None
 
 
-SeqIterType.singleton = SeqIterType()
+SeqIterType_singleton = SeqIterType()
 
 
 class SeqIter(EPyObject):
@@ -67,7 +67,7 @@ class SeqIter(EPyObject):
         self.next_index = 0
 
     def get_type(self) -> EPyObject:
-        return SeqIterType.singleton
+        return SeqIterType_singleton
 
     def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
         if name == '__next__':
