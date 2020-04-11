@@ -57,6 +57,7 @@ jobs:
                 src/echo/ecell.py \
                 src/echo/elog.py \
                 src/echo/emap.py \
+                src/echo/eproperty.py \
                 src/echo/emodule.py \
                 src/echo/eobjects.py \
                 src/echo/epy_object.py \

@@ -1,6 +1,6 @@
 from typing import Text, Tuple, Any, Dict, Optional
 
-from echo.epy_object import EPyObject, AttrWhere
+from echo.epy_object import EPyObject, AttrWhere, EPyType, try_invoke
 from echo.interp_result import Result, ExceptionData, check_result
 from echo.eobjects import (
     EFunction, EMethod, NativeFunction, EBuiltin,
@@ -18,7 +18,7 @@ class EProperty(EPyObject):
         self.fset = fset
         self.doc = doc
 
-    def get_type(self) -> EPyObject:
+    def get_type(self) -> EPyType:
         return get_guest_builtin('property')
 
     def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
@@ -38,11 +38,11 @@ class EProperty(EPyObject):
             return Result(self)
         log('ep:get', f'fget: {self.fget} obj: {obj} objtype: {objtype}')
         assert _self is self
-        do_call = self.fget.getattr('__call__', ictx)
-        if do_call.is_exception():
-            return do_call
-        do_call = do_call.get_value()
-        return do_call.invoke((obj,), kwargs, locals_dict, ictx)
+        do_call_ = self.fget.getattr('__call__', ictx)
+        if do_call_.is_exception():
+            return do_call_
+        do_call = do_call_.get_value()
+        return try_invoke(do_call, (obj,), kwargs, locals_dict, ictx)
 
     @check_result
     def _set(self,
@@ -52,13 +52,15 @@ class EProperty(EPyObject):
              ictx: ICtx,
              globals_: Optional[Dict[Text, Any]] = None) -> Result[Any]:
         log('ep:set', f'fset: {self.fset} args: {args}')
-        _self, obj, value = args
-        assert _self is self
-        do_call = self.fset.getattr('__call__', ictx)
-        if do_call.is_exception():
-            return do_call
-        do_call = do_call.get_value()
-        return do_call.invoke((obj, value), kwargs, locals_dict, ictx)
+        eself, obj, value = args
+        assert eself is self
+        if self.fset is None:
+            raise NotImplementedError
+        do_call_ = self.fset.getattr('__call__', ictx)
+        if do_call_.is_exception():
+            return do_call_
+        do_call = do_call_.get_value()
+        return try_invoke(do_call, (obj, value), kwargs, locals_dict, ictx)
 
     @check_result
     def _setter(self,
