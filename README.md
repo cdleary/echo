@@ -76,3 +76,12 @@ pytype --config=pytype.cfg --python-version=3.6
 ```
 python bin/cpython_tracer.py py_samples/simple_binops.py
 ```
+
+### REPL
+
+A very partial read-eval-print-loop is present for experimentation:
+
+```
+$ ./bin/echo_repl
+>>>
+```
