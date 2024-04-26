@@ -1,7 +1,7 @@
-distutils==3.9.6
 pycodestyle==2.5.0
 pyfakefs==3.7
 pytest==5.3.1
+pytest-mypy==0.10.3
 pytype==2019.12.06
 termcolor==1.1.0
 types-termcolor==1.1.0
