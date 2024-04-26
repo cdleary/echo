@@ -361,6 +361,17 @@ class StatefulFrame:
         tos_mi = self.stack[-arg]
         list.append(tos_mi, tos)
 
+    def _run_SET_UPDATE(self, arg, argval) -> None:
+        raise NotImplementedError
+
+    def _run_IS_OP(self, arg, argval) -> None:
+        tos = self._pop()
+        tos1 = self._pop()
+        if argval:
+            self.stack.append(tos is not tos1)
+        else:
+            self.stack.append(tos is tos1)
+
     def _run_SET_ADD(self, arg, argval) -> None:
         tos = self._pop()
         tos_mi = self.stack[-arg]
