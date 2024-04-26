@@ -1,9 +1,10 @@
 """Helpers for resolving given args/kwargs to frame slots."""
 
+from typing import Dict, Optional, Tuple, Any, List, Sequence
+
 import pprint
 import sys
 import types
-from typing import Text, Dict, Optional, Tuple, Any, List, Sequence
 
 from echo.interp_result import Result, ExceptionData, check_result
 from echo import code_attributes
@@ -12,7 +13,7 @@ from echo.elog import log
 from termcolor import cprint
 
 
-def _arg_join(arg_names: Sequence[Text]) -> Text:
+def _arg_join(arg_names: Sequence[str]) -> str:
     if len(arg_names) == 1:
         return "'{}'".format(arg_names[0])
     pieces = []
@@ -30,9 +31,9 @@ class _Sentinel:
 def resolve_args(
         attrs: code_attributes.CodeAttributes,
         args: Optional[Tuple[Any, ...]] = None,
-        kwargs: Optional[Dict[Text, Any]] = None,
+        kwargs: Optional[Dict[str, Any]] = None,
         defaults: Optional[Tuple[Any, ...]] = None,
-        kwarg_defaults: Optional[Dict[Text, Any]] = None
+        kwarg_defaults: Optional[Dict[str, Any]] = None
         ) -> Result[Tuple[List[Any], int]]:
     """Returns argument prefix that is pre-pended to local slots of a frame."""
     args = args or ()
@@ -70,9 +71,9 @@ def resolve_args(
         # live at its corresponding syntactical position in the argument list;
         # instead, Python appears to put it as the last argument, always.
         stararg_index: Optional[int] = attrs.stararg_index
+        assert stararg_index is not None
         arg_slots[stararg_index] = ()
     else:
-        stararg_index: Optional[int] = None
         permitted_args = attrs.total_argcount_no_skwa - attrs.kwonlyargcount
         log('ar', f'given args: {len(args)} permitted: {permitted_args}')
         if len(args) > permitted_args:
@@ -85,11 +86,11 @@ def resolve_args(
                 parameter=None,
                 exception=TypeError(msg)))
 
+    starkwarg_index: Optional[int] = None
     if attrs.starkwargs:
-        starkwarg_index: Optional[int] = attrs.starkwarg_index
+        starkwarg_index = attrs.starkwarg_index
+        assert starkwarg_index is not None
         arg_slots[starkwarg_index] = {}
-    else:
-        starkwarg_index: Optional[int] = None
 
     # Check for keyword-only arguments that were not provided.
     if attrs.kwonlyargcount:
@@ -130,7 +131,7 @@ def resolve_args(
     # "default required" annotation to None:
     #
     #       f(42, c=7) => default_required: [None, 0, None]
-    default_required = [None] * attrs.total_argcount_no_skwa
+    default_required: List[Optional[int]] = [None] * attrs.total_argcount_no_skwa
     if defaults:
         start = attrs.total_argcount_no_skwa-len(defaults)-len(kwarg_defaults)
         limit = attrs.total_argcount_no_skwa-len(kwarg_defaults)
@@ -204,10 +205,10 @@ def resolve_args(
             missing_count = sum(1 for arg in arg_slots if arg is _Sentinel)
             missing_names = [name for i, name in enumerate(arg_names)
                              if arg_slots[i] is _Sentinel]
-            missing = _arg_join(missing_names)
+            missing_str = _arg_join(missing_names)
             msg = '{}() missing {} required positional argument{}: {}'.format(
                     attrs.name, missing_count,
-                    '' if missing_count == 1 else 's', missing)
+                    '' if missing_count == 1 else 's', missing_str)
             return Result(ExceptionData(
                 traceback=None,
                 parameter=None,

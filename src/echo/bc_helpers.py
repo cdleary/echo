@@ -7,7 +7,7 @@ from typing import (
 VersionInfo = Tuple[int, int, int, str, int]
 
 
-def do_CALL_FUNCTION(fpop_n: Callable[[int], Tuple], arg: int,
+def do_CALL_FUNCTION(fpop_n: Callable[[int], Tuple[Any, ...]], arg: int,
                      version_info: VersionInfo):
     # https://docs.python.org/3.7/library/dis.html#opcode-CALL_FUNCTION
     #
