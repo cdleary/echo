@@ -6,9 +6,10 @@ from echo.interp_result import Result, check_result, ExceptionData
 from echo import interp_routines
 from echo import iteration_helpers
 from echo.eobjects import (
-    EFunction, EMethod, NativeFunction, EBuiltin, EClass, EInstance,
+    EFunction, EBuiltin, EClass, EInstance,
     register_builtin, get_guest_builtin, is_list_builtin,
 )
+from echo.builtin_genericalias import EGenericAlias
 from echo.interp_context import ICtx
 
 
@@ -185,9 +186,10 @@ def _do_list_setitem(
         args: Tuple[Any, ...],
         kwargs: Dict[Text, Any],
         ictx: ICtx) -> Result[Any]:
-    # Note that list[int] will use the unbound list type and do getitem with a
-    # type of int on the RHS -- this is supposed to give back a
-    # "types.GenericAlias".
+    if len(args) == 1:
+        assert not kwargs, (args, kwargs)
+        return Result(EGenericAlias(get_guest_builtin('list'), (args[0],)))
+
     assert len(args) == 2 and not kwargs, (args, kwargs)
     lst, index = args
     lst = _resolve(lst)

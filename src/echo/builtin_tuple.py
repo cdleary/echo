@@ -5,7 +5,7 @@ from echo.epy_object import EPyObject
 from echo.interp_result import Result, check_result
 from echo import interp_routines
 from echo.eobjects import (
-    EFunction, EMethod, NativeFunction, EBuiltin, EClass, EInstance,
+    EFunction, EBuiltin, EClass, EInstance,
     register_builtin, is_tuple_builtin, get_guest_builtin,
 )
 from echo.interp_context import ICtx

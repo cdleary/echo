@@ -5,7 +5,7 @@ from echo.epy_object import EPyObject, AttrWhere
 from echo.interp_result import Result, check_result, ExceptionData
 from echo import interp_routines
 from echo.eobjects import (
-    EFunction, EMethod, NativeFunction, EBuiltin, EClass, EInstance,
+    EFunction, EBuiltin, EClass, EInstance,
     register_builtin, get_guest_builtin, invoke_desc,
     _is_type_builtin, _is_dict_builtin, _is_object_builtin,
     _is_int_builtin,
@@ -33,7 +33,7 @@ class ESuper(EPyObject):
     def builtin_storage(self):
         return self.obj_or_type.builtin_storage
 
-    def get_type(self) -> 'EPyObject':
+    def get_type(self) -> EPyObject:
         return get_guest_builtin('super')
 
     def __repr__(self) -> Text:

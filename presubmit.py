@@ -11,6 +11,7 @@ import termcolor
 parser = optparse.OptionParser()
 parser.add_option('--skip-tests', dest='do_test', action='store_false',
                   default=True, help='Skip test phase')
+parser.add_option('--skip-style', dest='do_style', action='store_false', default=True, help='Skip style checks')
 opts, args = parser.parse_args()
 
 
@@ -59,7 +60,9 @@ subprocess.check_call([
 ])
 print('=== mypy ok!')
 
-subprocess.check_call(['pycodestyle', 'src/', 'tests/'])
+if opts.do_style:
+    subprocess.check_call(['pycodestyle', 'src/', 'tests/'])
+
 if opts.do_test:
     subprocess.check_call(['pytest', '-k', 'not knownf'])
 

@@ -92,7 +92,8 @@ class SeqIter(EPyObject):
              kwargs: Dict[Text, Any],
              locals_dict: Dict[Text, Any],
              ictx: ICtx,
-             globals_: Optional[Dict[Text, Any]] = None) -> Result[Any]:
+             globals_: Optional[Dict[Text, Any]] = None
+             ) -> Result[Any]:
         assert len(args) == 1 and not kwargs, (args, kwargs)
         gi_ = self.subject.getattr('__getitem__', ictx)
         if gi_.is_exception():
