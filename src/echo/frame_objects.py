@@ -1176,7 +1176,7 @@ class StatefulFrame:
         stack_depth_before = len(self.stack)
         result = f(arg=instruction.arg, argval=instruction.argval)
         log('bc:res', lambda: f'result {result}')
-        if result is None or type(result) == bool:
+        if result is None or type(result) is bool:
             pass
         else:
             assert isinstance(result, Result), (

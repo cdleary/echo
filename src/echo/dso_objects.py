@@ -15,7 +15,7 @@ from echo.ebuiltins import (
 
 
 def _dso_lift_container(o: Any) -> Any:
-    if type(o) == dict:
+    if type(o) is dict:
         return {_dso_lift(k): _dso_lift(v) for k, v in o.items()}
     if type(o) is tuple:
         return tuple(_dso_lift(e) for e in o)
