@@ -1,4 +1,4 @@
-"""ADT that encapsulates 'interpreter result value or error data'."""
+"""ADT that encapsulates `interpreter_result_value | error_data`."""
 
 import collections
 import functools

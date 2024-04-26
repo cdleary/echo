@@ -220,7 +220,7 @@ class StatefulFrame:
             log('fo:he', f'exc_info: {self.ictx.exc_info}')
             self._push(exception_data.traceback)
             self._push(exception_data.exception)
-            self._push(self._etype(exception_data.exception))
+            self._push(exception_data.exception)
         else:
             self._push(StackNullSentinel)
             self._push(StackNullSentinel)
@@ -1134,7 +1134,8 @@ class StatefulFrame:
             if (isinstance(item, EPyObject) or
                     isinstance(item, (types.FunctionType, types.CodeType,
                                       types.BuiltinFunctionType, type, bool,
-                                      int, str, list, dict, type(None)))):
+                                      int, str, list, dict, type(None),
+                                      Exception))):
                 s = '{!r} :: {}'.format(
                     item_type, trace_util.remove_at_hex(repr(item)))
             else:
