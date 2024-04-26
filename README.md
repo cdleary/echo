@@ -86,3 +86,9 @@ A very partial read-eval-print-loop is present for experimentation:
 $ ./bin/echo_repl
 >>>
 ```
+
+## Debugging
+
+```
+ECHO_DUMP_INSTS=1 ./bin/echo_vm  py_samples/simple_dict_comprehension.py
+```

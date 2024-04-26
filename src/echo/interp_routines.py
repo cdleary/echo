@@ -367,3 +367,11 @@ def cprint_lines_after(filename: Text, lineno: int) -> None:
                 saw_def = True
         cprint('%05d: ' % lineno, color='yellow', end='')
         cprint(line.rstrip(), color='blue')
+
+
+def dict_merge_with_error(d: Any, e: Any) -> Result[None]:
+    for k, v in e.items():
+        if k in d:
+            return Result(ExceptionData(None, None, KeyError(k)))
+        d[k] = v
+    return Result(None)

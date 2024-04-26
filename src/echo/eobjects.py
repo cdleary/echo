@@ -899,7 +899,7 @@ class EBuiltin(EPyType):
         'list.__new__', 'list.__init__',
         'list.__eq__', 'list.__repr__',
         'list.append', 'list.extend', 'list.clear', 'list.remove',
-        'list.__contains__', 'list.__iter__',
+        'list.__contains__', 'list.__iter__', 'list.__getitem__',
         'list.__setitem__',
         # tuple
         'tuple.__new__', 'tuple.__init__',

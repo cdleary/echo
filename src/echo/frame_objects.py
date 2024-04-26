@@ -356,13 +356,36 @@ class StatefulFrame:
     def _run_POP_TOP(self, arg, argval) -> None:
         self._pop()
 
+    def _run_LOAD_ASSERTION_ERROR(self, arg, argval) -> None:
+        self.stack.append(AssertionError)
+
+    def _run_DICT_MERGE(self, arg, argval) -> None:
+        tos = self._pop()
+        tos_mi = self.stack[-arg]
+        interp_routines.dict_merge_with_error(tos_mi, tos)
+
+    def _run_SET_UPDATE(self, arg, argval) -> None:
+        tos = self._pop()
+        tos_mi = self.stack[-arg]
+        set.update(tos_mi, tos)
+
     def _run_LIST_APPEND(self, arg, argval) -> None:
         tos = self._pop()
         tos_mi = self.stack[-arg]
         list.append(tos_mi, tos)
 
-    def _run_SET_UPDATE(self, arg, argval) -> None:
-        raise NotImplementedError
+    def _run_LIST_EXTEND(self, arg, argval) -> None:
+        iterable = self._pop()
+        tos_mi = self.stack[-arg]
+        list.extend(tos_mi, iterable)
+
+    def _run_CONTAINS_OP(self, arg, argval):
+        right = self._pop()
+        left = self._pop()
+        res = interp_routines.compare('in', left, right, self.ictx)
+        if res.is_exception():
+            return res
+        self.stack.append(res.get_value())
 
     def _run_IS_OP(self, arg, argval) -> None:
         tos = self._pop()
@@ -429,8 +452,8 @@ class StatefulFrame:
         return Result(dict(zip(ks, vs)))
 
     def _run_MAP_ADD(self, arg, argval) -> None:
-        k = self._pop()
         v = self._pop()
+        k = self._pop()
         map_ = self.stack[-arg]
         assert isinstance(map_, dict), map_
         si = get_guest_builtin('dict.__setitem__')
@@ -633,6 +656,21 @@ class StatefulFrame:
         else:
             self._pop()
             return False
+
+    @_sets_pc
+    def _run_JUMP_IF_NOT_EXC_MATCH(
+            self, arg, argval) -> Union[bool, Result[Any]]:
+        right = self._pop()
+        left = self._pop()
+        res = interp_routines.exception_match(left, right, self.ictx)
+        if res.is_exception():
+            return res
+        matched = res.get_value()
+        assert isinstance(matched, bool), matched
+        if matched:  # Do nothing.
+            return False
+        self.pc = arg
+        return True
 
     @_sets_pc
     def _run_FOR_ITER(self, arg, argval):
@@ -1084,7 +1122,7 @@ class StatefulFrame:
             if (isinstance(item, EPyObject) or
                     isinstance(item, (types.FunctionType, types.CodeType,
                                       types.BuiltinFunctionType, type, bool,
-                                      int, str, type(None)))):
+                                      int, str, list, dict, type(None)))):
                 s = '{!r} :: {}'.format(
                     item_type, trace_util.remove_at_hex(repr(item)))
             else:
