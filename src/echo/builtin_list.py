@@ -178,3 +178,21 @@ def _do_list_setitem(
 
     lst[name] = value
     return Result(None)
+
+
+@register_builtin('list.__getitem__')
+def _do_list_setitem(
+        args: Tuple[Any, ...],
+        kwargs: Dict[Text, Any],
+        ictx: ICtx) -> Result[Any]:
+    # Note that list[int] will use the unbound list type and do getitem with a
+    # type of int on the RHS -- this is supposed to give back a
+    # "types.GenericAlias".
+    assert len(args) == 2 and not kwargs, (args, kwargs)
+    lst, index = args
+    lst = _resolve(lst)
+
+    if isinstance(index, int):
+        return Result(lst[index])
+
+    raise NotImplementedError(lst, index)

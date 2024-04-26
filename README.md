@@ -114,3 +114,8 @@ $ vimdiff /tmp/bad.txt /tmp/good.txt
 
 From here you can eyeball where the value stacks seem to diverge to understand
 why echo may have produced a different result from CPython.
+
+## Design Notes
+
+Builtins are dispatched via `EBuiltin` in `eobjects.py` -- the implementations
+for those are registered through decorated functions in `builtin_*.py` files.

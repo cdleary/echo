@@ -1033,7 +1033,10 @@ class EBuiltin(EPyType):
             if self.bound_self is not None:
                 args = (self.bound_self,) + args
             return self._registry[self.name][0](args, kwargs, ictx)
-        raise NotImplementedError(self.name)
+
+        raise NotImplementedError(
+                'Did not find {!r} in {!r}'.format(self.name,
+                                                   self._registry.keys()))
 
     def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
         if name in self.dict_:
