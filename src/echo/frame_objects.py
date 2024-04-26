@@ -369,6 +369,10 @@ class StatefulFrame:
         tos_mi = self.stack[-arg]
         set.update(tos_mi, tos)
 
+    def _run_LIST_TO_TUPLE(self, arg, argval) -> None:
+        lst = self._pop()
+        self.stack.append(tuple(lst))
+
     def _run_LIST_APPEND(self, arg, argval) -> None:
         tos = self._pop()
         tos_mi = self.stack[-arg]

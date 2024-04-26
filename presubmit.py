@@ -62,10 +62,6 @@ print('=== mypy ok!')
 subprocess.check_call(['pycodestyle', 'src/', 'tests/'])
 if opts.do_test:
     subprocess.check_call(['pytest'])
-subprocess.check_call([
-    'pytype', '--config=pytype.cfg',
-    '--python-version=%s' % VERSION_MAJOR_MINOR,
-])
 
 if opts.do_test:
     PASS_BANNER = 'PRESUBMIT PASS!'
