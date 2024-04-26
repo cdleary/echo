@@ -31,6 +31,11 @@ is run on Python 3.10, there will be a lot of new bytecodes that it doesn't
 know about. The implementation of echo must be updated for changes in CPython
 versions since it implements the bytecode specification.
 
+Also, as the standard library is changed from Python version to the next Python
+version, novel constructs/combinations may be exposed that had not previously
+been tested; i.e. `import X` may work fine in version 3.x but then encounter
+difficulties in 3.y if the implementation of `X` changes significantly.
+
 ## Usage
 
 The `echo.py` command line utility attempts to act like a substitute Python
