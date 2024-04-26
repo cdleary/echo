@@ -386,7 +386,8 @@ class StatefulFrame:
     def _run_CONTAINS_OP(self, arg, argval):
         right = self._pop()
         left = self._pop()
-        res = interp_routines.compare('in', left, right, self.ictx)
+        op = 'not in' if argval else 'in'
+        res = interp_routines.compare(op, left, right, self.ictx)
         if res.is_exception():
             return res
         self.stack.append(res.get_value())

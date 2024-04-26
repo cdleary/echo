@@ -27,7 +27,6 @@ EVM_FAILING_SAMPLES = [
     'simple_repr_udt',
     'type_subclass_of_abc',
     'dunder_base',
-    'simple_exec',
     'simple_with_raise',
 ]
 
