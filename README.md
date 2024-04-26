@@ -1,5 +1,7 @@
 # echo
 
+[![CI](https://github.com/cdleary/echo/actions/workflows/ci.yml/badge.svg)](https://github.com/cdleary/echo/actions/workflows/ci.yml)
+
 Experimental Python meta-circular evaluator. Inspired by the approach taken by
 [Narcissus](https://github.com/mozilla/narcissus).
 
