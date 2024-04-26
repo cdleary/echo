@@ -96,6 +96,21 @@ $ ./bin/echo_repl
 
 ## Debugging
 
+There is a mechanism to dump interpreter state as the bytecodes execute:
+
 ```
 ECHO_DUMP_INSTS=1 ./bin/echo_vm  py_samples/simple_dict_comprehension.py
 ```
+
+You can use this to "differential debug" against the CPython VM internals
+(using a minimal tracer implemented using CPython `sys.settrace` hook and
+`ctypes`):
+
+```
+$ ECHO_DUMP_INSTS=1 ./bin/echo_vm py_samples/knownf_try_except_reraise.py 2>&1 | tee /tmp/bad.txt
+$ ./bin/minimal_tracer.py py_samples/knownf_try_except_reraise.py > /tmp/good.txt
+$ vimdiff /tmp/bad.txt /tmp/good.txt
+```
+
+From here you can eyeball where the value stacks seem to diverge to understand
+why echo may have produced a different result from CPython.
