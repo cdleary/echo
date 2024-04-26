@@ -35,10 +35,29 @@ class CtypeFrame:
             'f_stacktop': 9,
             'f_localsplus': 45,
         },
+        # https://github.com/python/cpython/blob/3.9/Include/cpython/frameobject.h#L17
+        (3, 9): {
+            'f_back': 3,
+            'f_code': 4,
+            'f_builtins': 5,
+            'f_globals': 6,
+            'f_locals': 7,  # "Local symbol table".
+            'f_valuestack': 8,
+            'f_stacktop': 9,
+            'f_localsplus': 45,
+        },
     }
     ULONG_SIZE_IN_BYTES = 8
     UINT_SIZE_IN_BYTES = 4
     PTR_TO_LONG = ctypes.POINTER(ctypes.c_ulong)
+    VERSION_TO_FRAME_IBLOCK_OFFSET = {
+        (3, 7): 112,
+        (3, 9): 112,
+    }
+    VERSION_TO_FRAME_BLOCK_STACK_OFFSET = {
+        (3, 7): 120,
+        (3, 9): 120,
+    }
 
     def __init__(self, frame: types.FrameType):
         self.frame_id = id(frame)
@@ -94,10 +113,12 @@ class CtypeFrame:
         return self.frame_ptr[self.offsets['f_stacktop']]
 
     def print_block_stack(self, printer) -> None:
-        assert sys.version_info[:2] == (3, 7)
-        f_iblock = ctypes.cast(
+        version = tuple(sys.version_info[:2])
+        iblock_offset = self.VERSION_TO_FRAME_IBLOCK_OFFSET[version]
+        frame_uints = ctypes.cast(
             self.frame_id,
-            ctypes.POINTER(ctypes.c_uint))[112//self.UINT_SIZE_IN_BYTES]
+            ctypes.POINTER(ctypes.c_uint))
+        f_iblock = frame_uints[iblock_offset//self.UINT_SIZE_IN_BYTES]
 
         type_to_str = {
             257: 'EXCEPT_HANDLER',
@@ -106,7 +127,8 @@ class CtypeFrame:
             122: 'SETUP_FINALLY',
         }
 
-        f_blockstack = ctypes.cast(self.frame_id+120,
+        blockstack_offset = self.VERSION_TO_FRAME_BLOCK_STACK_OFFSET[version]
+        f_blockstack = ctypes.cast(self.frame_id+blockstack_offset,
                                    ctypes.POINTER(_PyTryBlock))
         if not f_iblock:
             return
@@ -124,7 +146,7 @@ class CtypeFrame:
             return None
         return self._id2obj(value)
 
-    def print_stack(self, *, do_localsplus: bool, printer=print):
+    def print_stack(self, *, do_localsplus: bool, printer=print) -> None:
         # Left in, just in case there's some need to look at the pointer
         # values.
         #

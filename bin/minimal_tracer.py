@@ -6,9 +6,11 @@ import optparse
 import os
 import pprint
 import sys
+import types
 
 from echo import trace_util
 from echo import ctype_frame
+from echo import cpython_tracer
 
 
 stack = True
@@ -43,7 +45,7 @@ def get_histo_name(instruction, frame):
     return instruction.opname
 
 
-def _print_inst(instruction, frame):
+def _print_inst(instruction: dis.Instruction, frame: types.FrameType) -> None:
     global opcodeno
     if bc_histo is not None:
         bc_histo[get_histo_name(instruction, frame)] += 1
@@ -56,42 +58,13 @@ def _print_inst(instruction, frame):
     if limit is not None and opcodeno > limit:
         sys.exit(0)
 
+    if stack and bc_histo is None:
+        ctf = ctype_frame.CtypeFrame(frame)
+        ctf.print_stack(do_localsplus=False, printer=_print_stack)
+
 
 def _print_stack(*args):
     print(' ' * 8, *args)
-
-
-def note_trace(frame, event, arg):
-    filename = frame.f_code.co_filename
-    if filename.startswith('<frozen'):
-        return note_trace
-
-    frame.f_trace_opcodes = True
-    frame.f_trace = note_trace
-    #print(repr(event), frame)
-    if event == 'call':
-        #print(repr(event), frame)
-        pass
-    elif event == 'opcode':
-        instructions = dis.get_instructions(frame.f_code)
-        instruction = next(inst for inst in instructions
-                           if inst.offset == frame.f_lasti)
-        _print_inst(instruction, frame)
-        if instruction.opname == 'EXTENDED_ARG':
-            # For some reason the opcode after the extended arg doesn't seem
-            # to get traced.
-            instruction2 = next(inst for inst in instructions
-                               if inst.offset > frame.f_lasti)
-            _print_inst(instruction2, frame)
-        if stack and bc_histo is None:
-            ctf = ctype_frame.CtypeFrame(frame)
-            ctf.print_stack(do_localsplus=False, printer=_print_stack)
-    elif event == 'return':
-        #print('=>', repr(arg), repr(type(arg)))
-        pass
-    else:
-        pass
-    return note_trace
 
 
 def main():
@@ -109,24 +82,8 @@ def main():
     limit = opts.limit
     show_opcodeno = opts.opcodeno
 
-    sys.argv = args
-    with open(path) as f:
-        contents = f.read()
-    globals_ = {'__name__': '__main__', '__file__': os.path.realpath(path)}
-    #del sys.modules['enum']
-    #del sys.modules['re']
-    #del sys.modules['sre_compile']
-    #del sys.modules['sre_parse']
-    #del sys.modules['sre_constants']
-    #del sys.modules['types']
-    #sys.modules.pop('collections')
-    f = sys._getframe(0)
-    code = compile(contents, os.path.realpath(path), 'exec')
-    sys.settrace(note_trace)
-    try:
-        exec(code, globals_)
-    finally:
-        sys.settrace(None)
+    cpython_tracer.trace_path(args[0], _print_inst)
+
     if opts.bc_histo:
         pprint.pprint(bc_histo.most_common())
 
