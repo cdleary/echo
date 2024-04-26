@@ -20,6 +20,8 @@ from echo import emodule
 SAMPLE_DIR = 'py_samples'
 SAMPLE_FILES = [os.path.join(SAMPLE_DIR, p) for p in os.listdir(SAMPLE_DIR)
                 if p.endswith('.py') and not p.startswith('noexec')]
+
+# Python samples that are known to fail with echo VM.
 EVM_FAILING_SAMPLES = [
     'bad_class_kwarg',
     'import_numpy',
