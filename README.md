@@ -21,7 +21,13 @@ By performing guest-interpreter evaluation via the host interpreter, we can:
 * Potentially making the guest-language extensible in future
   work.
 
-[![Build Status](https://travis-ci.com/cdleary/echo.svg?branch=master)](https://travis-ci.com/cdleary/echo)
+## Implementation Note
+
+The implementation of echo is intimately related to the Python version it's
+running on; e.g. if echo was last developed/updated for Python 3.7 and then it
+is run on Python 3.10, there will be a lot of new bytecodes that it doesn't
+know about. The implementation of echo must be updated for changes in CPython
+versions since it implements the bytecode specification.
 
 ## Usage
 
@@ -64,12 +70,7 @@ py.test-3 -k kwarg --log-cli-level=DEBUG
 
 ### Type checking
 
-Type annotations are used where appropriate and checked via the "pytype"
-command line utility:
-
-```
-pytype --config=pytype.cfg --python-version=3.6
-```
+Type checking was previously done via pytype but is switching to be mypy based.
 
 ### CPython bytecode tracing
 
