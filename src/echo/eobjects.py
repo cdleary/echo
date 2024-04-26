@@ -102,6 +102,8 @@ class EFunction(EPyObject):
             return Result(EFunctionType_singleton)
         if name == '__dict__':
             return Result(self.dict_)
+        if name == '__closure__':
+            return Result(self.closure)
         if name == '__defaults__':
             return Result(self.defaults)
         if name == '__get__':
