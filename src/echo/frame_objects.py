@@ -964,6 +964,13 @@ class StatefulFrame:
         assert self._handle_exception(WhyStatus.CONTINUE, None, arg)
         return True
 
+    def _run_RERAISE(self, arg, argval) -> Result[None]:
+        exc = self._pop()
+        val = self._pop()
+        tb = self._pop()
+        # TODO(cdleary): 2024-04-25 Check exc is an exception class.
+        return Result(ExceptionData(tb, val, exc))
+
     def _run_RAISE_VARARGS(self, arg, argval):
         argc = arg
         cause, exc = _Sentinel, _Sentinel
