@@ -111,7 +111,7 @@ _BINARY_OPS = {
     'BINARY_FLOOR_DIVIDE': operator.floordiv,
     'BINARY_POWER': operator.pow,
 }
-_UNARY_OPS = {
+_UNARY_OPS: Dict[str, Callable[[Any], Any]] = {
     'UNARY_INVERT': operator.invert,
     'UNARY_NEGATIVE': operator.neg,
     'UNARY_POSITIVE': operator.pos,
@@ -120,7 +120,7 @@ _UNARY_OPS = {
 
 @check_result
 def run_unop(opname: Text, arg: Any, ictx: ICtx) -> Result[Any]:
-    op = _UNARY_OPS[opname]
+    op: Callable[[Any], Any] = _UNARY_OPS[opname]
     if type(arg) in BUILTIN_VALUE_TYPES:
         return Result(op(arg))
     raise NotImplementedError(opname)

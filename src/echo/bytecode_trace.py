@@ -46,8 +46,8 @@ class BytecodeTraceEntry:
 
 class AbstractTraceDumper(metaclass=abc.ABCMeta):
 
-    def __init__(self):
-        self.entries = []  # type: List[BytecodeTraceEntry]
+    def __init__(self) -> None:
+        self.entries: List[BytecodeTraceEntry] = []
 
     @abc.abstractmethod
     def note_instruction(self, instruction: dis.Instruction):

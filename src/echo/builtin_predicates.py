@@ -71,7 +71,7 @@ def _do_any(args: Tuple[Any, ...],
 
     def callback(item) -> Result[bool]:
         res = do_bool.invoke((item,), {}, {}, ictx)
-        if res.is_exception:
+        if res.is_exception():
             return res
         b = res.get_value()
         assert isinstance(b, bool), b

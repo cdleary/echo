@@ -208,8 +208,10 @@ class DsoModuleProxy(DsoPyObject):
         self.wrapped = wrapped
 
     @property
-    def filename(self) -> Text:
-        return self.wrapped.__file__
+    def filename(self) -> str:
+        file = self.wrapped.__file__
+        assert file is not None
+        return file
 
     @property
     def fully_qualified_name(self) -> Text:

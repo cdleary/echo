@@ -131,7 +131,8 @@ def resolve_args(
     # "default required" annotation to None:
     #
     #       f(42, c=7) => default_required: [None, 0, None]
-    default_required: List[Optional[int]] = [None] * attrs.total_argcount_no_skwa
+    default_required: List[Optional[int]] = \
+        [None] * attrs.total_argcount_no_skwa
     if defaults:
         start = attrs.total_argcount_no_skwa-len(defaults)-len(kwarg_defaults)
         limit = attrs.total_argcount_no_skwa-len(kwarg_defaults)
