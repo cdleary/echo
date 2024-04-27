@@ -54,7 +54,7 @@ class EFunction(EPyObject):
         }
 
     def get_type(self) -> EPyType:
-        return EFunctionType_singleton
+        return EFunctionType.get_singleton()
 
     def __repr__(self):
         return '<{}function {} at {:#x}>'.format(E_PREFIX, self.name, id(self))
@@ -100,7 +100,7 @@ class EFunction(EPyObject):
 
     def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
         if name == '__class__':
-            return Result(EFunctionType_singleton)
+            return Result(EFunctionType.get_singleton())
         if name == '__dict__':
             return Result(self.dict_)
         if name == '__closure__':
@@ -701,6 +701,14 @@ class EClass(EPyType):
 
 
 class EFunctionType(EPyType):
+    _singleton: Optional[EPyType] = None
+
+    @classmethod
+    def get_singleton(cls) -> EPyType:
+        if cls._singleton is None:
+            cls._singleton = EFunctionType()
+        return cls._singleton
+
     def __repr__(self) -> Text:
         return "<{}class 'function'>".format(E_PREFIX)
 

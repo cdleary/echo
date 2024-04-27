@@ -8,6 +8,15 @@ from echo.enative_fn import ENativeFn
 
 
 class EFunctionType(EPyType):
+    _singleton: Optional[EPyType] = None
+
+    @classmethod
+    def get_singleton(cls) -> EPyType:
+        if cls._singleton is not None:
+            return cls._singleton
+        cls._singleton = EFunctionType()
+        return cls._singleton
+
     def __repr__(self) -> str:
         return "<{}class 'function'>".format(E_PREFIX)
 
@@ -53,6 +62,3 @@ class EFunctionType(EPyType):
 
     def setattr(self, name: str, value: Any, ictx: ICtx) -> Any:
         raise NotImplementedError
-
-
-EFunctionType_singleton = EFunctionType()

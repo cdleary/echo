@@ -3,6 +3,7 @@ from typing import Callable, Optional, Any
 from echo.epy_object import EPyObject, EPyType, AttrWhere
 from echo.interp_result import Result, check_result
 from echo.interp_context import ICtx
+from echo import eobjects
 
 
 class ENativeFn(EPyObject):
@@ -15,7 +16,7 @@ class ENativeFn(EPyObject):
         return f'<built-in function {self.name}>'
 
     def get_type(self) -> EPyType:
-        return EFunctionType_singleton
+        return eobjects.EFunctionType.get_singleton()
 
     def hasattr_where(self, name: str) -> Optional[AttrWhere]:
         return None
