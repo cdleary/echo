@@ -135,7 +135,7 @@ class StatefulFrame:
     def __init__(self,
                  code: types.CodeType,
                  pc_to_instruction: List[Optional[dis.Instruction]],
-                 pc_to_bc_width: List[int],
+                 pc_to_bc_width: List[Optional[int]],
                  locals_: List[Any],
                  locals_dict: Optional[Dict[Text, Any]],
                  globals_: Dict[Text, Any],
@@ -1226,7 +1226,8 @@ class StatefulFrame:
 
         if ((not f_sets_pc) or
                 (f_sets_pc and not self._maybe_box_result_truthy(result))):
-            width = self.pc_to_bc_width[self.pc]
+            width: Optional[int] = self.pc_to_bc_width[self.pc]
+            assert width is not None
             self.pc += width
 
         return None

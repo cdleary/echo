@@ -3,6 +3,7 @@
 
 from typing import Text, Tuple, Any, Dict, Optional
 
+from echo.enative_fn import ENativeFn
 from echo.elog import log
 from echo.epy_object import EPyObject, EPyType, AttrWhere
 from echo.interp_result import Result, ExceptionData, check_result
@@ -77,7 +78,7 @@ class EGenericAlias(EPyObject):
     def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
         if name == '__eq__':
             return Result(EMethod(ENativeFn(_do_ga_eq,
-                                                 'types.GenericAlias.__eq__'),
+                                            'types.GenericAlias.__eq__'),
                                   bound_self=self))
         raise NotImplementedError(self, name)
 

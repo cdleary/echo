@@ -29,5 +29,3 @@ class ENativeFn(EPyObject):
     @check_result
     def invoke(self, *args, **kwargs) -> Result[Any]:
         return self.f(*args, **kwargs)
-
-

@@ -139,7 +139,8 @@ def interp(code: types.CodeType,
             cellvars[i].set(local_value)
 
     instructions = tuple(dis.get_instructions(code))
-    pc_to_instruction: List[Optional[dis.Instruction]] = [None] * (instructions[-1].offset+1)
+    pc_to_instruction: List[Optional[dis.Instruction]] = \
+        [None] * (instructions[-1].offset+1)
     pc_to_bc_width: List[Optional[int]] = [None] * (instructions[-1].offset+1)
     for i, instruction in enumerate(instructions):
         pc_to_instruction[instruction.offset] = instruction
@@ -148,10 +149,7 @@ def interp(code: types.CodeType,
                 instructions[i+1].offset-instruction.offset)
     del instructions
 
-    assert not any(width is None for width in pc_to_bc_width)
-    pc_to_bc_width_full = cast(list[int], pc_to_bc_width)
-
-    f = StatefulFrame(code, pc_to_instruction, pc_to_bc_width_full, locals_,
+    f = StatefulFrame(code, pc_to_instruction, pc_to_bc_width, locals_,
                       locals_dict, globals_, cellvars, in_function, ictx)
 
     if attrs.generator:
