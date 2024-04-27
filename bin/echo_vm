@@ -36,7 +36,7 @@ import termcolor
 
 def _print_surrounding(filename: Text, lineno: int) -> None:
     with open(filename) as f:
-        lines = list(enumerate((l.rstrip() for l in f), start=1))
+        lines = list(enumerate((line.rstrip() for line in f), start=1))
     print(f' {filename}:{lineno}', file=sys.stderr)
     for i, line in lines[max(lineno-8, 0):lineno+8]:
         arrow = termcolor.colored('==>', 'blue') if i == lineno else '   '
@@ -46,7 +46,8 @@ def _print_surrounding(filename: Text, lineno: int) -> None:
 
 def _handle_result(result: Result[Any]) -> int:
     if result.is_exception():
-        termcolor.cprint(repr(result.get_exception().exception), color='red', file=sys.stderr)
+        termcolor.cprint(repr(result.get_exception().exception), color='red',
+                         file=sys.stderr)
         tb = result.get_exception().traceback
         assert isinstance(tb, etraceback.ETraceback)
         for filename, lineno in etraceback.walk(tb):
@@ -79,8 +80,11 @@ def main() -> int:
     parser.add_option('-c', default=None,
                       help='Literal text to execute.')
     parser.add_option('--dump_trace', help='Path to dump bytecode trace to.')
-    parser.add_option('--call_profile', action='store_true', default=False, help='Profile calls.')
-    parser.add_option('--preload', default='', help='Modules to pre-load before potentially dumping instructions.')
+    parser.add_option('--call_profile', action='store_true',
+                      default=False, help='Profile calls.')
+    parser.add_option('--preload', default='',
+                      help='Modules to pre-load before potentially dumping '
+                           'instructions.')
     opts, args = parser.parse_args()
 
     # Options.
@@ -91,8 +95,9 @@ def main() -> int:
         state = interp.InterpreterState(os.getcwd())
         module_code = compile(opts.c, '<text>', 'exec')
         ictx = interp_context.ICtx(state, interp.interp, interp.do_call)
-        result = ictx.interp_callback(module_code, globals_={}, in_function=False,
-                             name='__main__', ictx=ictx)
+        result = ictx.interp_callback(module_code, globals_={},
+                                      in_function=False, name='__main__',
+                                      ictx=ictx)
         return _handle_result(result)
 
     # Path.
@@ -110,16 +115,20 @@ def main() -> int:
     state.paths = sys.path[1:] + state.paths
     fully_qualified = '__main__'
 
-    builtins = emodule.EModule('builtins', filename='<built-in>', globals_=ebuiltins.make_ebuiltins())
+    builtins = emodule.EModule('builtins', filename='<built-in>',
+                               globals_=ebuiltins.make_ebuiltins())
     esys = builtin_sys_module.make_sys_module(sys.argv)
-    ictx = interp_context.ICtx(state, interp.interp, interp.do_call, builtins, esys)
+    ictx = interp_context.ICtx(state, interp.interp, interp.do_call, builtins,
+                               esys)
     if opts.call_profile:
         ictx.call_profiler = call_profiler.CallProfiler()
 
     with suppress_env_vars(('ECHO_DUMP_INSTS', 'ECHO_DEBUG')):
         if opts.preload:
             for mod in opts.preload.split(','):
-                assert not import_routines.run_IMPORT_NAME('fake', 0, (), mod, dict(__name__=mod), ictx).is_exception()
+                assert not import_routines.run_IMPORT_NAME('fake', 0, (), mod,
+                                                           dict(__name__=mod),
+                                                           ictx).is_exception()
 
     try:
         result = interp.import_path(fullpath, fully_qualified, fully_qualified,

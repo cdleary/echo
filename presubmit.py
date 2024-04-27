@@ -61,7 +61,7 @@ subprocess.check_call([
 print('=== mypy ok!')
 
 if opts.do_style:
-    subprocess.check_call(['pycodestyle', 'src/', 'tests/'])
+    subprocess.check_call(['pycodestyle', 'src/', 'tests/', 'bin/echo_vm'])
 
 if opts.do_test:
     subprocess.check_call(['pytest', '-k', 'not knownf'])
