@@ -58,14 +58,14 @@ subprocess.check_call([
     'src/echo/trace_util.py',
     'src/echo/value.py',
 ])
-print('=== mypy ok!')
+print('=== mypy ok!', file=sys.stderr)
 
 if opts.do_style:
-    print('=== pycodestyle')
+    print('=== pycodestyle', file=sys.stderr)
     subprocess.check_call(['pycodestyle', 'src/', 'tests/', 'bin/echo_vm'])
 
 if opts.do_test:
-    print('=== pytest')
+    print('=== pytest', file=sys.stderr)
     subprocess.check_call(['pytest', '-k', 'not knownf'])
 
 if opts.do_test:
