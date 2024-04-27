@@ -8,7 +8,7 @@ from echo.epy_object import EPyObject, EPyType, AttrWhere
 from echo.interp_result import Result, ExceptionData, check_result
 from echo import interp_routines
 from echo.eobjects import (
-    EFunction, EMethod, NativeFunction, EBuiltin, EClass, EInstance,
+    EFunction, EMethod, EBuiltin, EClass, EInstance,
     register_builtin, _is_dict_builtin, get_guest_builtin, E_PREFIX
 )
 from echo.interp_context import ICtx
@@ -76,7 +76,7 @@ class EGenericAlias(EPyObject):
 
     def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
         if name == '__eq__':
-            return Result(EMethod(NativeFunction(_do_ga_eq,
+            return Result(EMethod(ENativeFn(_do_ga_eq,
                                                  'types.GenericAlias.__eq__'),
                                   bound_self=self))
         raise NotImplementedError(self, name)

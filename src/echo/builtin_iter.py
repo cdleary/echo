@@ -6,10 +6,11 @@ from collections import OrderedDict as odict
 
 from echo.elog import log
 from echo.epy_object import EPyObject, AttrWhere, EPyType, try_invoke
+from echo.enative_fn import ENativeFn
 from echo.interp_result import Result, ExceptionData, check_result
 from echo import interp_routines
 from echo.eobjects import (
-    EFunction, EMethod, NativeFunction, EBuiltin, EClass, EInstance,
+    EFunction, EMethod, EBuiltin, EClass, EInstance,
     register_builtin, _is_dict_builtin, get_guest_builtin,
 )
 from echo.interp_context import ICtx
@@ -76,7 +77,7 @@ class SeqIter(EPyObject):
     def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
         if name == '__next__':
             return Result(EMethod(
-                NativeFunction(self.next, 'seqiter.__next__'),
+                ENativeFn(self.next, 'seqiter.__next__'),
                 bound_self=self))
         raise NotImplementedError(self, name)
 

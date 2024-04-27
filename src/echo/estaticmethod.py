@@ -1,9 +1,10 @@
 from typing import Text, Tuple, Any, Dict, Optional
 
+from echo.enative_fn import ENativeFn
 from echo.epy_object import EPyObject, AttrWhere, EPyType
 from echo.interp_result import Result, ExceptionData, check_result
 from echo.eobjects import (
-    EFunction, EMethod, NativeFunction, EBuiltin,
+    EFunction, EMethod, EBuiltin,
     get_guest_builtin, E_PREFIX,
 )
 from echo.interp_context import ICtx
@@ -44,7 +45,7 @@ class EStaticMethod(EPyObject):
     @check_result
     def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
         if name == '__get__':
-            return Result(NativeFunction(
+            return Result(ENativeFn(
                 self._get, 'estaticmethod.__get__'))
         if name == '__func__':
             return Result(self.f)

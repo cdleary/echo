@@ -4,7 +4,7 @@ from typing import Text, Tuple, Any, Dict, Optional
 from echo.epy_object import EPyObject, AttrWhere, EPyType
 from echo.interp_result import Result, ExceptionData, check_result
 from echo.eobjects import (
-    EFunction, EMethod, NativeFunction, EBuiltin,
+    EFunction, EMethod, EBuiltin,
     get_guest_builtin,
 )
 from echo.interp_context import ICtx

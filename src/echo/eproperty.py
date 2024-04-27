@@ -2,8 +2,9 @@ from typing import Text, Tuple, Any, Dict, Optional
 
 from echo.epy_object import EPyObject, AttrWhere, EPyType, try_invoke
 from echo.interp_result import Result, ExceptionData, check_result
+from echo.enative_fn import ENativeFn
 from echo.eobjects import (
-    EFunction, EMethod, NativeFunction, EBuiltin,
+    EFunction, EMethod, EBuiltin,
     get_guest_builtin,
 )
 from echo.elog import log
@@ -80,13 +81,13 @@ class EProperty(EPyObject):
         if name == 'fset':
             return Result(self.fset)
         if name == '__get__':
-            return Result(EMethod(NativeFunction(
+            return Result(EMethod(ENativeFn(
                 self._get, 'eproperty.__get__'), bound_self=self))
         if name == '__set__':
-            return Result(EMethod(NativeFunction(
+            return Result(EMethod(ENativeFn(
                 self._set, 'eproperty.__set__'), bound_self=self))
         if name == 'setter':
-            return Result(EMethod(NativeFunction(
+            return Result(EMethod(ENativeFn(
                 self._setter, 'eproperty.setter'), bound_self=self))
         if name == '__doc__':
             return Result(self.doc)

@@ -14,7 +14,8 @@ from echo.interp_context import ICtx
 from echo.interp_result import Result, ExceptionData
 from echo.emodule import EModule
 from echo.dso_objects import DsoModuleProxy
-from echo.eobjects import NativeFunction, get_guest_builtin
+from echo.enative_fn import ENativeFn
+from echo.eobjects import get_guest_builtin
 from echo import builtin_sys_module
 
 from termcolor import cprint

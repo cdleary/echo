@@ -14,6 +14,7 @@ from typing import (
 import weakref
 
 from echo.return_kind import ReturnKind
+from echo.enative_fn import ENativeFn
 from echo.epy_object import (
     EPyObject, AttrWhere, EPyType, NoContextException, safer_repr, try_invoke,
 )
@@ -107,7 +108,7 @@ class EFunction(EPyObject):
         if name == '__defaults__':
             return Result(self.defaults)
         if name == '__get__':
-            return Result(EMethod(NativeFunction(
+            return Result(EMethod(ENativeFn(
                 self._get, 'efunction.__get__'), bound_self=self))
         if name == '__call__':
             return Result(self)
@@ -229,7 +230,7 @@ EMethodType_singleton = EMethodType()
 
 class EMethod(EPyObject):
 
-    def __init__(self, f: Union[EFunction, 'NativeFunction'], bound_self):
+    def __init__(self, f: Union[EFunction, ENativeFn], bound_self):
         self.f = f
         self.bound_self = bound_self
 
@@ -739,7 +740,7 @@ class EFunctionType(EPyType):
             return Result(None)
 
         if name == '__get__':
-            return Result(NativeFunction(self._get_desc, 'efunction.__get__'))
+            return Result(ENativeFn(self._get_desc, 'efunction.__get__'))
 
         raise NotImplementedError
 
@@ -1131,7 +1132,7 @@ class EBuiltin(EPyType):
 
         if (self.name in self.BUILTIN_FNS
                 and name == '__get__'):
-            return Result(EMethod(NativeFunction(
+            return Result(EMethod(ENativeFn(
                 self._get, 'ebuiltin.__get__'), bound_self=self))
 
         if (self.name in self.BUILTIN_FNS
@@ -1189,32 +1190,6 @@ def get_guest_builtin(name: Text) -> EBuiltin:
 
 def get_guest_builtin_self(name: Text, self: Any) -> EBuiltin:
     return EBuiltin(name, self)
-
-
-class NativeFunction(EPyObject):
-
-    def __init__(self, f: Callable[..., Result], name: Text):
-        self.f = f
-        self.name = name
-
-    def __repr__(self) -> Text:
-        return f'<built-in function {self.name}>'
-
-    def get_type(self) -> EPyType:
-        return EFunctionType_singleton
-
-    def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
-        return None
-
-    def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
-        raise NotImplementedError
-
-    def setattr(self, name: Text, value: Any, ictx: ICtx) -> Result[None]:
-        raise NotImplementedError
-
-    @check_result
-    def invoke(self, *args, **kwargs) -> Result[Any]:
-        return self.f(*args, **kwargs)
 
 
 @check_result

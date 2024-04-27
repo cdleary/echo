@@ -3,12 +3,13 @@ from typing import Text, Tuple, Any, Dict, Optional
 from echo.epy_object import EPyObject, AttrWhere, EPyType
 from echo.interp_result import Result, ExceptionData, check_result
 from echo.eobjects import (
-    EFunction, EMethod, NativeFunction, EBuiltin,
+    EFunction, EMethod, EBuiltin,
     get_guest_builtin,
 )
 from echo.return_kind import ReturnKind
 from echo.interp_context import ICtx
 from echo.value import Value
+from echo.enative_fn import ENativeFn
 
 
 class EGeneratorType(EPyType):
@@ -73,10 +74,10 @@ class EGenerator(EPyObject):
 
     def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
         if name == '__iter__':
-            return Result(EMethod(NativeFunction(
+            return Result(EMethod(ENativeFn(
                 self._iter, 'egenerator.__iter__'), bound_self=self))
         if name == '__next__':
-            return Result(EMethod(NativeFunction(
+            return Result(EMethod(ENativeFn(
                 self._next, 'egenerator.__next__'), bound_self=self))
         msg = f'Cannot find attribute {name} on {self}'
         return Result(ExceptionData(None, name, AttributeError(msg)))

@@ -35,8 +35,9 @@ from echo.eobjects import (
     EFunction, EBuiltin, EPyObject,
     EClass, EMethod,
     EAsyncGenerator, ReturnKind,
-    NativeFunction, get_guest_builtin, register_builtin,
+    get_guest_builtin, register_builtin,
 )
+from echo.enative_fn import ENativeFn
 from echo import interp_routines
 from echo.frame_objects import StatefulFrame, UnboundLocalSentinel
 from echo.value import Value
@@ -138,8 +139,8 @@ def interp(code: types.CodeType,
             cellvars[i].set(local_value)
 
     instructions = tuple(dis.get_instructions(code))
-    pc_to_instruction = [None] * (instructions[-1].offset+1)
-    pc_to_bc_width = [None] * (instructions[-1].offset+1)
+    pc_to_instruction: List[Optional[dis.Instruction]] = [None] * (instructions[-1].offset+1)
+    pc_to_bc_width: List[Optional[int]] = [None] * (instructions[-1].offset+1)
     for i, instruction in enumerate(instructions):
         pc_to_instruction[instruction.offset] = instruction
         if i+1 != len(instructions):
@@ -147,7 +148,10 @@ def interp(code: types.CodeType,
                 instructions[i+1].offset-instruction.offset)
     del instructions
 
-    f = StatefulFrame(code, pc_to_instruction, pc_to_bc_width, locals_,
+    assert not any(width is None for width in pc_to_bc_width)
+    pc_to_bc_width_full = cast(list[int], pc_to_bc_width)
+
+    f = StatefulFrame(code, pc_to_instruction, pc_to_bc_width_full, locals_,
                       locals_dict, globals_, cellvars, in_function, ictx)
 
     if attrs.generator:
@@ -225,7 +229,7 @@ def do_call(f,
     elif f is get_sunder_sre().compile:
         return _do_call_sre_compile(args, kwargs, ictx)
     elif type(f) in (EFunction, EMethod, EClassMethod, EStaticMethod,
-                     NativeFunction, DsoFunctionProxy, EClass, EBuiltin):
+                     ENativeFn, DsoFunctionProxy, EClass, EBuiltin):
         return f.invoke(args, kwargs, locals_dict, ictx, globals_=globals_)
     elif issubclass(type(f), EPyObject) and f.hasattr('__call__'):
         f_call = f.getattr('__call__', ictx)
@@ -241,7 +245,7 @@ def do_call(f,
             return Result(f(*args, **kwargs))  # Native call.
     else:
         if isinstance(f, EPyObject):
-            type_name = f.get_type().name
+            type_name = f.get_type().get_name()
         else:
             type_name = type(f).__name__
         return Result(ExceptionData(
@@ -250,7 +254,7 @@ def do_call(f,
 
 
 def run_function(f: types.FunctionType, *args: Tuple[Any, ...],
-                 builtins: EModule = None,
+                 builtins: Optional[EModule] = None,
                  globals_: Optional[Dict[Text, Any]] = None) -> Any:
     """Interprets f in the echo interpreter, returns unwrapped result."""
     state = InterpreterState(script_directory=None)

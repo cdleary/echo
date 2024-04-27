@@ -1,7 +1,8 @@
 import sys
 from typing import Tuple, Dict, Any, Text, Callable, Optional
 
-from echo.eobjects import NativeFunction, get_guest_builtin
+from echo.enative_fn import ENativeFn
+from echo.eobjects import get_guest_builtin
 from echo.emodule import EModule
 from echo.interp_result import Result, ExceptionData
 from echo.interp_context import ICtx
@@ -44,7 +45,7 @@ def wrap_sys(name: Text, arity: int) -> Callable:
           globals_: Optional[Dict[Text, Any]] = None) -> Result[Any]:
         assert len(args) == arity and not kwargs
         return Result(sys_f(*args))
-    return NativeFunction(f, f'sys.{name}')
+    return ENativeFn(f, f'sys.{name}')
 
 
 def make_sys_module(argv: Tuple[Text, ...]) -> EModule:
@@ -53,7 +54,7 @@ def make_sys_module(argv: Tuple[Text, ...]) -> EModule:
         stderr=sys.stderr,
         warnoptions=[],
         implementation=sys.implementation,
-        exc_info=NativeFunction(_get_exc_info, 'sys.exc_info'),
+        exc_info=ENativeFn(_get_exc_info, 'sys.exc_info'),
         intern=wrap_sys('intern', 1),
         getfilesystemencoding=wrap_sys('getfilesystemencoding', 0),
         getfilesystemencodeerrors=wrap_sys('getfilesystemencodeerrors', 0),

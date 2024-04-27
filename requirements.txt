@@ -6,3 +6,4 @@ termcolor==1.1.0
 types-termcolor==1.1.0
 numpy==1.26.4
 mypy==1.10.0
+pytest-watch==4.2.0
