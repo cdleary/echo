@@ -12,8 +12,7 @@ can interpret bytecodes appropriately.
 Implementation of builtin and functional constructs are the first priority for
 implementation.
 
-![Diagram of Echo VM execution](./docs/echovm-diagram-2024-03-31-1258.svg)
-<img src="./docs/echovm-diagram-2024-03-31-1258.svg">
+![Diagram of Echo VM execution](./docs/echovm-diagram-2024-03-31-1258.png)
 
 ## Potential
 
