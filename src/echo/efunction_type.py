@@ -3,7 +3,7 @@ from typing import Tuple, Optional, Dict, Any
 from echo.epy_object import EPyObject, EPyType, AttrWhere
 from echo.interp_context import ICtx
 from echo.interp_result import Result
-from echo.eobjects import E_PREFIX
+from echo.eobjects import E_PREFIX, get_guest_builtin, EMethod
 from echo.enative_fn import ENativeFn
 
 
