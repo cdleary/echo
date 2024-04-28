@@ -1,3 +1,5 @@
+"""Tests for the AST representation/stringification made for fuzz testing."""
+
 from echo.fuzz.genseq import Stmt, Expr, Suite, NameDef, As
 
 

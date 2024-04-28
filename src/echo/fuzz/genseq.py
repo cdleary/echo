@@ -142,13 +142,19 @@ class ExprKind(enum.Enum):
 
 
 class Expr:
+    """
+    TODO(cdleary): 2024-04-28 I think the original instinct here was to try to
+    keep it flat, but hard to do without proper sum types... should probably
+    switch it to be OOPy.
+    """
+
     @classmethod
     def make_dict_literal(cls):
         return cls(ExprKind.DICT_LITERAL, operands=())
 
     @classmethod
     def make_str(cls, s: Text):
-        return cls(ExprKind.STR_LITERAL, operands=(s,))
+        return cls(ExprKind.STR_LITERAL, operands=(), str_payload=s)
 
     @classmethod
     def make_none(cls):
@@ -157,7 +163,7 @@ class Expr:
     @classmethod
     def make_invoke(cls, lhs: 'Expr', args: Tuple['Expr', ...]) -> 'Expr':
         assert isinstance(args, tuple), args
-        return cls(ExprKind.INVOKE, (lhs, args))
+        return cls(ExprKind.INVOKE, (lhs, *args))
 
     @classmethod
     def make_name_ref(cls, arg: NameDef) -> 'NameRef':
@@ -166,12 +172,13 @@ class Expr:
 
     @classmethod
     def make_getattr(cls, lhs: 'Expr', name: Text) -> 'Expr':
-        return cls(ExprKind.GETATTR, (lhs, name))
+        return cls(ExprKind.GETATTR, (lhs,), str_payload=name)
 
-    def __init__(self, kind: ExprKind, operands: Tuple['Expr', ...]):
+    def __init__(self, kind: ExprKind, operands: Tuple['Expr', ...], str_payload: Optional[str] = None):
         assert isinstance(operands, tuple), operands
         self.kind = kind
         self.operands = operands
+        self.str_payload = str_payload
 
     def __repr__(self) -> Text:
         return f'{self.__class__.__name__}({self.kind}, {self.operands})'
