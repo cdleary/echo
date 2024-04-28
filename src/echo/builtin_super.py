@@ -1,11 +1,11 @@
-from typing import Text, Tuple, Any, Dict, Optional
+from typing import Text, Tuple, Any, Dict, Optional, Union
 
 from echo.elog import log
 from echo.epy_object import EPyObject, AttrWhere
 from echo.interp_result import Result, check_result, ExceptionData
 from echo import interp_routines
 from echo.eobjects import (
-    EFunction, EBuiltin, EClass, EInstance,
+    EFunction, EBuiltin, EClass, EInstance, EPyType,
     register_builtin, get_guest_builtin, invoke_desc,
     _is_type_builtin, _is_dict_builtin, _is_object_builtin,
     _is_int_builtin,
@@ -13,7 +13,7 @@ from echo.eobjects import (
 from echo.interp_context import ICtx
 
 
-def _get_mro(o: EPyObject) -> Tuple[EPyObject, ...]:
+def _get_mro(o: EPyObject) -> Tuple[Union[EPyObject, type], ...]:
     if isinstance(o, EBuiltin):
         return o.get_mro()
     assert isinstance(o, EClass), o
@@ -33,7 +33,7 @@ class ESuper(EPyObject):
     def builtin_storage(self):
         return self.obj_or_type.builtin_storage
 
-    def get_type(self) -> EPyObject:
+    def get_type(self) -> EPyType:
         return get_guest_builtin('super')
 
     def __repr__(self) -> Text:
@@ -94,18 +94,19 @@ class ESuper(EPyObject):
                 cls_attr = t.getattr(name, ictx)
 
             if cls_attr.is_exception():
-                return cls_attr.get_exception()
-            cls_attr = cls_attr.get_value()
-            log('super:ga', f't: {t} cls_attr: {cls_attr}')
-            if cls_attr.hasattr_where('__get__') == AttrWhere.CLS:
-                fget = cls_attr.getattr('__get__', ictx)
+                return Result(cls_attr.get_exception())
+
+            cls_attr_value = cls_attr.get_value()
+            log('super:ga', f't: {t} cls_attr: {cls_attr_value}')
+            if cls_attr_value.hasattr_where('__get__') == AttrWhere.CLS:
+                fget = cls_attr_value.getattr('__get__', ictx)
                 if fget.is_exception():
                     return fget
                 fget = fget.get_value()
                 o = (None if self.obj_or_type == start_type
                      else self.obj_or_type)
                 return fget.invoke((o, start_type), {}, {}, ictx)
-            return Result(cls_attr)
+            return Result(cls_attr_value)
 
         return Result(ExceptionData(
             None, None,
