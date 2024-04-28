@@ -59,14 +59,15 @@ def _do_tuple_new(args: Tuple[Any, ...],
 
 @register_builtin('tuple.__init__')
 @check_result
-def _do_tuple_new(args: Tuple[Any, ...],
-                  kwargs: Dict[Text, Any],
-                  ictx: ICtx) -> Result[Any]:
+def _do_tuple_init(
+        args: Tuple[Any, ...],
+        kwargs: Dict[Text, Any],
+        ictx: ICtx) -> Result[Any]:
     return Result(None)
 
 
 def _resolve(x: Any) -> Tuple:
-    if isinstance(x, EPyObject):
+    if isinstance(x, EInstance):
         return x.builtin_storage[tuple]
     if isinstance(x, tuple):
         return x
@@ -94,8 +95,9 @@ def _do_tuple_lt(args: Tuple[Any, ...],
 
 @register_builtin('tuple.__getitem__')
 @check_result
-def _do_tuple_lt(args: Tuple[Any, ...],
-                 kwargs: Dict[Text, Any],
-                 ictx: ICtx) -> Result[Any]:
+def _do_tuple_getitem(
+        args: Tuple[Any, ...],
+        kwargs: Dict[Text, Any],
+        ictx: ICtx) -> Result[Any]:
     assert len(args) == 2 and not kwargs, (args, kwargs)
     return Result(_resolve(args[0])[args[1]])
