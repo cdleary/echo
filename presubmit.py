@@ -20,6 +20,7 @@ VERSION_MAJOR_MINOR = '.'.join(str(e) for e in sys.version_info[:2])
 subprocess.check_call([
     'mypy',
     'src/echo/__init__.py',
+    'src/echo/import_routines.py',
     'src/echo/bc_helpers.py',
     'src/echo/builtin_build_class.py',
     'src/echo/builtin_bytearray.py',

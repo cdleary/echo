@@ -6,7 +6,7 @@ import os
 import sys
 from types import ModuleType, CodeType
 from typing import (
-    Text, Dict, Any, Optional, Union, Sequence, List, Tuple, Callable,
+    Dict, Any, Optional, Union, Sequence, List, Tuple, Callable,
 )
 
 from echo.elog import log as elog
@@ -41,7 +41,7 @@ def _bump_import_depth(f):
     return wrapper
 
 
-def log(ictx: ICtx, s: Text) -> None:
+def log(ictx: ICtx, s: str) -> None:
     if not DEBUG_PRINT_IMPORTS:
         return
     leader = '| ' * ictx.interp_state.import_depth
@@ -51,7 +51,7 @@ def log(ictx: ICtx, s: Text) -> None:
 
 @_bump_import_depth
 def _import_module_at_path(
-        path: Text, fully_qualified_name: Text, *,
+        path: str, fully_qualified_name: str, *,
         ictx: ICtx) -> Result[ModuleT]:
     """Imports a module at the given path and runs its code.
 
@@ -111,7 +111,7 @@ def _import_module_at_path(
 
 
 def _subimport_module_at_path(
-        path: Text, fully_qualified_name: Text,
+        path: str, fully_qualified_name: str,
         containing_package: EModule, ictx: ICtx) -> Result[ModuleT]:
     """
     Args:
@@ -143,7 +143,7 @@ def _subimport_module_at_path(
 
 
 def _resolve_module_or_package(
-        dirpath: Text, fqn_piece: Text) -> Result[Text]:
+        dirpath: str, fqn_piece: str) -> Result[str]:
     elog('imp:rmop',
          f'resolving mod or pkg; dirpath {dirpath!r} fqn_piece {fqn_piece!r}')
     module_path = os.path.join(dirpath, fqn_piece + '.py')
@@ -169,8 +169,8 @@ def _resolve_module_or_package(
         ImportError(msg)))
 
 
-def _find_absolute_import_path(module_name: Text,
-                               search_paths: Sequence[Text]) -> Result[Text]:
+def _find_absolute_import_path(module_name: str,
+                               search_paths: Sequence[str]) -> Result[str]:
     for path in search_paths:
         module_path = _resolve_module_or_package(path, module_name)
         if not module_path.is_exception():
@@ -184,7 +184,7 @@ def _find_absolute_import_path(module_name: Text,
 
 
 def _getattr_or_subimport(current_mod: ModuleT,
-                          fromlist_name: Text,
+                          fromlist_name: str,
                           ictx: ICtx) -> Result[Any]:
     """Either gets an attribute from a module or attempts a sub-import if no
     such attribute is available."""
@@ -203,7 +203,7 @@ def _getattr_or_subimport(current_mod: ModuleT,
         return make_err(current_mod.__name__)
 
     # Use echo getattr for EModules.
-    assert isinstance(current_mod, (EModule, DsoModuleProxy)), current_mod
+    assert isinstance(current_mod, EModule), current_mod
     result = current_mod.getattr(fromlist_name, ictx)
     if not result.is_exception():
         return result
@@ -223,7 +223,7 @@ def _getattr_or_subimport(current_mod: ModuleT,
 def _extract_fromlist(
         start_module: ModuleT,
         module: ModuleT,
-        fromlist: Optional[Sequence[Text]],
+        fromlist: Optional[Sequence[str]],
         ictx: ICtx) -> Result[Tuple[Any, ...]]:
     """Returns (start_module, leaf_module, fromlist_imports)."""
     if fromlist is None or fromlist == ('*',):
@@ -239,31 +239,31 @@ def _extract_fromlist(
     return Result((start_module, module, tuple(results)))
 
 
-def check_fqn(x: Text) -> Text:
+def check_fqn(x: str) -> str:
     pieces = x.split('.')
     assert all(piece for piece in pieces), x
     return '.'.join(pieces)
 
 
-def fqn_parent(x: Text, path: Text = '') -> Text:
+def fqn_parent(x: str, path: str = '') -> str:
     if os.path.basename(path) == '__init__.py':
         return x
     return '.'.join(x.split('.')[:-1])
 
 
-def fqn_suffix(x: Text) -> Text:
+def fqn_suffix(x: str) -> str:
     return x.split('.')[-1]
 
 
-def fqn_join(x: Text, y: Text) -> Text:
+def fqn_join(x: str, y: str) -> str:
     if not y:
         return x
     return check_fqn(x + '.' + y)
 
 
 def _traverse_module_pieces(
-        current_mod: ModuleT, current_dirpath: Text,
-        multi_module_pieces: Tuple[Text], ictx: ICtx) -> Result[ModuleT]:
+        current_mod: ModuleT, current_dirpath: str,
+        multi_module_pieces: Tuple[str, ...], ictx: ICtx) -> Result[ModuleT]:
     # Iterate through the "pieces" to import, advancing current_mod as we go.
     for i, piece in enumerate(multi_module_pieces):
         path_result = _resolve_module_or_package(current_dirpath, piece)
@@ -273,6 +273,7 @@ def _traverse_module_pieces(
 
         fqn = fqn_join(current_mod.fully_qualified_name, piece)
         assert isinstance(fqn, str), fqn
+        assert isinstance(current_mod, EModule), current_mod
         new_mod = _subimport_module_at_path(
             path, fqn, current_mod, ictx)
         if new_mod.is_exception():
@@ -284,9 +285,9 @@ def _traverse_module_pieces(
 
 
 def _resolve_level(
-        importing_path: Text,
-        importing_fully_qualified_name: Text,
-        level: int) -> Tuple[Text, Text]:
+        importing_path: str,
+        importing_fully_qualified_name: str,
+        level: int) -> Tuple[str, str]:
     """
     Returns (start_path, fqn_prefix).
     """
@@ -304,8 +305,8 @@ def _resolve_level(
 
 
 def _ascend_to_target_package(
-        level: int, importing_path: Text, importing_fqn: Text,
-        ictx: ICtx) -> Result[Tuple[ModuleT, Text]]:
+        level: int, importing_path: str, importing_fqn: str,
+        ictx: ICtx) -> Result[Tuple[ModuleT, str]]:
     def to_package(path, fqn):
         if os.path.basename(path) == '__init__.py':
             return path, fqn
@@ -330,11 +331,11 @@ def _ascend_to_target_package(
 
 
 def _import_name_with_level(
-        multi_module_name: Text,
+        multi_module_name: str,
         level: int,
-        fromlist: Optional[Tuple[Text]],
-        importing_path: Text,
-        importing_fully_qualified_name: Text,
+        fromlist: Optional[Tuple[str, ...]],
+        importing_path: str,
+        importing_fully_qualified_name: str,
         ictx: ICtx
             ) -> Result[Tuple[ModuleT, ModuleT, Tuple[Any, ...]]]:
     start_mod_result = _ascend_to_target_package(
@@ -354,11 +355,11 @@ def _import_name_with_level(
 
 
 def _import_name_without_level(
-        multi_module_name: Text,
-        fromlist: Optional[Tuple[Text]],
-        importing_path: Text,
-        importing_fully_qualified_name: Text,
-        search_paths: Sequence[Text],
+        multi_module_name: str,
+        fromlist: Optional[Tuple[str, ...]],
+        importing_path: str,
+        importing_fully_qualified_name: str,
+        search_paths: Sequence[str],
         ictx: ICtx
             ) -> Result[Tuple[ModuleT, ModuleT, Tuple[Any, ...]]]:
     multi_module_pieces = tuple(multi_module_name.split('.'))
@@ -388,11 +389,11 @@ def _import_name_without_level(
                              ictx)
 
 
-def _import_name(multi_module_name: Text,
+def _import_name(multi_module_name: str,
                  level: int,
                  fromlist: Optional[Tuple[str, ...]],
-                 importing_path: Text,
-                 importing_fully_qualified_name: Text,
+                 importing_path: str,
+                 importing_fully_qualified_name: str,
                  search_paths: Tuple[str, ...],
                  ictx: ICtx,
                  ) -> Result[Tuple[ModuleT, ModuleT, Tuple[Any, ...]]]:
@@ -418,23 +419,23 @@ def _import_name(multi_module_name: Text,
             importing_fully_qualified_name, search_paths, ictx)
 
 
-def import_path(path: Text, module_name: Text, fully_qualified_name: Text,
+def import_path(path: str, module_name: str, fully_qualified_name: str,
                 ictx: ICtx) -> Result[ModuleT]:
     if fully_qualified_name in ictx.interp_state.sys_modules:
         return Result(ictx.interp_state.sys_modules[fully_qualified_name])
     return _import_module_at_path(path, fully_qualified_name, ictx=ictx)
 
 
-def run_IMPORT_FROM(module: ModuleT, fromname: Text, ictx: ICtx):
+def run_IMPORT_FROM(module: ModuleT, fromname: str, ictx: ICtx):
     elog('imp:if', f'IMPORT_FROM module {module!r} fromname {fromname!r}')
     return _getattr_or_subimport(module, fromname, ictx)
 
 
-def run_IMPORT_NAME(importing_path: Text,
+def run_IMPORT_NAME(importing_path: str,
                     level: int,
-                    fromlist: Optional[Tuple[Text, ...]],
-                    multi_module_name: Text,
-                    globals_: Dict[Text, Any],
+                    fromlist: Optional[Tuple[str, ...]],
+                    multi_module_name: str,
+                    globals_: Dict[str, Any],
                     ictx: ICtx,
                     ) -> Result[Any]:
     """Performs functionality of the IMPORT_NAME bytecode.
@@ -507,7 +508,7 @@ def run_IMPORT_NAME(importing_path: Text,
 
 
 def import_star(module: ModuleT,
-                globals_: Dict[Text, Any],
+                globals_: Dict[str, Any],
                 ictx: ICtx,
                 ) -> None:
     if isinstance(module, ModuleType):
