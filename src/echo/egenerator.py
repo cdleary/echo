@@ -1,4 +1,4 @@
-from typing import Text, Tuple, Any, Dict, Optional
+from typing import Tuple, Any, Dict, Optional, Union
 
 from echo.epy_object import EPyObject, AttrWhere, EPyType
 from echo.interp_result import Result, ExceptionData, check_result
@@ -19,10 +19,10 @@ class EGeneratorType(EPyType):
     def get_name(self) -> str:
         return 'generator'
 
-    def __repr__(self) -> Text:
+    def __repr__(self) -> str:
         return "<eclass 'generator'>"
 
-    def get_type(self) -> EPyObject:
+    def get_type(self) -> EPyType:
         return get_guest_builtin('type')
 
     def get_dict(self):
@@ -31,20 +31,20 @@ class EGeneratorType(EPyType):
     def get_bases(self):
         raise NotImplementedError
 
-    def get_mro(self) -> Tuple[EPyObject, ...]:
+    def get_mro(self) -> Tuple[Union[EPyType, type], ...]:
         return (self, get_guest_builtin('object'))
 
-    def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
+    def getattr(self, name: str, ictx: ICtx) -> Result[Any]:
         if name == '__mro__':
             return Result(self.get_mro())
         if name == '__dict__':
             return Result(self._dict)
         raise NotImplementedError(self, name)
 
-    def setattr(self, name: Text, value: Any) -> Any:
+    def setattr(self, name: str, value: Any, ictx: ICtx) -> Any:
         raise NotImplementedError
 
-    def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
+    def hasattr_where(self, name: str) -> Optional[AttrWhere]:
         if name in ('__mro__', '__dict__'):
             return AttrWhere.SELF_SPECIAL
         return None
@@ -60,19 +60,19 @@ class EGenerator(EPyObject):
     def get_name(self) -> str:
         return 'generator'
 
-    def get_type(self) -> EPyObject:
+    def get_type(self) -> EPyType:
         return EGeneratorType_singleton
 
     def _iter(self, args, kwargs, locals_dict, ictx,
               globals_=None) -> Result[EPyObject]:
         return Result(self)
 
-    def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
+    def hasattr_where(self, name: str) -> Optional[AttrWhere]:
         if name in ('__iter__', '__next__'):
             return AttrWhere.CLS
         raise NotImplementedError
 
-    def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
+    def getattr(self, name: str, ictx: ICtx) -> Result[Any]:
         if name == '__iter__':
             return Result(EMethod(ENativeFn(
                 self._iter, 'egenerator.__iter__'), bound_self=self))
@@ -82,10 +82,10 @@ class EGenerator(EPyObject):
         msg = f'Cannot find attribute {name} on {self}'
         return Result(ExceptionData(None, name, AttributeError(msg)))
 
-    def setattr(self, name: Text, value: Any) -> Any:
+    def setattr(self, name: str, value: Any, ictx: ICtx) -> Any:
         raise NotImplementedError
 
-    def next(self, ictx: ICtx) -> Result[Value]:
+    def __next(self, ictx: ICtx) -> Result[Any]:
         result = self.f.run_to_return_or_yield()
         if result.is_exception():
             return Result(result.get_exception())
@@ -99,7 +99,7 @@ class EGenerator(EPyObject):
         return Result(ExceptionData(None, None, StopIteration()))
 
     def _next(self, args, kwargs, locals_dict, ictx,
-              globals_=None) -> Result[Value]:
+              globals_=None) -> Result[Any]:
         assert len(args) == 1 and not kwargs, (args, kwargs)
         assert args[0] is self
-        return self.next(ictx)
+        return self.__next(ictx)

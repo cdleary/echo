@@ -41,6 +41,7 @@ subprocess.check_call([
     'src/echo/common_test.py',
     'src/echo/dso_objects.py',
     'src/echo/ebuiltins.py',
+    'src/echo/egenerator.py',
     'src/echo/ecell.py',
     'src/echo/eclassmethod.py',
     'src/echo/elog.py',

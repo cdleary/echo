@@ -10,6 +10,7 @@ from echo.eobjects import (
 )
 from echo.interp_context import ICtx
 from echo import iteration_helpers
+from echo.value import Value
 
 
 @register_builtin('str')
