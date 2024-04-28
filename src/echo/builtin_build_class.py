@@ -25,7 +25,7 @@ def _pytype_calculate_metaclass(
         ictx: ICtx) -> Result[Union[EPyType, EBuiltin, Type]]:
     do_type = get_guest_builtin('type')
 
-    winner = metatype
+    winner: Union[EPyType, Type] = metatype
     for tmp in bases:
         tmptype = do_type.invoke((tmp,), {}, {}, ictx).get_value()
         assert isinstance(winner, (EPyType, EBuiltin, type)), winner
@@ -48,8 +48,9 @@ def _do___build_class__(
         kwargs: Dict[Text, Any],
         ictx: ICtx) -> Result[Any]:
     log('go:build_class', f'args: {args}')
-    func, name, *bases = args
-    bases = tuple(bases)
+    func, name, *bases_lst = args
+    assert isinstance(bases_lst, list), bases_lst
+    bases: Tuple[Any, ...] = tuple(bases_lst)
     metaclass = kwargs.pop('metaclass', None) if kwargs else None
     if not metaclass:
         if bases:
