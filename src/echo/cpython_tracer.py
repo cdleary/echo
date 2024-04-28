@@ -1,4 +1,4 @@
-from typing import Callable
+from typing import Callable, Any
 
 import dis
 import os
@@ -10,13 +10,16 @@ import functools
 EachInstFun = Callable[[dis.Instruction, types.FrameType], None]
 
 
-def _note_trace(frame: types.FrameType, event, arg, each_inst: EachInstFun):
+def _note_trace(frame: types.FrameType, event: str, arg: Any,
+                each_inst: EachInstFun):
     filename = frame.f_code.co_filename
     if filename.startswith('<frozen'):
         return functools.partial(_note_trace, each_inst=each_inst)
 
+    note_trace = functools.partial(_note_trace, each_inst=each_inst)
+
     frame.f_trace_opcodes = True
-    frame.f_trace = _note_trace
+    frame.f_trace = note_trace
     # print(repr(event), frame)
     if event == 'call':
         # print(repr(event), frame)
@@ -37,7 +40,7 @@ def _note_trace(frame: types.FrameType, event, arg, each_inst: EachInstFun):
         pass
     else:
         pass
-    return functools.partial(_note_trace, each_inst=each_inst)
+    return note_trace
 
 
 def trace_path(path: str, each_inst: EachInstFun) -> None:
@@ -51,7 +54,6 @@ def trace_path(path: str, each_inst: EachInstFun) -> None:
     # del sys.modules['sre_constants']
     # del sys.modules['types']
     # sys.modules.pop('collections')
-    f = sys._getframe(0)
     code = compile(contents, os.path.realpath(path), 'exec')
     note_trace = functools.partial(_note_trace, each_inst=each_inst)
     sys.settrace(note_trace)
