@@ -1,4 +1,4 @@
-from typing import Text, Tuple, Any, Dict, Optional, List
+from typing import Tuple, Any, Dict, Optional, List
 
 from echo.elog import log
 from echo.epy_object import EPyObject
@@ -16,7 +16,7 @@ from echo.interp_context import ICtx
 @register_builtin('list')
 @check_result
 def _do_list_call(args: Tuple[Any, ...],
-                  kwargs: Dict[Text, Any],
+                  kwargs: Dict[str, Any],
                   ictx: ICtx) -> Result[Any]:
     log('list:call', f'args: {args} kwargs: {kwargs}')
     if isinstance(args[0], EPyObject):
@@ -39,10 +39,10 @@ def _do_list_call(args: Tuple[Any, ...],
 @check_result
 def _do_list_new(
         args: Tuple[Any, ...],
-        kwargs: Dict[Text, Any],
+        kwargs: Dict[str, Any],
         ictx: ICtx) -> Result[Any]:
     assert len(args) >= 1 and not kwargs, (args, kwargs)
-    storage = list(*args[1:])
+    storage: list[Any] = list(*args[1:])
     if isinstance(args[0], EClass):
         inst = EInstance(args[0])
         inst.builtin_storage[list] = storage
@@ -55,13 +55,13 @@ def _do_list_new(
 @register_builtin('list.__init__')
 def _do_list_init(
         args: Tuple[Any, ...],
-        kwargs: Dict[Text, Any],
+        kwargs: Dict[str, Any],
         ictx: ICtx) -> Result[Any]:
     return Result(None)
 
 
 def _resolve(x: Any) -> List:
-    if isinstance(x, EPyObject):
+    if isinstance(x, EInstance):
         return x.builtin_storage[list]
     if isinstance(x, list):
         return x
@@ -72,7 +72,7 @@ def _resolve(x: Any) -> List:
 @register_builtin('list.append')
 def _do_list_append(
         args: Tuple[Any, ...],
-        kwargs: Dict[Text, Any],
+        kwargs: Dict[str, Any],
         ictx: ICtx) -> Result[Any]:
     assert len(args) == 2 and not kwargs, (args, kwargs)
     _resolve(args[0]).append(args[1])
@@ -82,7 +82,7 @@ def _do_list_append(
 @register_builtin('list.extend')
 def _do_list_extend(
         args: Tuple[Any, ...],
-        kwargs: Dict[Text, Any],
+        kwargs: Dict[str, Any],
         ictx: ICtx) -> Result[Any]:
     assert len(args) == 2 and not kwargs, (args, kwargs)
     _resolve(args[0]).extend(args[1])
@@ -90,9 +90,9 @@ def _do_list_extend(
 
 
 @register_builtin('list.clear')
-def _do_list_append(
+def _do_list_clear(
         args: Tuple[Any, ...],
-        kwargs: Dict[Text, Any],
+        kwargs: Dict[str, Any],
         ictx: ICtx) -> Result[Any]:
     assert len(args) == 1 and not kwargs, (args, kwargs)
     _resolve(args[0]).clear()
@@ -100,9 +100,9 @@ def _do_list_append(
 
 
 @register_builtin('list.remove')
-def _do_list_append(
+def _do_list_remove(
         args: Tuple[Any, ...],
-        kwargs: Dict[Text, Any],
+        kwargs: Dict[str, Any],
         ictx: ICtx) -> Result[Any]:
     assert len(args) == 2 and not kwargs, (args, kwargs)
     try:
@@ -115,7 +115,7 @@ def _do_list_append(
 @register_builtin('list.__eq__')
 def _do_list_eq(
         args: Tuple[Any, ...],
-        kwargs: Dict[Text, Any],
+        kwargs: Dict[str, Any],
         ictx: ICtx) -> Result[Any]:
     assert len(args) == 2 and not kwargs, (args, kwargs)
     lhs, rhs = map(_resolve, args)
@@ -135,7 +135,7 @@ def _do_list_eq(
 @register_builtin('list.__contains__')
 def _do_list_contains(
         args: Tuple[Any, ...],
-        kwargs: Dict[Text, Any],
+        kwargs: Dict[str, Any],
         ictx: ICtx) -> Result[Any]:
     assert len(args) == 2 and not kwargs, (args, kwargs)
     lhs = _resolve(args[0])
@@ -154,7 +154,7 @@ def _do_list_contains(
 @register_builtin('list.__iter__')
 def _do_list_iter(
         args: Tuple[Any, ...],
-        kwargs: Dict[Text, Any],
+        kwargs: Dict[str, Any],
         ictx: ICtx) -> Result[Any]:
     assert len(args) == 1 and not kwargs, (args, kwargs)
     lhs = _resolve(args[0])
@@ -164,7 +164,7 @@ def _do_list_iter(
 @register_builtin('list.__setitem__')
 def _do_list_setitem(
         args: Tuple[Any, ...],
-        kwargs: Dict[Text, Any],
+        kwargs: Dict[str, Any],
         ictx: ICtx) -> Result[Any]:
     assert len(args) == 3 and not kwargs, (args, kwargs)
     lst, name, value = args
@@ -182,9 +182,9 @@ def _do_list_setitem(
 
 
 @register_builtin('list.__getitem__')
-def _do_list_setitem(
+def _do_list_getitem(
         args: Tuple[Any, ...],
-        kwargs: Dict[Text, Any],
+        kwargs: Dict[str, Any],
         ictx: ICtx) -> Result[Any]:
     if len(args) == 1:
         assert not kwargs, (args, kwargs)
