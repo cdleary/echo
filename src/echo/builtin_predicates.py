@@ -32,6 +32,7 @@ def _do_bool_call(args: Tuple[Any, ...],
                               types.BuiltinFunctionType,
                               types.MethodDescriptorType,
                               getattr(_thread, 'RLock'), io.TextIOBase,
+                              type(NotImplemented),
                               type(None), getattr(re, 'Match'))), \
             (o, type(o))
         return Result(bool(o))
