@@ -255,6 +255,7 @@ class StatefulFrame:
             if (why == WhyStatus.CONTINUE and
                     self.block_stack[-1].kind == BlockKind.SETUP_LOOP):
                 b = self.block_stack[-1]
+                assert isinstance(return_value, int), return_value
                 self.pc = return_value
                 return True
 
@@ -1176,7 +1177,9 @@ class StatefulFrame:
             return Result((v, ReturnKind.RETURN))
 
         if instruction.opname == 'YIELD_VALUE':
-            self.pc += self.pc_to_bc_width[self.pc]
+            yield_width: Optional[int] = self.pc_to_bc_width[self.pc]
+            assert yield_width is not None
+            self.pc += yield_width
             return Result((Value(self._peek()), ReturnKind.YIELD))
 
         f = getattr(self, '_run_{}'.format(instruction.opname))
@@ -1268,7 +1271,7 @@ class EFrameType(EPyType):
     def get_bases(self):
         raise NotImplementedError
 
-    def get_mro(self) -> Tuple[EPyObject, ...]:
+    def get_mro(self) -> Tuple[Union[EPyType, type], ...]:
         return (self,)
 
     def get_type(self) -> EPyType:

@@ -1,6 +1,7 @@
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 
 from echo.interpreter_state import InterpreterState
+from echo.interp_result import ExceptionData
 
 
 EModule = Any
@@ -20,7 +21,7 @@ class ICtx:
         interp_state.sys_modules['sys'] = esys
         self.ebuiltins = ebuiltins
         self.desc_count = 0
-        self.exc_info = None
+        self.exc_info: Optional[ExceptionData] = None
         self.call_profiler = None
 
     def call(self, *args, **kwargs):
