@@ -19,6 +19,7 @@ VERSION_MAJOR_MINOR = '.'.join(str(e) for e in sys.version_info[:2])
 
 subprocess.check_call([
     'mypy',
+    'src/echo/call_profiler.py',
     'src/echo/cpython_tracer.py',
     'src/echo/ctype_frame.py',
     'src/echo/efunction_type.py',

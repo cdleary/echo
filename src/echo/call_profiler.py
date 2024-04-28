@@ -1,9 +1,11 @@
+from typing import List, Union
+
 import atexit
 import collections
 from operator import itemgetter
 import pprint
-from typing import Tuple, Any, Dict, Text
-from echo.eobjects import EFunction, EPyObject
+from typing import Tuple, Any, Dict
+from echo.eobjects import EFunction, EPyObject, EPyType
 
 
 class CallProfiler:
@@ -11,7 +13,7 @@ class CallProfiler:
         self.profile = collections.defaultdict(collections.Counter)
 
     def _get_types(self, args: Tuple) -> Tuple:
-        res = []
+        res: List[Union[EPyType, type]] = []
         for arg in args:
             if isinstance(arg, EPyObject):
                 res.append(arg.get_type())
@@ -19,7 +21,7 @@ class CallProfiler:
                 res.append(type(arg))
         return tuple(res)
 
-    def note(self, f, args: Tuple[Any, ...], kwargs: Dict[Text, Any]):
+    def note(self, f, args: Tuple[Any, ...], kwargs: Dict[str, Any]):
         if kwargs:
             return  # TODO
         if isinstance(f, EFunction):
