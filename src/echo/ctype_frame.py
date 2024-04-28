@@ -1,7 +1,7 @@
 import ctypes
 import sys
 import types
-from typing import Any
+from typing import Any, cast
 
 from echo import trace_util
 
@@ -113,7 +113,7 @@ class CtypeFrame:
         return self.frame_ptr[self.offsets['f_stacktop']]
 
     def print_block_stack(self, printer) -> None:
-        version = tuple(sys.version_info[:2])
+        version = cast(tuple[int, int], tuple(sys.version_info[:2]))
         iblock_offset = self.VERSION_TO_FRAME_IBLOCK_OFFSET[version]
         frame_uints = ctypes.cast(
             self.frame_id,
