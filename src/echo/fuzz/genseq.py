@@ -174,7 +174,8 @@ class Expr:
     def make_getattr(cls, lhs: 'Expr', name: Text) -> 'Expr':
         return cls(ExprKind.GETATTR, (lhs,), str_payload=name)
 
-    def __init__(self, kind: ExprKind, operands: Tuple['Expr', ...], str_payload: Optional[str] = None):
+    def __init__(self, kind: ExprKind, operands: Tuple['Expr', ...],
+                 str_payload: Optional[str] = None):
         assert isinstance(operands, tuple), operands
         self.kind = kind
         self.operands = operands
@@ -189,15 +190,14 @@ class Expr:
         if self.kind == ExprKind.NONE_LITERAL:
             return 'None'
         if self.kind == ExprKind.STR_LITERAL:
-            return repr(self.operands[0])
+            return repr(self.str_payload)
         if self.kind == ExprKind.INVOKE:
-            lhs, args = self.operands
-            assert isinstance(args, tuple), args
+            lhs, *args = self.operands
             return '{}({})'.format(
                 lhs.format(), ', '.join(a.format() for a in args))
         if self.kind == ExprKind.GETATTR:
             return '({}).{}'.format(self.operands[0].format(),
-                                    self.operands[1])
+                                    self.str_payload)
         raise NotImplementedError(self)
 
     def format(self, indent: int = 0) -> Text:
