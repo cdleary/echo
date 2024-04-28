@@ -22,6 +22,7 @@ subprocess.check_call([
     'src/echo/__init__.py',
     'src/echo/bc_helpers.py',
     'src/echo/builtin_bytearray.py',
+    'src/echo/builtin_exception.py',
     'src/echo/builtin_enumerate.py',
     'src/echo/builtin_int.py',
     'src/echo/builtin_iter.py',

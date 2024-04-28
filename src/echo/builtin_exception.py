@@ -1,4 +1,4 @@
-from typing import Text, Tuple, Any, Dict, Optional
+from typing import Tuple, Any, Dict, Optional
 
 from echo.epy_object import EPyObject, AttrWhere
 from echo.elog import log
@@ -21,25 +21,25 @@ class EException(EPyObject):
     def get_type(self):
         return get_guest_builtin('Exception')
 
-    def hasattr_where(self, name: Text) -> Optional[AttrWhere]:
+    def hasattr_where(self, name: str) -> Optional[AttrWhere]:
         if name == 'args':
             return AttrWhere.SELF_DICT
         return None
 
     @check_result
-    def getattr(self, name: Text, ictx: ICtx) -> Result[Any]:
+    def getattr(self, name: str, ictx: ICtx) -> Result[Any]:
         if name == 'args':
             return Result(self.dict_['args'])
         return Result(ExceptionData(None, None, AttributeError(name)))
 
-    def setattr(self, name: Text, value: Any) -> Result[None]:
+    def setattr(self, name: str, value: Any, ictx: ICtx) -> Result[None]:
         raise NotImplementedError
 
 
 @register_builtin('Exception.__new__')
 def _do_exception_new(
         args: Tuple[Any, ...],
-        kwargs: Dict[Text, Any],
+        kwargs: Dict[str, Any],
         ictx: ICtx) -> Result[Any]:
     assert 1 <= len(args) and not kwargs, (args, kwargs)
     msg = args[1] if len(args) == 2 else None
@@ -54,6 +54,6 @@ def _do_exception_new(
 @register_builtin('Exception.__init__')
 def _do_exception_init(
         args: Tuple[Any, ...],
-        kwargs: Dict[Text, Any],
+        kwargs: Dict[str, Any],
         ictx: ICtx) -> Result[Any]:
     return Result(None)
