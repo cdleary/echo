@@ -230,12 +230,15 @@ EMethodType_singleton = EMethodType()
 
 class EMethod(EPyObject):
 
-    def __init__(self, f: Union[EFunction, ENativeFn], bound_self):
+    def __init__(self, f: EPyObject, bound_self: EPyObject):
         self.f = f
         self.bound_self = bound_self
 
-    def __repr__(self) -> Text:
-        return f'<{E_PREFIX}bound method {self.f.name} of {self.bound_self!r}>'
+    def __repr__(self) -> str:
+        name_str = ''
+        if isinstance(self.f, EFunction):
+            name_str = ' ' + self.f.name
+        return f'<{E_PREFIX}bound method{name_str} of {self.bound_self!r}>'
 
     def get_type(self) -> EPyType:
         return EMethodType_singleton
