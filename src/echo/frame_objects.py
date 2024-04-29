@@ -458,8 +458,12 @@ class StatefulFrame:
         return Result(dict(zip(ks, vs)))
 
     def _run_MAP_ADD(self, arg, argval) -> None:
-        v = self._pop()
-        k = self._pop()
+        if sys.version_info[:2] > (3, 7):
+            v = self._pop()
+            k = self._pop()
+        else:
+            k = self._pop()
+            v = self._pop()
         map_ = self.stack[-arg]
         assert isinstance(map_, dict), map_
         si = get_guest_builtin('dict.__setitem__')
