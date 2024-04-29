@@ -1,10 +1,10 @@
 pycodestyle==2.10.0
 pyfakefs==5.4.1
-pytest==8.1.1
+pytest==7.4.4
 pytest-mypy==0.10.3
 termcolor==1.1.0
 types-termcolor==1.1.0
-numpy==1.26.4
-mypy==1.10.0
+numpy==1.21.6
+mypy==1.4.1
 pytest-watch==4.2.0
-tox==4.15.0
+tox==4.8.0

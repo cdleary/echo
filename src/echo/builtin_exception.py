@@ -13,7 +13,7 @@ from echo.interp_context import ICtx
 
 
 class EException(EPyObject):
-    def __init__(self, args: Tuple[Any]):
+    def __init__(self, args: Tuple[Any, ...]):
         self.dict_ = {
             'args': args,
         }

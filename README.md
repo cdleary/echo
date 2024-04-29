@@ -55,8 +55,22 @@ This is the property that echo attempts to build towards.
 
 ## Testing
 
-py.test is driven via a configuration file in the root of the project
-directory; so a developer can simply run:
+Testing is done via `tox`, which makes testing against multiple Python versions
+more tractable; e.g. running it against Python 3.9 configuration:
+
+```
+(echo-all-versions) cdleary@thor:~/proj/echo$ tox -e py39
+```
+
+On Ubuntu previous Python versions can be installed with relative easy via the
+deadsnakes PPA: see instructions in
+https://tech.joellemena.com/python/install-python3-6-in-ubuntu-22-04/
+
+### py.test
+
+py.test is run for any given Python version under test -- it is driven via a
+configuration file in the root of the project directory; so a developer can
+simply run:
 
 ```
 py.test-3

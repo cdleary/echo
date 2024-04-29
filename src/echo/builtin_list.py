@@ -42,7 +42,7 @@ def _do_list_new(
         kwargs: Dict[str, Any],
         ictx: ICtx) -> Result[Any]:
     assert len(args) >= 1 and not kwargs, (args, kwargs)
-    storage: list[Any] = list(*args[1:])
+    storage: List[Any] = list(*args[1:])
     if isinstance(args[0], EClass):
         inst = EInstance(args[0])
         inst.builtin_storage[list] = storage

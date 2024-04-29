@@ -224,7 +224,7 @@ def _extract_fromlist(
         start_module: ModuleT,
         module: ModuleT,
         fromlist: Optional[Sequence[str]],
-        ictx: ICtx) -> Result[Tuple[Any, ...]]:
+        ictx: ICtx) -> Result[Tuple[ModuleT, ModuleT, Tuple[Any, ...]]]:
     """Returns (start_module, leaf_module, fromlist_imports)."""
     if fromlist is None or fromlist == ('*',):
         return Result((start_module, module, ()))

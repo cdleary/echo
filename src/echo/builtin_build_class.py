@@ -21,7 +21,7 @@ def _is_subtype_of(x, y):
 
 def _pytype_calculate_metaclass(
         metatype: EPyType,
-        bases: Tuple[EPyType, EBuiltin],
+        bases: Tuple[Union[EPyType, EBuiltin], ...],
         ictx: ICtx) -> Result[Union[EPyType, EBuiltin, Type]]:
     do_type = get_guest_builtin('type')
 
