@@ -1,3 +1,4 @@
+import collections
 import operator
 import os
 import sys
@@ -21,23 +22,29 @@ from echo.eobjects import (
 import termcolor
 
 
+# Many opcodes end up delegating to special functions in the object protocol --
+# this maps bytecode operation names to the corresponding special function
+# name.
 OPNAME_TO_SPECIAL = {
-    'BINARY_SUBTRACT': '__sub__',
     'BINARY_ADD': '__add__',
-    'BINARY_SUBSCR': '__getitem__',
     'BINARY_AND': '__and__',
     'BINARY_MULTIPLY': '__mul__',
     'BINARY_OR': '__or__',
     'BINARY_POWER': '__pow__',
+    'BINARY_SUBSCR': '__getitem__',
+    'BINARY_SUBTRACT': '__sub__',
 }
+# These are the "right hand side" variants of the above for the symmetrical
+# binops.
 OPNAME_TO_SPECIAL_RHS = {
     'BINARY_ADD': '__radd__',
-    'BINARY_SUBTRACT': '__rsub__',
-    'BINARY_MULTIPLY': '__rmul__',
     'BINARY_AND': '__rand__',
+    'BINARY_MULTIPLY': '__rmul__',
     'BINARY_OR': '__ror__',
     'BINARY_POWER': '__rpow__',
+    'BINARY_SUBTRACT': '__rsub__',
 }
+
 COMPARE_TO_SPECIAL = {
     '==': '__eq__',
     '!=': '__ne__',
@@ -139,6 +146,7 @@ def run_binop(opname: Text, lhs: Any, rhs: Any, ictx: ICtx) -> Result[Any]:
     builtin_value_types = {
         ebool, ebytes, estr, eint, elist, edict, ebytearray, eset, etuple,
         float, complex, slice, range, ebytearray, type(sys.version_info),
+        collections.OrderedDict,
     }
 
     if (opname in ('BINARY_TRUE_DIVIDE', 'BINARY_MODULO') and rhs_type is eint

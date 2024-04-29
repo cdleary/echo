@@ -72,6 +72,20 @@ To run a specific test via `tox` on a specific Python version:
 PYTEST_ARGS=-ktry_except_raise tox -e py37
 ```
 
+### OS X Multiple Python Versions
+
+On OS X multiple Python versions can be installed via `pyenv`; something along
+the lines of:
+
+```
+$ pyenv install 3.7
+$ echo 'export PYENV_ROOT="$HOME/.pyenv"' >> ~/.bash_profile
+$ echo 'export PATH="$PYENV_ROOT/bin:$PATH"' >> ~/.bash_profile
+$ echo 'eval "$(pyenv init --path)"' >> ~/.bash_profile
+$ echo 'eval "$(pyenv init -)"' >> ~/.bash_profile
+$ ln -s $(pyenv which python3.7) /usr/local/bin/python3.7
+```
+
 ### py.test
 
 py.test is run for any given Python version under test -- it is driven via a
