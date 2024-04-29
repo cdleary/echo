@@ -1160,8 +1160,9 @@ class StatefulFrame:
                         block_info.level), file=sys.stderr)
 
     def _run_one_bytecode(self) -> Optional[Result[Tuple[Value, ReturnKind]]]:
-        instruction = self.pc_to_instruction[self.pc]
-        assert instruction is not None
+        instruction: Optional[dis.Instruction] = \
+            self.pc_to_instruction[self.pc]
+        assert instruction is not None, (self.pc_to_instruction, self.pc)
 
         if instruction.starts_line:
             self.current_lineno = instruction.starts_line
