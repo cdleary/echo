@@ -1,11 +1,8 @@
-from typing import Tuple, Any, Dict, Optional, Union
+from typing import Tuple, Any, Optional, Union
 
 from echo.epy_object import EPyObject, AttrWhere, EPyType
-from echo.interp_result import Result, ExceptionData, check_result
-from echo.eobjects import (
-    EFunction, EMethod, EBuiltin,
-    get_guest_builtin,
-)
+from echo.interp_result import Result, ExceptionData
+from echo.eobjects import EMethod, get_guest_builtin
 from echo.return_kind import ReturnKind
 from echo.interp_context import ICtx
 from echo.value import Value

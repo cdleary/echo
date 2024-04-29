@@ -1,4 +1,4 @@
-from typing import Tuple, Any, Dict, Optional, List
+from typing import Tuple, Any, Dict, List
 
 from echo.elog import log
 from echo.epy_object import EPyObject
@@ -6,8 +6,7 @@ from echo.interp_result import Result, check_result, ExceptionData
 from echo import interp_routines
 from echo import iteration_helpers
 from echo.eobjects import (
-    EFunction, EBuiltin, EClass, EInstance,
-    register_builtin, get_guest_builtin, is_list_builtin,
+    EClass, EInstance, register_builtin, get_guest_builtin, is_list_builtin,
 )
 from echo.builtin_genericalias import EGenericAlias
 from echo.interp_context import ICtx

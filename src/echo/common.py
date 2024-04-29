@@ -1,11 +1,10 @@
 """Commonly used utility functions."""
 
 import dis
-import itertools
 import functools
 import types
 from typing import (
-    Any, Text, Iterable, Sequence, Tuple, List, TypeVar, Callable, Dict
+    Any, Text, Sequence, Tuple, List, TypeVar, Callable, Dict
 )
 from io import StringIO
 

@@ -4,7 +4,7 @@ from echo.epy_object import EPyObject, AttrWhere, EPyType, try_invoke
 from echo.interp_result import Result, ExceptionData, check_result
 from echo.enative_fn import ENativeFn
 from echo.eobjects import (
-    EFunction, EMethod, EBuiltin,
+    EMethod, EBuiltin,
     get_guest_builtin,
 )
 from echo.elog import log

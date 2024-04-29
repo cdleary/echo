@@ -1,14 +1,10 @@
-import os
-import textwrap
-
 from echo import interp
 from echo import builtin_sys_module
 from echo.interp_context import ICtx
-from echo import import_routines
 from echo.interpreter_state import InterpreterState
 
 from echo.import_routines import (
-    _find_absolute_import_path, _resolve_module_or_package,
+    _find_absolute_import_path,
     _import_module_at_path, _subimport_module_at_path, _import_name,
     _resolve_level
 )

@@ -114,10 +114,10 @@ class Stmt:
             pieces = [f'if {test.format()}:\n{consequent_str}']
             for elif_ in elifs:
                 suite_str = elif_[1].format(INDENT_PER_LEVEL)
-                pieces.append('elif {elif_[0]}:\n{suite_str}')
+                pieces.append(f'elif {elif_[0]}:\n{suite_str}')
             if alternate:
                 suite_str = alternate.format(INDENT_PER_LEVEL)
-                pieces.append('else:{suite_str}')
+                pieces.append(f'else:{suite_str}')
             return ''.join(pieces)
         raise NotImplementedError(self)
 

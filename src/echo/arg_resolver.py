@@ -2,15 +2,11 @@
 
 from typing import Dict, Optional, Tuple, Any, List, Sequence
 
-import pprint
 import sys
-import types
 
 from echo.interp_result import Result, ExceptionData, check_result
 from echo import code_attributes
 from echo.elog import log
-
-from termcolor import cprint
 
 
 def _arg_join(arg_names: Sequence[str]) -> str:

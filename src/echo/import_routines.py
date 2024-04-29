@@ -1,24 +1,16 @@
-import types
 import importlib
 import functools
-import logging
 import os
 import sys
 from types import ModuleType, CodeType
-from typing import (
-    Dict, Any, Optional, Union, Sequence, List, Tuple, Callable,
-)
+from typing import Dict, Any, Optional, Union, Sequence, Tuple
 
 from echo.elog import log as elog
 from echo.interp_context import ICtx
 from echo.interp_result import Result, ExceptionData
 from echo.emodule import EModule
 from echo.dso_objects import DsoModuleProxy
-from echo.enative_fn import ENativeFn
-from echo.eobjects import get_guest_builtin
 from echo import builtin_sys_module
-
-from termcolor import cprint
 
 
 DEBUG_PRINT_IMPORTS = bool(os.getenv('DEBUG_PRINT_IMPORTS', False))

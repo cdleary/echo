@@ -1,5 +1,6 @@
+from typing import Dict, Union, Optional, Any
+
 import types
-from typing import Dict, Text, Union, Optional, Any
 
 EModule = Any
 StatefulFrame = Any
@@ -9,9 +10,8 @@ class InterpreterState:
 
     last_frame: Optional[StatefulFrame]
 
-    def __init__(self, script_directory: Optional[Text]):
-        self.sys_modules = {
-        }  # type: Dict[Text, Union[types.ModuleType, EModule]]
+    def __init__(self, script_directory: Optional[str]):
+        self.sys_modules: Dict[str, Union[types.ModuleType, EModule]] = {}
 
         # sys.path: "module search path; path[0] is the script directory, else
         # ''"

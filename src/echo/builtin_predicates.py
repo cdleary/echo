@@ -1,19 +1,16 @@
+from typing import Text, Tuple, Any, Dict
+
 import collections
 import re
 import types
-from typing import Text, Tuple, Any, Dict, Optional
 
 import io
 import _thread
 
 from echo.elog import log
-from echo.epy_object import EPyObject, AttrWhere, try_invoke
+from echo.epy_object import EPyObject, try_invoke
 from echo.interp_result import Result, check_result, ExceptionData
-from echo import interp_routines
-from echo.eobjects import (
-    EFunction, EBuiltin, EClass, EInstance,
-    register_builtin, _is_dict_builtin, get_guest_builtin,
-)
+from echo.eobjects import EBuiltin, register_builtin, get_guest_builtin
 from echo.interp_context import ICtx
 from echo import iteration_helpers
 

@@ -4,7 +4,7 @@ from typing import Tuple, Dict, Any, Text, Callable, Optional
 from echo.enative_fn import ENativeFn
 from echo.eobjects import get_guest_builtin
 from echo.emodule import EModule
-from echo.interp_result import Result, ExceptionData
+from echo.interp_result import Result
 from echo.interp_context import ICtx
 
 

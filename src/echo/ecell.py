@@ -1,4 +1,4 @@
-from typing import Any, Tuple, Optional
+from typing import Any, Optional
 
 from echo.interp_context import ICtx
 from echo.interp_result import Result

@@ -2,9 +2,9 @@ from typing import Text, Tuple, Any, Dict, Optional
 
 from echo.enative_fn import ENativeFn
 from echo.epy_object import EPyObject, AttrWhere, EPyType
-from echo.interp_result import Result, ExceptionData, check_result
+from echo.interp_result import Result, check_result
 from echo.eobjects import (
-    EFunction, EMethod, EBuiltin,
+    EBuiltin,
     get_guest_builtin, E_PREFIX,
 )
 from echo.interp_context import ICtx

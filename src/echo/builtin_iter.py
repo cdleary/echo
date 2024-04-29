@@ -4,14 +4,11 @@ import weakref
 from typing import Text, Tuple, Any, Dict, Optional, Type
 from collections import OrderedDict as odict
 
-from echo.elog import log
 from echo.epy_object import EPyObject, AttrWhere, EPyType, try_invoke
 from echo.enative_fn import ENativeFn
 from echo.interp_result import Result, ExceptionData, check_result
-from echo import interp_routines
 from echo.eobjects import (
-    EFunction, EMethod, EBuiltin, EClass, EInstance,
-    register_builtin, _is_dict_builtin, get_guest_builtin,
+    EMethod, register_builtin, get_guest_builtin,
 )
 from echo.interp_context import ICtx
 

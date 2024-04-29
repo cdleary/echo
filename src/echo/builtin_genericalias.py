@@ -4,16 +4,10 @@
 from typing import Text, Tuple, Any, Dict, Optional
 
 from echo.enative_fn import ENativeFn
-from echo.elog import log
 from echo.epy_object import EPyObject, EPyType, AttrWhere
-from echo.interp_result import Result, ExceptionData, check_result
-from echo import interp_routines
-from echo.eobjects import (
-    EFunction, EMethod, EBuiltin, EClass, EInstance,
-    register_builtin, _is_dict_builtin, get_guest_builtin, E_PREFIX
-)
+from echo.interp_result import Result, check_result
+from echo.eobjects import EMethod, get_guest_builtin, E_PREFIX
 from echo.interp_context import ICtx
-from echo import iteration_helpers
 
 
 class EGenericAliasType(EPyType):

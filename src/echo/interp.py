@@ -1,28 +1,16 @@
 """(Metacircular) interpreter loop implementation."""
 
-import abc
-import collections
 import dis
-import functools
-import importlib
-import logging
-import operator
-import os
 import types
 import weakref
-import sys
 
-from io import StringIO
-from typing import (
-    Dict, Any, Text, Tuple, List, Optional, Union, Sequence, Iterable, cast,
-    Callable,
-)
+from typing import Dict, Any, Text, Tuple, List, Optional
 
 from echo import epy_object
 from echo import builtin_sys_module
 from echo.epy_object import safer_repr
 from echo.dso_objects import DsoFunctionProxy
-from echo.common import dis_to_str, get_code, none_filler
+from echo.common import get_code, none_filler
 from echo.elog import log
 from echo.interp_result import Result, ExceptionData, check_result
 from echo.interp_context import ICtx
@@ -31,10 +19,9 @@ from echo import arg_resolver
 from echo import code_attributes
 from echo.interpreter_state import InterpreterState
 from echo.ecell import ECell
+from echo.return_kind import ReturnKind
 from echo.eobjects import (
-    EFunction, EBuiltin, EPyObject,
-    EClass, EMethod,
-    EAsyncGenerator, ReturnKind,
+    EFunction, EBuiltin, EPyObject, EClass, EMethod, EAsyncGenerator,
     get_guest_builtin, register_builtin,
 )
 from echo.enative_fn import ENativeFn
@@ -48,7 +35,7 @@ from echo.estaticmethod import EStaticMethod
 from echo.eclassmethod import EClassMethod
 from echo.egenerator import EGenerator
 from echo.emodule import EModule
-from echo.etraceback import ETraceback
+import echo.etraceback  # noqa: F401
 import echo.emap
 import echo.eproperty
 import echo.builtin_build_class
@@ -65,7 +52,7 @@ import echo.builtin_enumerate
 import echo.builtin_predicates
 import echo.builtin_object
 import echo.builtin_bytearray
-import echo.oo_builtins
+import echo.oo_builtins  # noqa: F401
 
 
 @check_result

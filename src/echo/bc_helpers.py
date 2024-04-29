@@ -1,7 +1,6 @@
 import dataclasses
-import types
 from typing import (
-    Callable, Tuple, Text, Optional, Any, Dict, List, TypeVar, Generic
+    Callable, Tuple, Text, Optional, Any, List,
 )
 
 VersionInfo = Tuple[int, int, int, str, int]

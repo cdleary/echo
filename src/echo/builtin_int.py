@@ -1,13 +1,11 @@
-from typing import Text, Tuple, Any, Dict, Optional
+from typing import Text, Tuple, Any, Dict
 import operator
 
-from echo.elog import log
 from echo.epy_object import EPyObject
 from echo.interp_result import Result, check_result, ExceptionData
-from echo import interp_routines
 from echo.eobjects import (
-    EFunction, EBuiltin, EClass, EInstance,
-    register_builtin, _is_dict_builtin, get_guest_builtin,
+    EClass, EInstance,
+    register_builtin, get_guest_builtin,
 )
 from echo.interp_context import ICtx
 
@@ -52,7 +50,6 @@ def _do_int_new(
     value = args[1] if len(args) > 1 else 0
     if isinstance(cls, EClass):
         assert get_guest_builtin('int') in cls.get_mro()
-        globals_: Dict[str, Any] = {}
         o = EInstance(cls)
         o.builtin_storage[int] = value
         return Result(o)

@@ -1,13 +1,11 @@
 import dis
 import itertools
 import functools
-import operator
 import os
 import sys
 import types
 from typing import (
-    List, Any, Text, Optional, Dict, Tuple, Callable, cast, Sequence, Union,
-    Type,
+    List, Any, Text, Optional, Dict, Tuple, Callable, Union, Type,
 )
 from enum import Enum
 
@@ -17,23 +15,22 @@ from echo.elog import log
 from echo.interp_context import ICtx
 from echo import import_routines
 from echo import etraceback
-from echo.epy_object import EPyType, AttrWhere
 from echo.eobjects import (
-    ReturnKind, EBuiltin, EFunction, EPyObject,
-    GuestCoroutine, EInstance, get_guest_builtin,
+    EFunction, EPyObject,
+    GuestCoroutine, get_guest_builtin,
     do_getitem, do_setitem, do_hasattr, do_getattr,
-    do_delitem, do_setattr, E_PREFIX, safer_repr,
+    do_delitem, do_setattr
 )
 from echo import trace_util
 from echo.ecell import ECell
-from echo.emodule import EModule
-from echo.code_attributes import CodeAttributes
 from echo.interpreter_state import InterpreterState
 from echo.interp_result import Result, ExceptionData
 from echo import interp_routines
 from echo import bytecode_trace
 from echo.value import Value
 from echo import eframe
+from echo.epy_object import safer_repr
+from echo.return_kind import ReturnKind
 
 
 DEBUG_PRINT_BYTECODE_LINE = bool(os.getenv('DEBUG_PRINT_BYTECODE_LINE', False))
@@ -587,7 +584,7 @@ class StatefulFrame:
 
     def _run_WITH_CLEANUP_FINISH(self, arg, argval) -> None:
         res = self._pop()
-        exc = self._pop()
+        exc = self._pop()  # noqa: F841
         if res is True:
             self._push(WhyStatus.SILENCED)
         elif res is None:
@@ -825,7 +822,6 @@ class StatefulFrame:
     def _run_END_FINALLY(self, arg, argval) -> Result[bool]:
         status = self._pop()
         log('bc:ef', f'END_FINALLY status {status!r}')
-        do_issubclass = get_guest_builtin('issubclass')
         if isinstance(status, (int, WhyStatus)):
             why = WhyStatus(status)
 
@@ -983,7 +979,7 @@ class StatefulFrame:
         argc = arg
         cause, exc = _Sentinel, _Sentinel
         if argc >= 2:
-            cause = self._pop()
+            cause = self._pop()  # noqa: F841
         if argc >= 1:
             exc = self._pop()
         if exc is _Sentinel:  # Re-raise.

@@ -1,9 +1,7 @@
 from typing import List, Union
 
-import atexit
 import collections
 from operator import itemgetter
-import pprint
 from typing import Tuple, Any, Dict
 from echo.eobjects import EFunction, EPyObject, EPyType
 

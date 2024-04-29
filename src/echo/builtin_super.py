@@ -3,12 +3,8 @@ from typing import Text, Tuple, Any, Dict, Optional, Union
 from echo.elog import log
 from echo.epy_object import EPyObject, AttrWhere
 from echo.interp_result import Result, check_result, ExceptionData
-from echo import interp_routines
 from echo.eobjects import (
-    EFunction, EBuiltin, EClass, EInstance, EPyType,
-    register_builtin, get_guest_builtin, invoke_desc,
-    _is_type_builtin, _is_dict_builtin, _is_object_builtin,
-    _is_int_builtin,
+    EBuiltin, EClass, EPyType, register_builtin, get_guest_builtin,
 )
 from echo.interp_context import ICtx
 

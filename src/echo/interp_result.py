@@ -1,10 +1,8 @@
 """ADT that encapsulates `interpreter_result_value | error_data`."""
 
-from typing import TypeVar, Union, Generic, Text, Callable, Tuple, Any
+from typing import TypeVar, Union, Generic, Text, Callable
 
-import collections
 import functools
-from enum import Enum
 
 
 T = TypeVar('T')

@@ -1,12 +1,9 @@
 from typing import Tuple, Any, Dict, Optional
 
 from echo.epy_object import EPyObject, AttrWhere
-from echo.elog import log
-from echo.epy_object import EPyObject
 from echo.interp_result import Result, ExceptionData, check_result
-from echo import interp_routines
 from echo.eobjects import (
-    EFunction, EBuiltin, EClass, EInstance,
+    EClass, EInstance,
     register_builtin, _is_exception_builtin, get_guest_builtin,
 )
 from echo.interp_context import ICtx
@@ -42,7 +39,7 @@ def _do_exception_new(
         kwargs: Dict[str, Any],
         ictx: ICtx) -> Result[Any]:
     assert 1 <= len(args) and not kwargs, (args, kwargs)
-    msg = args[1] if len(args) == 2 else None
+    # msg = args[1] if len(args) == 2 else None
     if isinstance(args[0], EClass):
         inst = EInstance(args[0])
         return Result(inst)

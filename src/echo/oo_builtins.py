@@ -2,16 +2,17 @@ from typing import Tuple, Any, Dict, Text
 
 from echo.eobjects import (
     register_builtin, EPyObject, EClass, EBuiltin, EPyType, EFunction,
-    is_tuple_builtin, is_list_builtin, get_guest_builtin,
-    GuestCoroutineType, EMethodType_singleton, safer_repr,
+    is_tuple_builtin, is_list_builtin, get_guest_builtin, GuestCoroutineType,
+    EMethodType_singleton,
     # TODO fix privateness of this
     _is_type_builtin, _is_str_builtin, _is_int_builtin, _is_dict_builtin,
     _is_object_builtin, _is_bool_builtin,
 )
 from echo.elog import debugged, log
 from echo.dso_objects import DsoPyObject
-from echo.interp_result import Result, ExceptionData, check_result
+from echo.interp_result import Result, check_result
 from echo.interp_context import ICtx
+from echo.epy_object import safer_repr
 
 
 @register_builtin('isinstance')

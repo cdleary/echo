@@ -1,9 +1,8 @@
-import functools
 import operator
 import os
 import sys
 import types
-from typing import Text, Any, Union, Dict, Callable
+from typing import Text, Any, Dict, Callable
 import weakref
 
 from echo.dso_objects import DsoPyObject, DsoClassProxy
@@ -11,16 +10,13 @@ from echo.ebuiltins import BUILTIN_VALUE_TYPES_TUP, BUILTIN_VALUE_TYPES
 from echo.elog import log, debugged
 from echo.interp_context import ICtx
 from echo.interp_result import Result, check_result, ExceptionData
-from echo.epy_object import AttrWhere, try_invoke
-from echo.interpreter_state import InterpreterState
+from echo.epy_object import try_invoke
 from echo.eobjects import (
     EInstance, EBuiltin, EFunction, EClass,
     EPyObject, EMethod,
     get_guest_builtin,
-    do_hasattr, _type_getattro,
+    _type_getattro,
 )
-from echo.emodule import EModule
-from echo.value import Value
 
 import termcolor
 

@@ -1,29 +1,22 @@
-import abc
 import builtins
 import collections
-import itertools
-import operator
 import os
-import pprint
 import sys
 import types
 from typing import (
-    Text, Any, Dict, Iterable, Tuple, Optional, Set, Callable, Union, Type,
+    Text, Any, Dict, Tuple, Optional, Callable, Union, Type,
     Deque, List
 )
 import weakref
 
-from echo.return_kind import ReturnKind
 from echo.enative_fn import ENativeFn
 from echo.epy_object import (
-    EPyObject, AttrWhere, EPyType, NoContextException, safer_repr, try_invoke,
+    EPyObject, AttrWhere, EPyType, try_invoke,
 )
 from echo.elog import log, debugged
-from echo.interpreter_state import InterpreterState
 from echo.interp_context import ICtx
 from echo.code_attributes import CodeAttributes
 from echo.interp_result import Result, ExceptionData, check_result
-from echo.value import Value
 from echo.common import memoize
 
 E_PREFIX = 'e' if 'E_PREFIX' not in os.environ else os.environ['E_PREFIX']

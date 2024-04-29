@@ -1,8 +1,7 @@
 from io import StringIO
 from contextlib import redirect_stdout
 
-from echo.interp import interp, run_function
-from echo.common import get_code
+from echo.interp import run_function
 
 
 def test_print_to_10():
