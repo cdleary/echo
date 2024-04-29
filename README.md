@@ -66,6 +66,12 @@ On Ubuntu previous Python versions can be installed with relative easy via the
 deadsnakes PPA: see instructions in
 https://tech.joellemena.com/python/install-python3-6-in-ubuntu-22-04/
 
+To run a specific test via `tox` on a specific Python version:
+
+```
+PYTEST_ARGS=-ktry_except_raise tox -e py37
+```
+
 ### py.test
 
 py.test is run for any given Python version under test -- it is driven via a
