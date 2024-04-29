@@ -1,5 +1,5 @@
 pycodestyle==2.11.1
-pyfakefs==3.7
+pyfakefs==5.4.1
 pytest==8.1.1
 pytest-mypy==0.10.3
 termcolor==1.1.0
