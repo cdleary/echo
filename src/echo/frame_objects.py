@@ -839,7 +839,8 @@ class StatefulFrame:
                 return Result(True)
 
             raise NotImplementedError(status)
-        elif self._eissubclass(status, get_guest_builtin('BaseException')):
+        elif (self._eissubclass(status, get_guest_builtin('BaseException'))
+              or isinstance(status, BaseException)):
             exc = self._pop()
             tb = self._pop()
             exception_data = ExceptionData(traceback=tb, parameter=status,
@@ -849,7 +850,8 @@ class StatefulFrame:
         elif status is None:
             return Result(False)
         else:
-            raise NotImplementedError(repr(status))
+            raise NotImplementedError(
+                f'Unhandled END_FINALLY status: {status!r}')
 
     def _run_UNARY_NOT(self, arg, argval) -> None:
         arg = self._pop()
