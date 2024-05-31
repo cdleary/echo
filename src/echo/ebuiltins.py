@@ -4,13 +4,17 @@ from typing import Dict, Text, Any
 
 from echo.eobjects import get_guest_builtin
 
+# These are all the builtins that we implement in a virtualized fashion.
 BUILTINS = tuple("""len str int bool super type object list dict tuple
 bytearray
 property staticmethod classmethod sum
-map iter next enumerate any all exec hash vars
+map iter next enumerate any all exec eval hash vars
 hasattr getattr setattr isinstance issubclass repr callable min max dir
 BaseException Exception
 """.split())
+
+# These are the builtins that we expose directly from the underlying Python
+# implementation. Eventually one would want all of these to be virtualized.
 PASSTHRU = tuple("""range slice float reversed set frozenset zip sorted
 memoryview bytes complex id
 compile

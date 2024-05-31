@@ -51,7 +51,10 @@ def _handle_result(result: Result[Any]) -> int:
         tb = result.get_exception().traceback
         assert isinstance(tb, etraceback.ETraceback)
         for filename, lineno in etraceback.walk(tb):
-            _print_surrounding(filename, lineno)
+            if os.path.exists(filename):
+                _print_surrounding(filename, lineno)
+            else:
+                print(f' {filename}:{lineno}', file=sys.stderr)
         termcolor.cprint(str(result), color='red', file=sys.stderr)
         error = True
     else:

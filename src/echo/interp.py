@@ -265,6 +265,7 @@ def import_path(path: Text, module_name: Text, fully_qualified_name: Text,
 def _do_exec(args: Tuple[Any, ...],
              kwargs: Dict[Text, Any],
              ictx: ICtx) -> Result[None]:
+    """Implements the `exec` builtin."""
     assert 1 <= len(args) <= 3 and not kwargs, (args, kwargs)
     source, globals_, locals_ = none_filler(args, 3)
     if isinstance(source, types.CodeType):
@@ -277,3 +278,20 @@ def _do_exec(args: Tuple[Any, ...],
     if res.is_exception():
         return res
     return Result(None)
+
+
+@check_result
+@register_builtin('eval')
+def _do_eval(args: Tuple[Any, ...],
+             kwargs: Dict[Text, Any],
+             ictx: ICtx) -> Result[None]:
+    """Implements the `eval` builtin."""
+    source, globals_, locals_ = none_filler(args, 3)
+    if isinstance(source, types.CodeType):
+        code = source
+    else:
+        assert isinstance(source, str), type(source)
+        code = compile(source, '<string>', 'eval')
+    res = interp(code, globals_=globals_, ictx=ictx, name='eval',
+                 locals_dict=locals_, in_function=False)
+    return res
